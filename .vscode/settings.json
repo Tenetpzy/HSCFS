@@ -5,5 +5,6 @@
         "atomic": "c",
         "errno.h": "c",
         "errno-base.h": "c"
-    }
+    },
+    "C_Cpp.intelliSenseEngineFallback": "enabled"
 }
