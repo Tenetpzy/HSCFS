@@ -4,6 +4,7 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/inc",
+                "${workspaceFolder}/test/inc",
                 "/home/pzy/spdk_src/spdk/build/include"
             ],
             "defines": [],
