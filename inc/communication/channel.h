@@ -1,39 +1,31 @@
 #pragma once
 
-#include "spdk/nvme.h"
 #include <pthread.h>
 #include <sys/queue.h>
 #include <stdint.h>
 
-struct comm_channel_controller;
+#include "spdk/nvme.h"
+#include "communication/dev.h"
 
-// spdk设备信息
-typedef struct comm_dev
-{
-    struct spdk_nvme_ctrlr *nvme_ctrlr;  // SPDK扫描到的设备控制器
-    struct spdk_nvme_ns *ns;  // 控制器的namespace
-    struct comm_channel_controller *channel_ctrlr;  // 该设备的qpair管理器
-} comm_dev;
-
-/**************************************************************/
 /* channel操作接口 */
+struct comm_channel;
 
 // channel句柄，用户使用此对象控制对应channel
 typedef struct comm_channel* comm_channel_handle;
 
 // 信道层调用上层回调时，传递的CQE状态参数
-typedef enum CQE_status
+typedef enum comm_cmd_CQE_result
 {
-    CQE_SUCCESS, CQE_ERROR
-} CQE_status;
+    CMD_CQE_SUCCESS, CMD_CQE_ERROR
+} comm_cmd_CQE_result;
 
 /*
-cmd_cb_func：使用channel发送命令时设置的回调函数。
+channel_cmd_cb_func：使用channel发送命令时设置的回调函数。
 若该命令已成功发送，此函数在轮询channel时被调用。
-status表示命令CQE状态。
+result表示命令的CQE结果。
 arg是发送命令时传入的回调参数。
 */
-typedef void(*cmd_cb_func)(CQE_status status, void *arg);
+typedef void(*channel_cmd_cb_func)(comm_cmd_CQE_result result, void *arg);
 
 // 自定义命令的内容，由上层构造并传递给channel
 typedef struct comm_raw_cmd
@@ -67,15 +59,15 @@ void comm_channel_unlock(comm_channel_handle self);
 
 // 通过handle发送read命令。返回0成功，否则返回对应errno。
 int comm_channel_send_read_cmd_no_lock(comm_channel_handle handle, void *buffer, uint64_t lba, uint32_t lba_count,
-    cmd_cb_func cb_func, void *cb_arg);
+    channel_cmd_cb_func cb_func, void *cb_arg);
 int comm_channel_send_read_cmd(comm_channel_handle handle, void *buffer, uint64_t lba, uint32_t lba_count,
-    cmd_cb_func cb_func, void *cb_arg);
+    channel_cmd_cb_func cb_func, void *cb_arg);
 
 // 通过handle发送write命令。返回0成功，否则返回对应errno。
 int comm_channel_send_write_cmd_no_lock(comm_channel_handle handle, void *buffer, uint64_t lba, uint32_t lba_count,
-    cmd_cb_func cb_func, void *cb_arg);
+    channel_cmd_cb_func cb_func, void *cb_arg);
 int comm_channel_send_write_cmd(comm_channel_handle handle, void *buffer, uint64_t lba, uint32_t lba_count,
-    cmd_cb_func cb_func, void *cb_arg);
+    channel_cmd_cb_func cb_func, void *cb_arg);
 
 /* 
 发送自定义命令。
@@ -84,7 +76,7 @@ int comm_channel_send_write_cmd(comm_channel_handle handle, void *buffer, uint64
 此接口线程安全。
 */
 int comm_send_raw_cmd(comm_dev *dev, void *buf, uint32_t buf_len, comm_raw_cmd *raw_cmd, 
-    cmd_cb_func cb_func, void *cb_arg);
+    channel_cmd_cb_func cb_func, void *cb_arg);
 
 /*
 轮询handle对应channel中发送的命令是否已经完成。
@@ -101,8 +93,6 @@ int comm_polling_admin_completions(comm_dev *dev);
 
 /*********************************************************************************/
 /* 信道层channel管理器 */
-
-struct comm_channel;
 
 typedef struct comm_channel_controller
 {

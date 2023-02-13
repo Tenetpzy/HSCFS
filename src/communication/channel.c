@@ -167,7 +167,7 @@ void comm_channel_unlock(comm_channel_handle self)
 // 包装上层调用channel发送命令时提供的回调函数和参数
 typedef struct channel_cmd_cb_ctx
 {
-    cmd_cb_func caller_cb_func;
+    channel_cmd_cb_func caller_cb_func;
     void *caller_cb_arg;
 } channel_cmd_cb_ctx;
 
@@ -175,21 +175,21 @@ typedef struct channel_cmd_cb_ctx
 static void channel_inner_spdk_cmd_callback(void *ctx, const struct spdk_nvme_cpl *cpl)
 {
     channel_cmd_cb_ctx *cmd_cb_ctx = (channel_cmd_cb_ctx *)ctx;
-    CQE_status status = CQE_SUCCESS;
+    comm_cmd_CQE_result res = CMD_CQE_SUCCESS;
 
     // CQE为错误，打印日志并设置status
     if (spdk_nvme_cpl_is_error(cpl))  
     {
         HSCFS_LOG(HSCFS_LOG_WARNING, "cmd CQE error, error status: %s", 
             spdk_nvme_cpl_get_status_string(&cpl->status));
-        status = CQE_ERROR;
+        res = CMD_CQE_ERROR;
     }
 
-    cmd_cb_ctx->caller_cb_func(status, cmd_cb_ctx->caller_cb_arg);
+    cmd_cb_ctx->caller_cb_func(res, cmd_cb_ctx->caller_cb_arg);
     free(cmd_cb_ctx);
 }
 
-static channel_cmd_cb_ctx *new_channel_cmd_cb_ctx(cmd_cb_func cb_func, void *cb_arg)
+static channel_cmd_cb_ctx *new_channel_cmd_cb_ctx(channel_cmd_cb_func cb_func, void *cb_arg)
 {
     channel_cmd_cb_ctx *cmd_cb_ctx = (channel_cmd_cb_ctx *)malloc(sizeof(channel_cmd_cb_ctx));
     if (cmd_cb_ctx == NULL)
@@ -203,7 +203,7 @@ static channel_cmd_cb_ctx *new_channel_cmd_cb_ctx(cmd_cb_func cb_func, void *cb_
 }
 
 int comm_channel_send_read_cmd_no_lock(comm_channel_handle handle, void *buffer, uint64_t lba, uint32_t lba_count,
-    cmd_cb_func cb_func, void *cb_arg)
+    channel_cmd_cb_func cb_func, void *cb_arg)
 {
     channel_cmd_cb_ctx *cmd_cb_ctx = new_channel_cmd_cb_ctx(cb_func, cb_arg);
     if (cmd_cb_ctx == NULL)
@@ -223,7 +223,7 @@ int comm_channel_send_read_cmd_no_lock(comm_channel_handle handle, void *buffer,
 }
 
 int comm_channel_send_read_cmd(comm_channel_handle handle, void *buffer, uint64_t lba, uint32_t lba_count,
-    cmd_cb_func cb_func, void *cb_arg)
+    channel_cmd_cb_func cb_func, void *cb_arg)
 {
     int ret = 0;
     ret = comm_channel_lock(handle);
@@ -238,7 +238,7 @@ int comm_channel_send_read_cmd(comm_channel_handle handle, void *buffer, uint64_
 }
 
 int comm_channel_send_write_cmd_no_lock(comm_channel_handle handle, void *buffer, uint64_t lba, uint32_t lba_count,
-    cmd_cb_func cb_func, void *cb_arg)
+    channel_cmd_cb_func cb_func, void *cb_arg)
 {
     channel_cmd_cb_ctx *cmd_cb_ctx = new_channel_cmd_cb_ctx(cb_func, cb_arg);
     if (cmd_cb_ctx == NULL)
@@ -258,7 +258,7 @@ int comm_channel_send_write_cmd_no_lock(comm_channel_handle handle, void *buffer
 }
 
 int comm_channel_send_write_cmd(comm_channel_handle handle, void *buffer, uint64_t lba, uint32_t lba_count,
-    cmd_cb_func cb_func, void *cb_arg)
+    channel_cmd_cb_func cb_func, void *cb_arg)
 {
     int ret = 0;
     ret = comm_channel_lock(handle);
@@ -284,7 +284,7 @@ static void build_nvme_cmd(struct spdk_nvme_cmd *nvme_cmd, comm_raw_cmd *raw_cmd
 }
 
 int comm_send_raw_cmd(comm_dev *dev, void *buf, uint32_t buf_len, comm_raw_cmd *raw_cmd, 
-    cmd_cb_func cb_func, void *cb_arg)
+    channel_cmd_cb_func cb_func, void *cb_arg)
 {
     int ret = 0;
     channel_cmd_cb_ctx *cmd_cb_ctx = new_channel_cmd_cb_ctx(cb_func, cb_arg);
