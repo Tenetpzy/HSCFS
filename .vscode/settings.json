@@ -58,7 +58,10 @@
         "thread": "cpp",
         "cinttypes": "cpp",
         "typeinfo": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "dev.h": "c",
+        "queue.h": "c",
+        "session_cmd_ctx.h": "c"
     },
     "C_Cpp.intelliSenseEngineFallback": "enabled"
 }

@@ -7,7 +7,6 @@
 #include "spdk/nvme.h"
 #include "communication/dev.h"
 
-/* channel操作接口 */
 struct comm_channel;
 
 // channel句柄，用户使用此对象控制对应channel
@@ -56,6 +55,9 @@ int comm_channel_trylock(comm_channel_handle self);
 
 // 解锁一个channel
 void comm_channel_unlock(comm_channel_handle self);
+
+// 释放一个channel
+void comm_channel_release(comm_channel_handle self);
 
 // 通过handle发送read命令。返回0成功，否则返回对应errno。
 int comm_channel_send_read_cmd_no_lock(comm_channel_handle handle, void *buffer, uint64_t lba, uint32_t lba_count,
@@ -115,8 +117,5 @@ void comm_channel_controller_destructor(comm_channel_controller *self);
 
 // 获取一个channel，返回该channel的句柄
 comm_channel_handle comm_channel_controller_get_channel(comm_channel_controller *self);
-
-// 释放一个channel
-void comm_channel_controller_put_channel(comm_channel_controller *self, comm_channel_handle handle);
 
 /*****************************************************************************/

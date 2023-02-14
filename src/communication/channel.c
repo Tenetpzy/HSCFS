@@ -132,11 +132,12 @@ comm_channel_handle comm_channel_controller_get_channel(comm_channel_controller 
     return &self->channels[min_channel];
 }
 
-void comm_channel_controller_put_channel(comm_channel_controller *self, comm_channel_handle handle)
+void comm_channel_release(comm_channel_handle self)
 {
-    pthread_spin_lock(&self->lock);
-    --self->channel_use_cnt[handle->idx];
-    pthread_spin_unlock(&self->lock);
+    comm_channel_controller *channel_ctrlr = self->dev->channel_ctrlr;
+    pthread_spin_lock(&channel_ctrlr->lock);
+    --channel_ctrlr->channel_use_cnt[self->idx];
+    pthread_spin_unlock(&channel_ctrlr->lock);
 }
 
 int comm_channel_lock(comm_channel_handle self)
