@@ -77,7 +77,7 @@ int comm_channel_send_write_cmd(comm_channel_handle handle, void *buffer, uint64
 返回0成功，否则返回对应errno。
 此接口线程安全。
 */
-int comm_send_raw_cmd(comm_dev *dev, void *buf, uint32_t buf_len, comm_raw_cmd *raw_cmd, 
+int comm_send_raw_cmd(comm_channel_handle handle, void *buf, uint32_t buf_len, comm_raw_cmd *raw_cmd, 
     channel_cmd_cb_func cb_func, void *cb_arg);
 
 /*
@@ -90,8 +90,9 @@ max_cplt指定此次调用最多处理已完成命令的个数，若为0则处�
 */
 int comm_channel_polling_completions_no_lock(comm_channel_handle handle, uint32_t max_cplt);
 
-// 轮询管理类命令。
-int comm_polling_admin_completions(comm_dev *dev);
+// 轮询管理类命令，该函数线程安全，不需对channel加锁
+// 返回处理的已完成命令个数，或-ENXIO，表示底层传输出错。
+int comm_polling_admin_completions(comm_channel_handle handle);
 
 /*********************************************************************************/
 /* 信道层channel管理器 */

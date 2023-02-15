@@ -15,6 +15,11 @@ typedef enum comm_session_cmd_sync_attr {
     SESSION_SYNC_CMD, SESSION_ASYNC_CMD
 } comm_session_cmd_sync_attr;
 
+typedef enum comm_session_cmd_state {
+    SESSION_CMD_NEW, SESSION_CMD_WAIT_POLLING, SESSION_CMD_NEED_POLLING, SESSION_CMD_RECEIVED_CQE,
+    SESSION_CMD_TID_WAIT_QUERY, SESSION_CMD_TID_CAN_QUERY, SESSION_CMD_TID_CPLT_QUERY
+} comm_session_cmd_state;
+
 #define COMM_SESSION_CMD_QUEUE_FIELD queue_entry
 
 // 会话层用于跟踪命令执行的上下文
@@ -48,7 +53,8 @@ typedef struct comm_session_cmd_ctx
     uint32_t tid_result_buf_len;  // result_buffer的长度
 
     comm_session_cmd_nvme_type cmd_nvme_type;  // 记录该命令是admin还是I/O命令
-    uint8_t cmd_is_received_CQE;  // 由会话层使用的命令状态，标志CQE是否已收到
+    comm_session_cmd_state cmd_session_state;  // 由会话层使用的命令状态
+    int timer_fd;  // 会话层轮询该命令使用的定时器
     TAILQ_ENTRY(comm_session_cmd_ctx) COMM_SESSION_CMD_QUEUE_FIELD;  // 会话层维护ctx的链表
 } comm_session_cmd_ctx;
 
@@ -78,8 +84,14 @@ comm_session_cmd_ctx* new_comm_session_sync_long_cmd_ctx(comm_channel_handle cha
 comm_session_cmd_ctx* new_comm_session_async_long_cmd_ctx(comm_channel_handle channel,
     void *tid_res_buf, uint32_t tid_res_len, comm_async_cb_func cb_func, void *cb_arg, int *rc);
 
-// 释放会话层命令上下文，通信层申请的channel在此处释放
-void free_comm_session_cmd_ctx(comm_session_cmd_ctx *self);
+// 释放命令上下文同步相关的资源
+void free_comm_session_cmd_ctx_sync_info(comm_session_cmd_ctx *self);
+
+// 释放命令上下文结构
+static inline void free_comm_session_cmd_ctx(comm_session_cmd_ctx *self)
+{
+    free(self);
+}
 
 static inline comm_session_cmd_nvme_type comm_session_cmd_ctx_get_nvme_type(comm_session_cmd_ctx *self)
 {

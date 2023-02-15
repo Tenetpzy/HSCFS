@@ -44,12 +44,6 @@ static void comm_channel_destructor(comm_channel *self)
         HSCFS_LOG_ERRNO(HSCFS_LOG_WARNING, ret, "free channel lock error.");
 }
 
-// comm_channel_controller* comm_channel_controller_get_instance()
-// {
-//     static comm_channel_controller g_channel_ctrlr;
-//     return &g_channel_ctrlr;
-// }
-
 int comm_channel_controller_constructor(comm_channel_controller *self, comm_dev *dev, size_t channel_num)
 {
     int ret;
@@ -284,7 +278,7 @@ static void build_nvme_cmd(struct spdk_nvme_cmd *nvme_cmd, comm_raw_cmd *raw_cmd
     nvme_cmd->cdw15 = raw_cmd->dword15;
 }
 
-int comm_send_raw_cmd(comm_dev *dev, void *buf, uint32_t buf_len, comm_raw_cmd *raw_cmd, 
+int comm_send_raw_cmd(comm_channel_handle handle, void *buf, uint32_t buf_len, comm_raw_cmd *raw_cmd, 
     channel_cmd_cb_func cb_func, void *cb_arg)
 {
     int ret = 0;
@@ -299,9 +293,9 @@ int comm_send_raw_cmd(comm_dev *dev, void *buf, uint32_t buf_len, comm_raw_cmd *
         ret = ENOMEM;
         goto err1;
     }
-    build_nvme_cmd(nvme_cmd, raw_cmd, dev);
+    build_nvme_cmd(nvme_cmd, raw_cmd, handle->dev);
     
-    ret = spdk_nvme_ctrlr_cmd_admin_raw(dev->nvme_ctrlr, nvme_cmd, buf, buf_len, 
+    ret = spdk_nvme_ctrlr_cmd_admin_raw(handle->dev->nvme_ctrlr, nvme_cmd, buf, buf_len, 
         channel_inner_spdk_cmd_callback, cmd_cb_ctx);
     if (ret != 0)
     {
@@ -326,9 +320,9 @@ int comm_channel_polling_completions_no_lock(comm_channel_handle handle, uint32_
     return ret;
 }
 
-int comm_polling_admin_completions(comm_dev *dev)
+int comm_polling_admin_completions(comm_channel_handle handle)
 {
-    int ret = spdk_nvme_ctrlr_process_admin_completions(dev->nvme_ctrlr);
+    int ret = spdk_nvme_ctrlr_process_admin_completions(handle->dev->nvme_ctrlr);  
     if (ret == -ENXIO)
         HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, -ret, "spdk polling I/O cmd failed.");
     return ret;

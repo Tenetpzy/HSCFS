@@ -74,7 +74,7 @@ static comm_session_cmd_ctx* new_comm_session_cmd_ctx_inner(comm_channel_handle 
     
     ctx->channel = channel;
     ctx->cmd_nvme_type = cmd_nvme_type;
-    ctx->cmd_is_received_CQE = 0;
+    ctx->cmd_session_state = SESSION_CMD_NEW;
 
     return ctx;
 }
@@ -107,16 +107,13 @@ comm_session_cmd_ctx* new_comm_session_async_long_cmd_ctx(comm_channel_handle ch
         cb_func, cb_arg, 1, tid_res_buf, tid_res_len, rc);
 }
 
-void free_comm_session_cmd_ctx(comm_session_cmd_ctx *self)
+// 释放comm_session_cmd_ctx的同步资源(条件变量和锁)
+void free_comm_session_cmd_ctx_sync_info(comm_session_cmd_ctx *self)
 {
-    if (self->cmd_sync_type == SESSION_SYNC_CMD)
-    {
-        int ret = pthread_mutex_destroy(&self->wait_mtx);
-        if (ret != 0)
-            HSCFS_LOG_ERRNO(HSCFS_LOG_WARNING, ret, "destroy session cmd ctx wait_mtx failed.");
-        ret = pthread_cond_destroy(&self->wait_cond);
-        if (ret != 0)
-            HSCFS_LOG_ERRNO(HSCFS_LOG_WARNING, ret, "destroy session cmd ctx wait_cond failed.");
-    }
-    comm_channel_release(self->channel);
+    int ret = pthread_mutex_destroy(&self->wait_mtx);
+    if (ret != 0)
+        HSCFS_LOG_ERRNO(HSCFS_LOG_WARNING, ret, "destroy session cmd ctx wait_mtx failed.");
+    ret = pthread_cond_destroy(&self->wait_cond);
+    if (ret != 0)
+        HSCFS_LOG_ERRNO(HSCFS_LOG_WARNING, ret, "destroy session cmd ctx wait_cond failed.");
 }

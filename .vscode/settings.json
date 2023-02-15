@@ -61,7 +61,10 @@
         "variant": "cpp",
         "dev.h": "c",
         "queue.h": "c",
-        "session_cmd_ctx.h": "c"
+        "session_cmd_ctx.h": "c",
+        "sys_log.h": "c",
+        "pthread.h": "c",
+        "channel.h": "c"
     },
     "C_Cpp.intelliSenseEngineFallback": "enabled"
 }
