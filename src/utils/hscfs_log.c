@@ -1,4 +1,4 @@
-#include "utils/sys_log.h"
+#include "utils/hscfs_log.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <errno.h>
@@ -31,7 +31,7 @@ void hscfs_log_errno(hscfs_log_level log_level, const char *funcname, unsigned i
     int ret = strerror_r(err, errno_msg, sizeof(errno_msg));
     PRINT_TO_STDERR("errno: ");
     if (ret == 0)
-        PRINT_TO_STDERR("%s", errno_msg);
+        PRINT_TO_STDERR("%s\n", errno_msg);
     else
-        PRINT_TO_STDERR("failed to convert errno to str.");
+        PRINT_TO_STDERR("failed to convert errno to str.\n");
 }

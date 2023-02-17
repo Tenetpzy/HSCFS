@@ -64,7 +64,14 @@
         "session_cmd_ctx.h": "c",
         "sys_log.h": "c",
         "pthread.h": "c",
-        "channel.h": "c"
+        "channel.h": "c",
+        "session_env.h": "c",
+        "hscfs_log.h": "c",
+        "quota.h": "c",
+        "comm_api.h": "c",
+        "nvme.h": "c",
+        "env.h": "c",
+        "queue_extras.h": "c"
     },
     "C_Cpp.intelliSenseEngineFallback": "enabled"
 }

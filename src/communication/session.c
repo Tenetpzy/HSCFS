@@ -1,6 +1,186 @@
-#include "communication/session_env.h"
-#include "communication/session_cmd_ctx.h"
-#include "utils/sys_log.h"
+#include <pthread.h>
+#include <errno.h>
+
+#include "communication/session.h"
+#include "utils/hscfs_log.h"
+#include "utils/queue_extras.h"
+
+typedef enum comm_session_cmd_sync_attr {
+    SESSION_SYNC_CMD, SESSION_ASYNC_CMD
+} comm_session_cmd_sync_attr;
+
+typedef enum comm_session_cmd_state {
+    SESSION_CMD_NEW, SESSION_CMD_WAIT_POLLING, SESSION_CMD_NEED_POLLING, SESSION_CMD_RECEIVED_CQE,
+    SESSION_CMD_TID_WAIT_QUERY, SESSION_CMD_TID_CAN_QUERY, SESSION_CMD_TID_CPLT_QUERY
+} comm_session_cmd_state;
+
+#define COMM_SESSION_CMD_QUEUE_FIELD queue_entry
+
+// 会话层用于跟踪命令执行的上下文
+typedef struct comm_session_cmd_ctx
+{
+    comm_channel_handle channel;  // 命令使用的channel
+    comm_cmd_result cmd_result;  // 命令执行结果状态
+
+    comm_session_cmd_sync_attr cmd_sync_type;  // 标志该命令是同步还是异步
+    union
+    {
+        // 异步接口传入的回调函数和参数
+        struct
+        {
+            comm_async_cb_func async_cb_func;
+            void *async_cb_arg;
+        };
+
+        // 同步接口进行等待的条件变量信息
+        struct
+        {
+            uint8_t cmd_is_cplt;  // 标志该命令是否已在会话层处理完
+            pthread_cond_t wait_cond;  // 等待会话层处理的条件变量
+            pthread_mutex_t wait_mtx;  // 与wait_cond和wait_state相关的锁
+        };
+    };
+    
+    uint8_t is_long_cmd;  // 是否属于长命令
+    uint16_t tid;  // 长命令的tid
+    void *tid_result_buffer;  // 用于保存长命令结果的buffer
+    uint32_t tid_result_buf_len;  // result_buffer的长度
+
+    comm_session_cmd_nvme_type cmd_nvme_type;  // 记录该命令是admin还是I/O命令
+    comm_session_cmd_state cmd_session_state;  // 由会话层使用的命令状态
+    int timer_fd;  // 会话层轮询该命令使用的定时器
+    TAILQ_ENTRY(comm_session_cmd_ctx) COMM_SESSION_CMD_QUEUE_FIELD;  // 会话层维护ctx的链表
+} comm_session_cmd_ctx;
+
+/*******************************************************************************************/
+/* 会话层上下文分配、初始化、释放 */
+
+// 初始化同步命令的命令类型(同步/异步标志)、条件变量相关信息
+static int comm_session_cmd_ctx_init_sync_info(comm_session_cmd_ctx *ctx)
+{
+    int ret = 0;
+    ret = pthread_cond_init(&ctx->wait_cond, NULL);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "init session cmd ctx condvar failed.");
+        return ret;
+    }
+    ret = pthread_mutex_init(&ctx->wait_mtx, NULL);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "init session cmd ctx condmtx failed.");
+        pthread_cond_destroy(&ctx->wait_cond);  // 不会返回error
+    }
+    ctx->cmd_sync_type = SESSION_SYNC_CMD;
+    ctx->cmd_is_cplt = 0;
+    return ret;
+}
+
+// 初始化异步命令的命令类型(同步/异步标志)，回调相关信息
+static inline void comm_session_cmd_ctx_init_async_info(comm_session_cmd_ctx *ctx, 
+    comm_async_cb_func cb_func, void *cb_arg)
+{
+    ctx->cmd_sync_type = SESSION_ASYNC_CMD;
+    ctx->async_cb_func = cb_func;
+    ctx->async_cb_arg = cb_arg;
+}
+
+// 分配新的tid。同时下发多于UINT16_MAX个长命令时会出现tid重复，可能导致错误，暂时不处理。
+static uint16_t alloc_new_tid(void)
+{
+    static uint16_t tid = 0;
+    return tid++;
+}
+
+// 分配comm_session_cmd_ctx结构体，并初始化属性
+static comm_session_cmd_ctx* new_comm_session_cmd_ctx_inner(comm_channel_handle channel,
+    comm_session_cmd_nvme_type cmd_nvme_type, comm_session_cmd_sync_attr sync_type, 
+    comm_async_cb_func cb_func, void *cb_arg, uint8_t long_cmd, void *res_buf, uint32_t res_len, int *rc)
+{
+    comm_session_cmd_ctx *ctx = (comm_session_cmd_ctx *)malloc(sizeof(comm_session_cmd_ctx));
+    if (ctx == NULL)
+    {
+        HSCFS_LOG(HSCFS_LOG_ERROR, "alloc comm_session_cmd_ctx failed.");
+        *rc = ENOMEM;
+        return NULL;
+    }
+
+    if (sync_type == SESSION_SYNC_CMD)
+    {
+        int ret = comm_session_cmd_ctx_init_sync_info(ctx);
+        if (ret != 0)
+        {
+            *rc = ret;
+            free(ctx);
+            return NULL;
+        }
+    }
+    else
+        comm_session_cmd_ctx_init_async_info(ctx, cb_func, cb_arg);
+
+    if (long_cmd)
+    {
+        ctx->tid = alloc_new_tid();
+        ctx->tid_result_buffer = res_buf;
+        ctx->tid_result_buf_len = res_len;
+    }
+    ctx->is_long_cmd = long_cmd;
+    
+    ctx->channel = channel;
+    ctx->cmd_nvme_type = cmd_nvme_type;
+    ctx->cmd_session_state = SESSION_CMD_NEW;
+
+    return ctx;
+}
+
+comm_session_cmd_ctx* new_comm_session_sync_cmd_ctx(comm_channel_handle channel, 
+    comm_session_cmd_nvme_type cmd_type, int *rc)
+{
+    return new_comm_session_cmd_ctx_inner(channel, cmd_type, SESSION_SYNC_CMD, 
+        NULL, NULL, 0, NULL, 0, rc);
+}
+
+comm_session_cmd_ctx* new_comm_session_async_cmd_ctx(comm_channel_handle channel,
+    comm_session_cmd_nvme_type cmd_type, comm_async_cb_func cb_func, void *cb_arg, int *rc)
+{
+    return new_comm_session_cmd_ctx_inner(channel, cmd_type, SESSION_ASYNC_CMD, 
+        cb_func, cb_arg, 0, NULL, 0, rc);
+}
+
+comm_session_cmd_ctx* new_comm_session_sync_long_cmd_ctx(comm_channel_handle channel, 
+    void *tid_res_buf, uint32_t tid_res_len, int *rc)
+{
+    return new_comm_session_cmd_ctx_inner(channel, SESSION_ADMIN_CMD, SESSION_SYNC_CMD,
+        NULL, NULL, 1, tid_res_buf, tid_res_len, rc);
+}
+
+comm_session_cmd_ctx* new_comm_session_async_long_cmd_ctx(comm_channel_handle channel, 
+    void *tid_res_buf, uint32_t tid_res_len, comm_async_cb_func cb_func, void *cb_arg, int *rc)
+{
+    return new_comm_session_cmd_ctx_inner(channel, SESSION_ADMIN_CMD, SESSION_ASYNC_CMD,
+        cb_func, cb_arg, 1, tid_res_buf, tid_res_len, rc);
+}
+
+// 释放comm_session_cmd_ctx的同步资源(条件变量和锁)
+void free_comm_session_cmd_ctx_sync_info(comm_session_cmd_ctx *self)
+{
+    int ret = pthread_mutex_destroy(&self->wait_mtx);
+    if (ret != 0)
+        HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "destroy session cmd ctx wait_mtx failed.");
+    ret = pthread_cond_destroy(&self->wait_cond);
+    if (ret != 0)
+        HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "destroy session cmd ctx wait_cond failed.");
+}
+
+void free_comm_session_cmd_ctx(comm_session_cmd_ctx *self)
+{
+    if (self->cmd_sync_type == SESSION_SYNC_CMD)
+        free_comm_session_cmd_ctx_sync_info(self);
+    free(self);
+}
+
+/*****************************************************************************************/
+/* 会话层环境与轮询线程 */
 
 typedef TAILQ_HEAD(, comm_session_cmd_ctx) cmd_queue_t;
 
@@ -26,13 +206,13 @@ int comm_session_env_init(void)
     ret = pthread_cond_init(&session_env->polling_thread_cond, NULL);
     if (ret != 0)
     {
-        HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, ret, "init session env condvar failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "init session env condvar failed.");
         return ret;
     }
     ret = pthread_mutex_init(&session_env->cmd_queue_mtx, NULL);
     if (ret != 0)
     {
-        HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, ret, "init session env condmtx failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "init session env condmtx failed.");
         pthread_cond_destroy(&session_env->polling_thread_cond);
         return ret;
     }
@@ -50,7 +230,7 @@ int comm_session_env_submit_cmd_ctx(comm_session_cmd_ctx *cmd_ctx)
     ret = pthread_mutex_lock(&session_env->cmd_queue_mtx);
     if (ret != 0)
     {
-        HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, ret, "lock session env failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "lock session env failed.");
         return ret;
     }
 
@@ -60,14 +240,14 @@ int comm_session_env_submit_cmd_ctx(comm_session_cmd_ctx *cmd_ctx)
     session_env->cmd_queue_size++;
     ret = pthread_mutex_unlock(&session_env->cmd_queue_mtx);
     if (ret != 0)
-        HSCFS_LOG_ERRNO(HSCFS_LOG_WARNING, ret, "unlock session env failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "unlock session env failed.");
     
     // 若之前命令队列为空，则唤醒轮询线程
     if (need_wakeup_polling)
     {
         ret = pthread_cond_broadcast(&session_env->polling_thread_cond);
         if (ret != 0)
-            HSCFS_LOG_ERRNO(HSCFS_LOG_WARNING, ret, "wakeup polling thread failed.");
+            HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "wakeup polling thread failed.");
     }
 
     return ret;
@@ -80,7 +260,7 @@ static int polling_thread_wait_cmd_ready(comm_session_env *session_env)
     ret = pthread_mutex_lock(&session_env->cmd_queue_mtx);
     if (ret != 0)
     {
-        HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, ret, "polling thread lock session env failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "polling thread lock session env failed.");
         return ret;
     }
 
@@ -89,7 +269,7 @@ static int polling_thread_wait_cmd_ready(comm_session_env *session_env)
         ret = pthread_cond_wait(&session_env->polling_thread_cond, &session_env->cmd_queue_mtx);
         if (ret != 0)
         {
-            HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, ret, "polling thread wait on condvar failed.");
+            HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "polling thread wait on condvar failed.");
             pthread_mutex_unlock(&session_env->cmd_queue_mtx);  // 轮询线程已经崩了，unlock没必要再判返回值
             return ret;
         }
@@ -144,18 +324,18 @@ static void polling_thread_process_cplt_cmd(polling_thread_env *thrd_env, comm_s
         int ret = pthread_mutex_lock(&cmd->wait_mtx);
         if (ret != 0)
         {
-            HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, ret, "polling thread lock cond failed.");
+            HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "polling thread lock cond failed.");
             TAILQ_INSERT_TAIL(&thrd_env->err_queue, cmd, COMM_SESSION_CMD_QUEUE_FIELD);
         }
         cmd->cmd_is_cplt = 1;  // 设置完成标志，同步命令根据此标志判断命令在会话层是否处理完成
         ret = pthread_mutex_unlock(&cmd->wait_mtx);
         if (ret != 0)
-            HSCFS_LOG_ERRNO(HSCFS_LOG_WARNING, ret, "polling thread unlock cond failed.");
+            HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "polling thread unlock cond failed.");
         
         // 通知通信层等待的线程
         ret = pthread_cond_broadcast(&cmd->wait_cond);
         if (ret != 0)
-            HSCFS_LOG_ERRNO(HSCFS_LOG_WARNING, ret, "polling thread wakeup cond failed.");
+            HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "polling thread wakeup cond failed.");
     }
 }
 
@@ -177,7 +357,7 @@ static void polling_thread_process_cmd_received_CQE(polling_thread_env *thrd_env
 
         // 如果是查询命令结果的CQE，则直接将其重新移入tid等待列表
         // 否则，是命令下发的CQE，将状态置为SESSION_CMD_TID_WAIT_QUERY后加入tid等待列表
-        if (cmd->cmd_session_state != SESSION_CMD_TID_CPLT_QUERY)
+        if (cmd->cmd_session_state == SESSION_CMD_RECEIVED_CQE)
             cmd->cmd_session_state = SESSION_CMD_TID_WAIT_QUERY;
 
         TAILQ_INSERT_TAIL(&thrd_env->tid_queue, cmd, COMM_SESSION_CMD_QUEUE_FIELD);
@@ -370,7 +550,7 @@ void* comm_session_polling_thread(void *arg)
         int ret = polling_thread_wait_cmd_ready(session_env);
         if (ret != 0)
         {
-            HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, ret, "polling thread exit.");
+            HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "polling thread exit.");
             return NULL;
         }
 

@@ -1,8 +1,12 @@
 #include <stdlib.h>
 #include <error.h>
+
 #include "communication/channel.h"
-#include "utils/sys_log.h"
+#include "communication/dev.h"
+#include "utils/hscfs_log.h"
 #include "spdk/nvme_spec.h"
+#include "spdk/nvme.h"
+#include "utils/queue_extras.h"
 
 // 描述一个channel的信息
 typedef struct comm_channel
@@ -11,8 +15,16 @@ typedef struct comm_channel
     comm_dev *dev;  // 该channel所属设备
     size_t idx;  // 该channel在channel_controller中的下标
     pthread_mutex_t lock;  // 保证channel独占使用的锁
-    SLIST_ENTRY(comm_channel) list_entry;
 } comm_channel;
+
+/* 信道层channel管理器 */
+typedef struct comm_channel_controller
+{
+    struct comm_channel *channels;  // 指向分配的channel数组
+    size_t *channel_use_cnt;  // 记录每一个channel当前的使用计数
+    size_t _channel_num;  // 当前分配的channel数量
+    pthread_spinlock_t lock;  // 用于分配channel时的互斥
+} comm_channel_controller;
 
 // 构造channel：分配qpair，初始化lock，初始化ref_count为0。返回0成功，否则返回对应errno。
 static int comm_channel_constructor(comm_channel *self, comm_dev *dev, size_t index)
@@ -26,7 +38,7 @@ static int comm_channel_constructor(comm_channel *self, comm_dev *dev, size_t in
     int ret = pthread_mutex_init(&self->lock, NULL);
     if (ret != 0)
     {
-        HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, ret, "initialize channel lock failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "initialize channel lock failed.");
         spdk_nvme_ctrlr_free_io_qpair(self->qpair);
         return ret;
     }
@@ -41,10 +53,11 @@ static void comm_channel_destructor(comm_channel *self)
     spdk_nvme_ctrlr_free_io_qpair(self->qpair);
     int ret = pthread_mutex_destroy(&self->lock);
     if (ret != 0)
-        HSCFS_LOG_ERRNO(HSCFS_LOG_WARNING, ret, "free channel lock error.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "free channel lock error.");
 }
 
-int comm_channel_controller_constructor(comm_channel_controller *self, comm_dev *dev, size_t channel_num)
+// 分配控制器中channels数组，并构造数组中每一个channel。若失败，返回对应errno
+static int comm_channel_controller_constructor(comm_channel_controller *self, comm_dev *dev, size_t channel_num)
 {
     int ret;
     self->channels = (comm_channel*)malloc(sizeof(comm_channel) * channel_num);
@@ -64,7 +77,7 @@ int comm_channel_controller_constructor(comm_channel_controller *self, comm_dev 
     ret = pthread_spin_init(&self->lock, PTHREAD_PROCESS_PRIVATE);
     if (ret != 0)
     {
-        HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, ret, "init channel controller lock failed!");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "init channel controller lock failed!");
         goto err1;
     }
 
@@ -84,7 +97,7 @@ int comm_channel_controller_constructor(comm_channel_controller *self, comm_dev 
     {
     int res = pthread_spin_destroy(&self->lock);
     if (res != 0)
-        HSCFS_LOG_ERRNO(HSCFS_LOG_WARNING, res, "free channel controller lock error.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, res, "free channel controller lock error.");
     }
     // 释放已构造的所有comm_channel的资源，然后释放channels数组
     err1:
@@ -94,15 +107,35 @@ int comm_channel_controller_constructor(comm_channel_controller *self, comm_dev 
     return ret;
 }
 
-void comm_channel_controller_destructor(comm_channel_controller *self)
+comm_channel_controller* new_comm_channel_controller(comm_dev *dev, size_t channel_num)
 {
+    comm_channel_controller *ctrlr = (comm_channel_controller *)malloc(sizeof(comm_channel_controller));
+    if (ctrlr == NULL)
+    {
+        HSCFS_LOG(HSCFS_LOG_ERROR, "alloc comm channel controller failed.");
+        return NULL;
+    }
+    int ret = comm_channel_controller_constructor(ctrlr, dev, channel_num);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "init comm channel controller failed.");
+        free(ctrlr);
+        return NULL;
+    }
+    return ctrlr;
+}
+
+void free_comm_channel_controller(comm_channel_controller *self)
+{
+    // 析构每一个channel，然后释放channels数组
     for (size_t i = 0; i < self->_channel_num; ++i)
         comm_channel_destructor(&self->channels[i]);
     free(self->channels);
     free(self->channel_use_cnt);
     int ret = pthread_spin_destroy(&self->lock);
     if (ret != 0)
-        HSCFS_LOG_ERRNO(HSCFS_LOG_WARNING, ret, "free channel controller lock error.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "free channel controller lock error.");
+    free(self);
 }
 
 comm_channel_handle comm_channel_controller_get_channel(comm_channel_controller *self)
@@ -138,7 +171,7 @@ int comm_channel_lock(comm_channel_handle self)
 {
     int ret = pthread_mutex_lock(&self->lock);
     if (ret != 0)
-        HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, ret, "lock channel failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "lock channel failed.");
     return ret;
 }
 
@@ -147,7 +180,7 @@ int comm_channel_trylock(comm_channel_handle self)
 {
     int ret = pthread_mutex_trylock(&self->lock);
     if (ret != 0 && ret != EBUSY)
-        HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, ret, "trylock channel failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "trylock channel failed.");
     return ret;
 }
 
@@ -155,7 +188,7 @@ void comm_channel_unlock(comm_channel_handle self)
 {
     int ret = pthread_mutex_unlock(&self->lock);
     if (ret != 0)
-        HSCFS_LOG_ERRNO(HSCFS_LOG_WARNING, ret, "unlock channel failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "unlock channel failed.");
 }
 
 // 信道层使用的SPDK命令发送的回调参数
@@ -210,7 +243,7 @@ int comm_channel_send_read_cmd_no_lock(comm_channel_handle handle, void *buffer,
     if (ret != 0)
     {
         ret = -ret;  // spdk返回负errno，此处将其变换为errno
-        HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, ret, "spdk send read cmd failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "spdk send read cmd failed.");
         free(cmd_cb_ctx);
     }
 
@@ -245,7 +278,7 @@ int comm_channel_send_write_cmd_no_lock(comm_channel_handle handle, void *buffer
     if (ret != 0)
     {
         ret = -ret;
-        HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, ret, "spdk send write cmd failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "spdk send write cmd failed.");
         free(cmd_cb_ctx);
     }
 
@@ -300,7 +333,7 @@ int comm_send_raw_cmd(comm_channel_handle handle, void *buf, uint32_t buf_len, c
     if (ret != 0)
     {
         ret = -ret;
-        HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, ret, "spdk send raw cmd failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "spdk send raw cmd failed.");
         goto err2;
     }
     return ret;
@@ -316,7 +349,7 @@ int comm_channel_polling_completions_no_lock(comm_channel_handle handle, uint32_
 {
     int ret = spdk_nvme_qpair_process_completions(handle->qpair, max_cplt);
     if (ret == -ENXIO)
-        HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, -ret, "spdk polling I/O cmd failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, -ret, "spdk polling I/O cmd failed.");
     return ret;
 }
 
@@ -324,6 +357,6 @@ int comm_polling_admin_completions(comm_channel_handle handle)
 {
     int ret = spdk_nvme_ctrlr_process_admin_completions(handle->dev->nvme_ctrlr);  
     if (ret == -ENXIO)
-        HSCFS_LOG_ERRNO(HSCFS_LOG_ERROR, -ret, "spdk polling I/O cmd failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, -ret, "spdk polling I/O cmd failed.");
     return ret;
 }

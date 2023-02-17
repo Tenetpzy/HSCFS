@@ -1,11 +1,6 @@
 #pragma once
 
-#include <pthread.h>
-#include <sys/queue.h>
 #include <stdint.h>
-
-#include "spdk/nvme.h"
-#include "communication/dev.h"
 
 struct comm_channel;
 
@@ -95,26 +90,19 @@ int comm_channel_polling_completions_no_lock(comm_channel_handle handle, uint32_
 int comm_polling_admin_completions(comm_channel_handle handle);
 
 /*********************************************************************************/
-/* 信道层channel管理器 */
+typedef struct comm_channel_controller comm_channel_controller;
+typedef struct comm_dev comm_dev;
 
-typedef struct comm_channel_controller
-{
-    struct comm_channel *channels;  // 指向分配的channel数组
-    size_t *channel_use_cnt;  // 记录每一个channel当前的使用计数
-    size_t _channel_num;  // 当前分配的channel数量
-    pthread_spinlock_t lock;  // 用于分配channel时的互斥
-} comm_channel_controller;
-
-/* 
-comm_channel_controller构造函数
-channel_num：需要分配的channel数量
-分配channels数组，并构造数组中每一个channel。
-返回0成功，否则返回对应errno。
+/*
+分配一个channel控制器，分配控制器中channels数组，并构造数组中每一个channel。
+channel_num：需要分配的channel数量。
+dev：channel控制器绑定的设备
+返回NULL则分配失败。
 */
-int comm_channel_controller_constructor(comm_channel_controller *self, comm_dev *dev, size_t channel_num);
+comm_channel_controller* new_comm_channel_controller(comm_dev *dev, size_t channel_num);
 
-// 析构函数：析构每一个channel，然后释放channels数组
-void comm_channel_controller_destructor(comm_channel_controller *self);
+// 析构并释放channel控制器
+void free_comm_channel_controller(comm_channel_controller *self);
 
 // 获取一个channel，返回该channel的句柄
 comm_channel_handle comm_channel_controller_get_channel(comm_channel_controller *self);

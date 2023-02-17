@@ -11,5 +11,5 @@ void hscfs_log_errno(hscfs_log_level log_level, const char *funcname, unsigned i
 #define HSCFS_LOG(log_level, format, ...) \
     hscfs_log_print(log_level, __func__, __LINE__, format, ##__VA_ARGS__)
 
-#define HSCFS_LOG_ERRNO(log_level, err, format, ...) \
+#define HSCFS_ERRNO_LOG(log_level, err, format, ...) \
     hscfs_log_errno(log_level, __func__, __LINE__, err, format, ##__VA_ARGS__)
