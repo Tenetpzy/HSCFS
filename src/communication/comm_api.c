@@ -1,8 +1,7 @@
 #include "communication/comm_api.h"
 #include "communication/channel.h"
 #include "communication/dev.h"
-#include "communication/session_cmd_ctx.h"
-#include "communication/session_env.h"
+#include "communication/session.h"
 
 int comm_submit_async_read_request(comm_dev *dev, void *buffer, uint64_t lba, uint32_t lba_count,
     comm_async_cb_func cb_func, void *cb_arg)

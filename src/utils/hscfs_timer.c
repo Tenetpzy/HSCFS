@@ -1,47 +1,33 @@
-#include <sys/timerfd.h>
-#include <sys/epoll.h>
-#include <time.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
 #include <assert.h>
 
-#include "utils/queue_extras.h"
 #include "utils/hscfs_log.h"
 #include "utils/hscfs_timer.h"
 
-typedef struct hscfs_timer
+int hscfs_timer_constructor(hscfs_timer *self, uint8_t is_block_check)
 {
-    int timer_fd;
-    struct timespec _expiration_time;
-    uint8_t _is_period;
-} hscfs_timer;
-
-hscfs_timer* new_hscfs_timer(void)
-{
-    hscfs_timer *timer = (hscfs_timer *)malloc(sizeof(hscfs_timer));
-    if (timer == NULL)
-    {
-        HSCFS_LOG(HSCFS_LOG_ERROR, "alloc hscfs timer struct failed.");
-        return NULL;
-    }
-    int fd = timerfd_create(CLOCK_MONOTONIC, 0);
+    int flags = 0;
+    if (!is_block_check)
+        flags |= TFD_NONBLOCK;
+    int fd = timerfd_create(CLOCK_MONOTONIC, flags);
     if (fd == -1)
     {
-        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, errno, "timerfd create failed.");
-        free(timer);
-        return NULL;
+        int ret = errno;
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "timerfd create failed.");
+        return ret;
     }
-    timer->timer_fd = fd;
-    return timer;
-};
+    self->timer_fd = fd;
+    self->_is_block_check = is_block_check;
+    return 0;
+}
 
-void free_hscfs_timer(hscfs_timer *self)
+void hscfs_timer_destructor(hscfs_timer *self)
 {
     int ret = close(self->timer_fd);
     if (ret != 0)
         HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, errno, "timerfd close failed.");
-    free(self);
 }
 
 void hscfs_timer_set(hscfs_timer *self, struct timespec *expiration_time, uint8_t is_period)
@@ -54,7 +40,7 @@ int hscfs_timer_start(hscfs_timer *self)
 {
     // 若itime.it_value为0，则解除定时器
     // 定时器到期后，将itime.it_interval装入it_value。若interval为0，则只启动1次
-    struct itimerspec itime;
+    struct itimerspec itime = {0};
     itime.it_value = self->_expiration_time;
     if (self->_is_period)
         itime.it_interval = self->_expiration_time;
@@ -75,44 +61,37 @@ int hscfs_timer_stop(hscfs_timer *self)
     return ret;
 }
 
-#define HSCFS_TIMER_MONITOR_MAX_SIZE_PER_WAIT 16
-#define HSCFS_TIMER_MONITOR_ENTRY_LIST_ENTRY list_entry
-
-typedef struct hscfs_timer_monitor_entry
+int hscfs_timer_check_expire(hscfs_timer *self, uint64_t *overflow_times)
 {
-    hscfs_timer *timer;
-    hscfs_timer_cb cb_func;
-    void *cb_arg;
-    LIST_ENTRY(hscfs_timer_monitor_entry) HSCFS_TIMER_MONITOR_ENTRY_LIST_ENTRY;
-} hscfs_timer_monitor_entry;
-
-typedef struct hscfs_timer_monitor
-{
-    int epoll_fd;
-    struct epoll_event evlist[HSCFS_TIMER_MONITOR_MAX_SIZE_PER_WAIT];
-    LIST_HEAD(, hscfs_timer_monitor_entry) monitor_entry_list;
-} hscfs_timer_monitor;
-
-hscfs_timer_monitor* new_hscfs_timer_monitor(void)
-{
-    hscfs_timer_monitor *monitor = (hscfs_timer_monitor *)malloc(sizeof(hscfs_timer_monitor));
-    if (monitor == NULL)
+    uint64_t of_times = 0;
+    if (read(self->timer_fd, &of_times, sizeof(uint64_t)) == -1)
     {
-        HSCFS_LOG(HSCFS_LOG_ERROR, "alloc timer monitor failed.");
-        return NULL;
+        int err = errno;
+        // 非阻塞定时器，返回EAGAIN错误，则未到期
+        if (err == EAGAIN && !self->_is_block_check)
+            return EAGAIN;
+        // 其它read错误
+        return err;
     }
-    monitor->epoll_fd = epoll_create(10);  // 10是随便写的参数，目前内核不使用epoll_create的size hint
-    if (monitor->epoll_fd == -1)
-    {
-        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, errno, "timer monitor create epoll fd failed.");
-        free(monitor);
-        return NULL;
-    }
-    LIST_INIT(&monitor->monitor_entry_list);
-    return monitor;
+    if (overflow_times != NULL)
+        *overflow_times = of_times;
+    return 0;
 }
 
-void free_hscfs_timer_monitor(hscfs_timer_monitor *self)
+int hscfs_timer_monitor_constructor(hscfs_timer_monitor *self)
+{
+    self->epoll_fd = epoll_create(10);  // 10是随便写的参数，目前内核不使用epoll_create的size hint
+    if (self->epoll_fd == -1)
+    {
+        int ret = errno;
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "timer monitor create epoll fd failed.");
+        return ret;
+    }
+    LIST_INIT(&self->monitor_entry_list);
+    return 0;
+}
+
+void hscfs_timer_monitor_destructor(hscfs_timer_monitor *self)
 {
     int ret = close(self->epoll_fd);
     if (ret != 0)
@@ -185,8 +164,8 @@ int hscfs_timer_monitor_wait_added_timer(hscfs_timer_monitor *self)
         && errno == EINTR);
     if (ret == -1)
     {
-        ret = errno;
-        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "timer monitor wait timer failed.");
+        ret = -errno;
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, errno, "timer monitor wait timer failed.");
         return ret;
     }
 
