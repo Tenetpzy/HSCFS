@@ -1,7 +1,11 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "communication/comm_api.h"
-#include "communication/channel.h"
+#include "communication/dev.h"
 #include "utils/queue_extras.h"
 #include "utils/hscfs_multithread.h"
 
@@ -72,7 +76,7 @@ typedef struct comm_session_cmd_ctx
  * 对于异步命令，take_ownership若为1，则轮询线程获取self的所有权，轮询线程将在命令执行结束后释放资源。
  * channel参数为发送命令使用的channel。
  * 
- * 通信层发送命令后，可构造会话层命令上下文，并使用comm_session_env_submit_cmd_ctx将其提交给会话层
+ * 通信层发送命令后，可构造会话层命令上下文，并使用comm_session_submit_cmd_ctx将其提交给会话层
  */
 
 // 同步命令
@@ -106,7 +110,20 @@ void comm_session_cmd_ctx_destructor(comm_session_cmd_ctx *self);
 int comm_session_env_init(void);
 
 // 将命令上下文提交给会话层，此后由轮询线程完成轮询该命令CQE等后续流程
-int comm_session_env_submit_cmd_ctx(comm_session_cmd_ctx *cmd_ctx);
+int comm_session_submit_cmd_ctx(comm_session_cmd_ctx *cmd_ctx);
 
 // 接口层向信道层提交命令时，使用的回调函数
 void comm_session_polling_thread_callback(comm_cmd_CQE_result result, void *arg);
+
+// 轮询线程启动参数
+typedef struct polling_thread_start_env
+{
+    comm_dev *dev;
+} polling_thread_start_env;
+
+// 轮询线程入口
+void* comm_session_polling_thread(void *arg);
+
+#ifdef __cplusplus
+}
+#endif

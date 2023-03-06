@@ -7,25 +7,6 @@
 #include "spdk/nvme_spec.h"
 #include "spdk/nvme.h"
 #include "utils/queue_extras.h"
-#include "utils/hscfs_multithread.h"
-
-// 描述一个channel的信息
-typedef struct comm_channel
-{
-    struct spdk_nvme_qpair *qpair;  // 该channel关联的SQ/CQ队列
-    comm_dev *dev;  // 该channel所属设备
-    size_t idx;  // 该channel在channel_controller中的下标
-    mutex_t lock;  // 保证channel独占使用的锁
-} comm_channel;
-
-/* 信道层channel管理器 */
-typedef struct comm_channel_controller
-{
-    struct comm_channel *channels;  // 指向分配的channel数组
-    size_t *channel_use_cnt;  // 记录每一个channel当前的使用计数
-    size_t _channel_num;  // 当前分配的channel数量
-    spinlock_t lock;  // 用于分配channel时的互斥
-} comm_channel_controller;
 
 // 构造channel：分配qpair，初始化lock，初始化ref_count为0。返回0成功，否则返回对应errno。
 static int comm_channel_constructor(comm_channel *self, comm_dev *dev, size_t index)
@@ -58,7 +39,7 @@ static void comm_channel_destructor(comm_channel *self)
 }
 
 // 分配控制器中channels数组，并构造数组中每一个channel。若失败，返回对应errno
-static int comm_channel_controller_constructor(comm_channel_controller *self, comm_dev *dev, size_t channel_num)
+int comm_channel_controller_constructor(comm_channel_controller *self, comm_dev *dev, size_t channel_num)
 {
     int ret;
     self->channels = (comm_channel*)malloc(sizeof(comm_channel) * channel_num);
@@ -108,25 +89,7 @@ static int comm_channel_controller_constructor(comm_channel_controller *self, co
     return ret;
 }
 
-comm_channel_controller* new_comm_channel_controller(comm_dev *dev, size_t channel_num)
-{
-    comm_channel_controller *ctrlr = (comm_channel_controller *)malloc(sizeof(comm_channel_controller));
-    if (ctrlr == NULL)
-    {
-        HSCFS_LOG(HSCFS_LOG_ERROR, "alloc comm channel controller failed.");
-        return NULL;
-    }
-    int ret = comm_channel_controller_constructor(ctrlr, dev, channel_num);
-    if (ret != 0)
-    {
-        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "init comm channel controller failed.");
-        free(ctrlr);
-        return NULL;
-    }
-    return ctrlr;
-}
-
-void free_comm_channel_controller(comm_channel_controller *self)
+void comm_channel_controller_destructor(comm_channel_controller *self)
 {
     // 析构每一个channel，然后释放channels数组
     for (size_t i = 0; i < self->_channel_num; ++i)
@@ -136,7 +99,6 @@ void free_comm_channel_controller(comm_channel_controller *self)
     int ret = spin_destroy(&self->lock);
     if (ret != 0)
         HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "free channel controller lock error.");
-    free(self);
 }
 
 comm_channel_handle comm_channel_controller_get_channel(comm_channel_controller *self)
@@ -162,7 +124,7 @@ comm_channel_handle comm_channel_controller_get_channel(comm_channel_controller 
 
 void comm_channel_release(comm_channel_handle self)
 {
-    comm_channel_controller *channel_ctrlr = self->dev->channel_ctrlr;
+    comm_channel_controller *channel_ctrlr = &self->dev->channel_ctrlr;
     spin_lock(&channel_ctrlr->lock);
     --channel_ctrlr->channel_use_cnt[self->idx];
     spin_unlock(&channel_ctrlr->lock);

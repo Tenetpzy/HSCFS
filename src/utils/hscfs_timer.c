@@ -14,9 +14,9 @@ int hscfs_timer_constructor(hscfs_timer *self, uint8_t is_block_check)
     int fd = timerfd_create(CLOCK_MONOTONIC, flags);
     if (fd == -1)
     {
-        int ret = errno;
-        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "timerfd create failed.");
-        return ret;
+        int err = errno;
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, err, "timerfd create failed.");
+        return -1;
     }
     self->timer_fd = fd;
     self->_is_block_check = is_block_check;

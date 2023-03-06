@@ -1,7 +1,8 @@
-include_directories(../inc inc)
+include_directories(${PROJECT_SOURCE_DIR}/inc ${PROJECT_SOURCE_DIR}/test/inc)
 link_directories(/usr/local/lib)
 
 add_compile_options(-g -Wall)
 link_libraries(gtest pthread)
 
 add_subdirectory(utils)
+add_subdirectory(communication)

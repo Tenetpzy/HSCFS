@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // 用户态、内核多线程同步和互斥工具的兼容层
 
 // 用户态
@@ -72,3 +76,8 @@ static int cond_broadcast(cond_t *self)
 {
     return pthread_cond_broadcast(self);
 }
+
+
+#ifdef __cplusplus
+}
+#endif

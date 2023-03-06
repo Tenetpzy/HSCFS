@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "utils/hscfs_log.h"
 
 // 用户态
@@ -20,3 +24,7 @@ static void comm_free_dma_mem(void *buf)
 {
     spdk_free(buf);
 }
+
+#ifdef __cplusplus
+}
+#endif

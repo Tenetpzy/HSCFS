@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum hscfs_log_level 
 {
     HSCFS_LOG_DEBUG, HSCFS_LOG_INFO, HSCFS_LOG_WARNING, HSCFS_LOG_ERROR
@@ -13,3 +17,8 @@ void hscfs_log_errno(hscfs_log_level log_level, const char *funcname, unsigned i
 
 #define HSCFS_ERRNO_LOG(log_level, err, format, ...) \
     hscfs_log_errno(log_level, __func__, __LINE__, err, format, ##__VA_ARGS__)
+
+
+#ifdef __cplusplus
+}
+#endif

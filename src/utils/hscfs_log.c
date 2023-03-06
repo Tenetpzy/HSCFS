@@ -1,8 +1,10 @@
-#include "utils/hscfs_log.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <errno.h>
 #include <string.h>
+
+#include "utils/hscfs_log.h"
+#include "utils/hscfs_multithread.h"
 
 const char *log_level_str[] = {"DEBUG", "INFO", "WARING", "ERROR"};
 #define ERRNO_MSG_LEN 128
@@ -28,6 +30,6 @@ void hscfs_log_errno(hscfs_log_level log_level, const char *funcname, unsigned i
     va_end(args);
     
     char errno_msg[ERRNO_MSG_LEN];
-    char *msg = strerror_r(err, errno_msg, sizeof(errno_msg));
-    PRINT_TO_STDERR("error: %s\n", msg);
+    if (strerror_r(err, errno_msg, sizeof(errno_msg)) == 0)
+        PRINT_TO_STDERR("error: %s\n", errno_msg);
 }

@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
@@ -69,3 +73,7 @@ int hscfs_timer_monitor_del_timer(hscfs_timer_monitor *self, hscfs_timer *timer)
  * 返回已到期定时器个数，出错返回-errno
  */
 int hscfs_timer_monitor_wait_added_timer(hscfs_timer_monitor *self);
+
+#ifdef __cplusplus
+}
+#endif

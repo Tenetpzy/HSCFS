@@ -44,7 +44,9 @@ static void comm_session_cmd_ctx_init_async_info(comm_session_cmd_ctx *ctx,
 static uint16_t alloc_new_tid(void)
 {
     static uint16_t tid = 0;
-    return tid++;
+    if (tid == UINT16_MAX)
+        tid = 0;
+    return ++tid;
 }
 
 // 分配comm_session_cmd_ctx结构体，并初始化属性
@@ -119,13 +121,6 @@ void comm_session_cmd_ctx_destructor(comm_session_cmd_ctx *self)
     }
 }
 
-// void free_comm_session_cmd_ctx(comm_session_cmd_ctx *self)
-// {
-//     if (self->cmd_sync_type == SESSION_SYNC_CMD)
-//         free_comm_session_cmd_ctx_sync_info(self);
-//     free(self);
-// }
-
 /*****************************************************************************************/
 /* 会话层环境 */
 
@@ -168,7 +163,7 @@ int comm_session_env_init(void)
     return ret;
 }
 
-int comm_session_env_submit_cmd_ctx(comm_session_cmd_ctx *cmd_ctx)
+int comm_session_submit_cmd_ctx(comm_session_cmd_ctx *cmd_ctx)
 {
     // 是否需要volatile?? mutex能否保证session_env对象成员写入后其他线程的可见性？
     comm_session_env *session_env = session_env_get_instance();
@@ -203,6 +198,7 @@ int comm_session_env_submit_cmd_ctx(comm_session_cmd_ctx *cmd_ctx)
 /***********************************************************/
 /* 轮询线程 */
 
+
 #define CPLT_TID_LIST_ENTRY list_entry
 typedef struct cplt_tid_entry
 {
@@ -217,7 +213,6 @@ typedef enum cplt_tid_poll_state
 {
     CPLT_TID_POLL_DISABLE, // 此时未进行任务
     CPLT_TID_POLL_WAIT_PERIOD,  // 等待到达任务轮询周期 
-    CPLT_TID_POLL_READY,  // 需要进行一次任务
     CPLT_TID_POLL_RUNNING, // 任务正在进行
     CPLT_TID_POLL_FINISHED,  // 已成功完成该任务
     CPLT_TID_POLL_ERROR  // 该任务执行过程出错
@@ -226,6 +221,12 @@ typedef enum cplt_tid_poll_state
 // 主机每次进行[获取已完成tid]任务时，指定的tid列表大小
 // 即每次最多从SSD获取CPLT_TID_PER_POLL个已完成tid
 #define CPLT_TID_PER_POLL 8
+
+// 发送[获取已完成tid]命令的时间周期(ns)
+// 50us
+#define CPLT_TID_POLL_PERIOD (1000 * 50)
+
+#define INVALID_TID 0
 
 // 会话层轮询线程的执行环境
 typedef struct polling_thread_env
@@ -239,22 +240,49 @@ typedef struct polling_thread_env
     cplt_tid_polling_state cplt_tid_query_state;  // 查询已完成tid任务的状态
     comm_session_cmd_ctx cplt_tid_query_ctx;  // 查询已完成tid任务的上下文
     comm_channel_handle cplt_tid_query_handle;  // 查询已完成tid任务使用的channel
+    comm_dev *dev;  // 轮询的目标设备
 } polling_thread_env;
 
-static int polling_thread_env_constructor(polling_thread_env *self)
+// 轮询线程向SSD发送[获取已完成tid]所使用的会话层回调。回调参数为polling_thread_env
+static void polling_thread_cplt_tid_query_callback(comm_cmd_result res, void *arg)
+{
+    polling_thread_env *thrd_env = (polling_thread_env *)arg;
+    if (res != COMM_CMD_SUCCESS)
+    {
+        HSCFS_LOG(HSCFS_LOG_WARNING, "polling thread query cplt tid failed.");
+        thrd_env->cplt_tid_query_state = CPLT_TID_POLL_ERROR;
+        return;
+    }
+
+    // 标记[获取已完成tid]任务已经成功获得结果
+    thrd_env->cplt_tid_query_state = CPLT_TID_POLL_FINISHED;
+}
+
+static int polling_thread_env_constructor(polling_thread_env *self, comm_dev *device)
 {
     TAILQ_INIT(&self->cq_queue);
     TAILQ_INIT(&self->tid_queue);
     TAILQ_INIT(&self->err_queue);
     LIST_INIT(&self->cplt_tid_list);
+
     int ret = hscfs_timer_constructor(&self->cplt_tid_query_timer, 0);
     if (ret != 0)
         return ret;
+    struct timespec tim = {.tv_sec = 0, .tv_nsec = CPLT_TID_POLL_PERIOD};
+    hscfs_timer_set(&self->cplt_tid_query_timer, &tim, 0);
+
     self->cplt_tid_buffer = comm_alloc_dma_mem(sizeof(uint16_t) * CPLT_TID_PER_POLL);
     if (self->cplt_tid_buffer == NULL)
+    {
+        hscfs_timer_destructor(&self->cplt_tid_query_timer);
         return ENOMEM;
+    }
+
+    self->cplt_tid_query_handle = comm_channel_controller_get_channel(&device->channel_ctrlr);
     self->cplt_tid_query_state = CPLT_TID_POLL_DISABLE;
-    
+    self->dev = device;
+    // cplt_tid_query_ctx在每次发送该命令时初始化
+
     return 0;
 }
 
@@ -288,11 +316,14 @@ static void polling_thread_process_cplt_cmd(polling_thread_env *thrd_env, comm_s
     // 否则是同步命令，唤醒等待的线程
     else
     {
-        int ret = mutex_lock(&cmd->wait_mtx);
+        int ret = mutex_trylock(&cmd->wait_mtx);
         if (ret != 0)
         {
+            if (ret == EBUSY)  // 如果没获取到锁，则下轮遍历重试
+                return;
             HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "polling thread lock cond failed.");
             TAILQ_INSERT_TAIL(&thrd_env->err_queue, cmd, COMM_SESSION_CMD_QUEUE_FIELD);
+            return;
         }
         cmd->cmd_is_cplt = 1;  // 设置完成标志，同步命令根据此标志判断命令在会话层是否处理完成
         ret = mutex_unlock(&cmd->wait_mtx);
@@ -366,6 +397,7 @@ static void polling_thread_process_cq_queue(polling_thread_env *thrd_env)
                     int ret = comm_channel_polling_completions_no_lock(cur_cmd->channel, 0);
                     if (ret < 0)
                         polling_thread_move_cmd_between_queues(&thrd_env->err_queue, cq_queue, cur_cmd);
+                    comm_channel_unlock(cur_cmd->channel);
                 }
             }
 
@@ -419,7 +451,7 @@ static void polling_thread_send_query_result_cmd(polling_thread_env *thrd_env, c
 {
     comm_raw_cmd query_cmd = {0};
     query_cmd.opcode = 0xc2;
-    query_cmd.dword10 = cmd->tid_result_buf_len;
+    query_cmd.dword10 = cmd->tid_result_buf_len / 4;
     query_cmd.dword12 = 0x60021;
     query_cmd.dword13 = cmd->tid;
     int ret = comm_send_raw_cmd(cmd->channel, cmd->tid_result_buffer, cmd->tid_result_buf_len, 
@@ -433,17 +465,6 @@ static void polling_thread_send_query_result_cmd(polling_thread_env *thrd_env, c
     // 设置状态为等待进行CQE轮询并移入cq等待队列，等待cq轮询子任务轮询其结果查询命令的CQE
     cmd->cmd_session_state = SESSION_CMD_NEED_POLLING;
     polling_thread_move_cmd_between_queues(&thrd_env->cq_queue, &thrd_env->tid_queue, cmd);
-}
-
-// 轮询线程发送[已完成tid]命令的回调
-static void polling_thread_query_cplt_tid_callback(comm_cmd_CQE_result result, void *arg)
-{
-
-}
-
-static int polling_thread_send_query_cplt_tid_cmd(polling_thread_env *thrd_env)
-{
-
 }
 
 // 轮询线程处理tid等待队列的入口
@@ -462,8 +483,11 @@ static void polling_thread_process_tid_queue(polling_thread_env *thrd_env)
         TAILQ_FOREACH(cmd, tid_wait_queue, COMM_SESSION_CMD_QUEUE_FIELD)
         {
             if (cmd->tid == tid && cmd->cmd_session_state == SESSION_CMD_TID_WAIT_QUERY)
+            {
                 cmd->cmd_session_state = SESSION_CMD_TID_CAN_QUERY;
-            LIST_REMOVE(cur_tid_entry, CPLT_TID_LIST_ENTRY);
+                LIST_REMOVE(cur_tid_entry, CPLT_TID_LIST_ENTRY);
+                free(cur_tid_entry);
+            }
         }
     }
 
@@ -485,6 +509,99 @@ static void polling_thread_process_tid_queue(polling_thread_env *thrd_env)
         default:
             break;
         }
+    }
+}
+
+// 轮询线程发送[查询已完成tid命令]
+static int polling_thread_send_query_cplt_tid_cmd(polling_thread_env *thrd_env)
+{
+    // 下发命令
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = 0xc2;
+    cmd.dword10 = CPLT_TID_PER_POLL * sizeof(uint16_t) / 4;
+    cmd.dword12 = 0x50021;
+    cmd.dword13 = 0;
+    comm_session_async_cmd_ctx_constructor(&thrd_env->cplt_tid_query_ctx, thrd_env->cplt_tid_query_handle, 
+        SESSION_ADMIN_CMD, polling_thread_cplt_tid_query_callback, thrd_env, 0);
+    int ret = comm_send_raw_cmd(thrd_env->cplt_tid_query_handle, thrd_env->cplt_tid_buffer, 
+        CPLT_TID_PER_POLL * sizeof(uint16_t), &cmd, comm_session_polling_thread_callback, thrd_env);
+    if (ret != 0)
+    {
+        HSCFS_LOG(HSCFS_LOG_ERROR, "polling thread send cplt tid query cmd failed.");
+        return ret;
+    }
+
+    // 将命令加入会话层命令队列
+    ret = comm_session_submit_cmd_ctx(&thrd_env->cplt_tid_query_ctx);
+    if (ret != 0)
+        HSCFS_LOG(HSCFS_LOG_ERROR, "polling thread submit cplt tid query cmd ctx failed.");
+    return ret;
+}
+
+// 轮询线程处理[已完成tid查询]的入口
+static void polling_thread_process_cplt_tid_query(polling_thread_env *thrd_env)
+{
+    int ret = 0;
+    switch (thrd_env->cplt_tid_query_state)
+    {
+        /* 此时已完成tid查询任务未激活
+         * 如果tid等待队列不为空，则启动该任务（启动轮询定时器）
+         */
+    case CPLT_TID_POLL_DISABLE:
+        if (!TAILQ_EMPTY(&thrd_env->tid_queue))
+        {
+            ret = hscfs_timer_start(&thrd_env->cplt_tid_query_timer);
+            if (ret != 0)
+            {
+                HSCFS_LOG(HSCFS_LOG_ERROR, "polling thread start cplt tid query timer failed.");
+                thrd_env->cplt_tid_query_state = CPLT_TID_POLL_ERROR;
+                return;
+            }
+            thrd_env->cplt_tid_query_state = CPLT_TID_POLL_WAIT_PERIOD;
+        }
+        break;
+
+        /* 此时正在等待轮询周期
+         * 则轮询定时器是否到期，若到期，发送命令
+         */
+    case CPLT_TID_POLL_WAIT_PERIOD:
+        ret = hscfs_timer_check_expire(&thrd_env->cplt_tid_query_timer, NULL);
+        if (ret != 0) // 未到期或发生错误
+        {
+            if (ret == EAGAIN)
+                return;
+            HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "polling thread poll cplt tid query timer failed.");
+            thrd_env->cplt_tid_query_state = CPLT_TID_POLL_ERROR;
+            return;
+        }
+
+        // 定时器已到期，发送查询已完成tid命令，标记任务正在进行
+        ret = polling_thread_send_query_cplt_tid_cmd(thrd_env);
+        if (ret != 0)
+            return;
+        thrd_env->cplt_tid_query_state = CPLT_TID_POLL_RUNNING;
+        break;
+
+    // 发送命令后，由回调函数将状态设置为CPLT_TID_POLL_FINISHED，表示已经收到CQE
+    case CPLT_TID_POLL_FINISHED:
+        // 将所有收到的tid加入cplt tid链表
+        for (size_t i = 0; i < CPLT_TID_PER_POLL; ++i)
+        {
+            if (thrd_env->cplt_tid_buffer[i] == INVALID_TID)
+                break;
+            cplt_tid_entry *entry = (cplt_tid_entry *)malloc(sizeof(cplt_tid_entry));
+            if (entry == NULL)
+            {
+                HSCFS_LOG(HSCFS_LOG_WARNING, "polling thread alloc cplt tid entry failed.");
+                return;
+            }
+            LIST_INSERT_HEAD(&thrd_env->cplt_tid_list, entry, CPLT_TID_LIST_ENTRY);
+        }
+        thrd_env->cplt_tid_query_state = CPLT_TID_POLL_DISABLE;
+        break;
+    
+    default:
+        break;
     }
 }
 
@@ -551,6 +668,16 @@ static int polling_thread_fetch_cmd_from_session(polling_thread_env *thrd_env, c
     return 0;
 }
 
+static int polling_thread_is_error(polling_thread_env *thrd_env)
+{
+    return !TAILQ_EMPTY(&thrd_env->err_queue) || thrd_env->cplt_tid_query_state == CPLT_TID_POLL_ERROR;
+}
+
+static void polling_thread_print_exit_log(void)
+{
+    HSCFS_LOG(HSCFS_LOG_ERROR, "polling thread exit.");
+}
+
 /* 
  * 会话层轮询线程
  * todo: 目前此线程没有设置取消机制。
@@ -559,9 +686,9 @@ void* comm_session_polling_thread(void *arg)
 {
     comm_session_env *session_env = session_env_get_instance();
     polling_thread_env thrd_env;
-    if (polling_thread_env_constructor(&thrd_env) != 0)
+    if (polling_thread_env_constructor(&thrd_env, ((polling_thread_start_env*)arg)->dev) != 0)
     {
-        HSCFS_LOG(HSCFS_LOG_ERROR, "polling thread exit.");
+        polling_thread_print_exit_log();
         return NULL;
     }
 
@@ -571,22 +698,20 @@ void* comm_session_polling_thread(void *arg)
         int ret = polling_thread_fetch_cmd_from_session(&thrd_env, session_env);
         if (ret != 0)
         {
-            HSCFS_LOG(HSCFS_LOG_ERROR, "polling thread exit.");
+            HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "polling thread fetch cmd failed.");
+            polling_thread_print_exit_log();
             return NULL;
         }
 
-        // 轮询cq等待队列
-        polling_thread_process_cq_queue(&thrd_env);
+        polling_thread_process_cq_queue(&thrd_env);  // 轮询cq等待队列
+        polling_thread_process_tid_queue(&thrd_env);  // 轮询tid等待队列
+        polling_thread_process_cplt_tid_query(&thrd_env);  // 处理已完成tid轮询任务
 
-        // 轮询tid等待队列
-        polling_thread_process_tid_queue(&thrd_env);
-
-        /* epoll_wait，等待：CQE查询的定时器到期，或已完成tid查询的定时器到期 */
-        /* 将到期的定时器移出epoll */
-        /* 根据到期的定时器设置对应命令的状态 */
-        
-        /* 若tid等待队列非空，且已完成tid查询的定时器到期 */
-        /* 向SSD查询已完成tid，并将它们合并入cplt_tid_list */
-        /* 若thrd_env中cq_queue和tid_queue均为空，则睡眠等待上层命令，否则继续loop */
+        if (polling_thread_is_error(&thrd_env))
+        {
+            HSCFS_LOG(HSCFS_LOG_ERROR, "polling thread error occured.");
+            polling_thread_print_exit_log();
+            return NULL;
+        }
     }
 }
