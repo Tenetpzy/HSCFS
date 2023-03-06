@@ -14,8 +14,9 @@ struct spdk_cmd_cb
 {
     spdk_nvme_cmd_cb _cb_fn;
     void *_cb_arg;
+	uint16_t _tid;
 
-    spdk_cmd_cb(spdk_nvme_cmd_cb cb_fn, void * cb_arg) : _cb_fn(cb_fn), _cb_arg(cb_arg) {}
+    spdk_cmd_cb(uint16_t tid, spdk_nvme_cmd_cb cb_fn, void * cb_arg) : _tid(tid), _cb_fn(cb_fn), _cb_arg(cb_arg) {}
 };
 
 struct spdk_nvme_ctrlr{};
@@ -23,8 +24,9 @@ struct spdk_nvme_ns{};
 
 static const size_t test_channel_size = 8;
 static const size_t lba_size = 512;
+static const size_t max_ret_tid = 16;
 
-void spdk_stub_setup();
+void spdk_stub_setup(void);
 
 // 使用index + 1数值模拟指针
 struct spdk_nvme_qpair *spdk_nvme_ctrlr_alloc_io_qpair(struct spdk_nvme_ctrlr *ctrlr,

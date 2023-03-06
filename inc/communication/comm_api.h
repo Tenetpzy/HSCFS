@@ -8,7 +8,18 @@ extern "C" {
 
 #include <stdint.h>
 
+#include "fs/fs.h"
+
 typedef struct comm_dev comm_dev;
+typedef struct comm_raw_cmd comm_raw_cmd;
+struct migrate_task
+{
+    uint32_t migrateLpaCnt;
+    struct f2fs_sit_entry victimSegInfo;
+    uint64_t migrateDstLpa;
+    uint64_t migrateSrcLpa;
+}__attribute__((packed));
+typedef struct migrate_task migrate_task;
 
 typedef enum comm_cmd_result
 {
@@ -23,6 +34,7 @@ int comm_submit_async_read_request(comm_dev *dev, void *buffer, uint64_t lba, ui
 
 int comm_submit_sync_read_request(comm_dev *dev, void *buffer, uint64_t lba, uint32_t lba_count);
 
+int comm_submit_raw_sync_cmd(comm_dev *dev, void *buf, uint32_t buf_len, comm_raw_cmd *raw_cmd);
 
 #ifdef __cplusplus
 }

@@ -27,25 +27,59 @@ polling_thread_start_env polling_thread_arg;
 //     fprintf(stdout, "%s\n", buf);
 // }
 
-void sync_read_multiple_thread_test(size_t idx, comm_dev *dev)
-{
-    char buf[lba_size];
-    if (comm_submit_sync_read_request(dev, buf, idx, 1) != 0)
-        throw std::runtime_error("submit sync read request error.");
+// void sync_read_multiple_thread_test(size_t idx, comm_dev *dev)
+// {
+//     char buf[lba_size];
+//     if (comm_submit_sync_read_request(dev, buf, idx, 1) != 0)
+//         throw std::runtime_error("submit sync read request error.");
     
-    fprintf(stdout, "thread %lu: %s\n", idx, buf);
+//     fprintf(stdout, "thread %lu: %s\n", idx, buf);
+// }
+
+// TEST(comm_test, sync_read_multiple_thread)
+// {
+//     const size_t th_num = 16;
+//     const size_t test_num = 1024;
+//     for (size_t i = 0; i < test_num; ++i)
+//     {
+//         fprintf(stdout, "test round: %lu\n", i);
+//         std::thread ths[th_num];
+//         for (size_t i = 0; i < th_num; ++i)
+//             ths[i] = std::thread(sync_read_multiple_thread_test, i, &dev);
+//         for (size_t i = 0; i < th_num; ++i)
+//             ths[i].join();
+//         std::cout << std::endl;
+//     }
+// }
+
+void sync_raw_long_cmd_test()
+{
+    const size_t cmd_res_len = 128;
+    char cmd_result[cmd_res_len];
+    comm_raw_cmd cmd;
+    cmd.opcode = 0xc5;
+    cmd.dword10 = cmd_res_len / 4;
+    cmd.dword12 = 0x10021; // one of long cmd
+    if (comm_submit_raw_sync_cmd(&dev, cmd_result, cmd_res_len, &cmd) != 0)
+        throw std::runtime_error("submit raw sync cmd failed.");
+    fprintf(stdout, "%s\n", cmd_result);
 }
 
-TEST(comm_test, sync_read_multiple_thread)
+// TEST(comm_test, sync_raw_long_cmd_single)
+// {
+//     sync_raw_long_cmd_test();
+// }
+
+TEST(comm_test, sync_raw_long_cmd_multi_thread)
 {
     const size_t th_num = 16;
-    const size_t test_num = 1024;
+    const size_t test_num = 1;
     for (size_t i = 0; i < test_num; ++i)
     {
         fprintf(stdout, "test round: %lu\n", i);
         std::thread ths[th_num];
         for (size_t i = 0; i < th_num; ++i)
-            ths[i] = std::thread(sync_read_multiple_thread_test, i, &dev);
+            ths[i] = std::thread(sync_raw_long_cmd_test);
         for (size_t i = 0; i < th_num; ++i)
             ths[i].join();
         std::cout << std::endl;

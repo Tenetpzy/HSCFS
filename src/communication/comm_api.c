@@ -96,3 +96,51 @@ int comm_submit_sync_read_request(comm_dev *dev, void *buffer, uint64_t lba, uin
     return ret;
 }
 
+int comm_submit_raw_sync_cmd(comm_dev *dev, void *buf, uint32_t buf_len, comm_raw_cmd *raw_cmd)
+{
+    int ret = 0;
+    comm_channel_handle channel = comm_channel_controller_get_channel(&dev->channel_ctrlr);
+    comm_session_cmd_ctx session_ctx;
+    ret = comm_session_sync_long_cmd_ctx_constructor(&session_ctx, channel, buf, buf_len);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync raw cmd: construct session ctx failed.");
+        goto err0;
+    }
+    raw_cmd->dword13 = session_ctx.tid;
+    ret = comm_send_raw_cmd(channel, buf, buf_len, raw_cmd, comm_session_polling_thread_callback, &session_ctx);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync read: send read cmd failed.");
+        goto err1;
+    }
+    ret = comm_session_submit_cmd_ctx(&session_ctx);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync read: submit ctx to session failed.");
+        goto err1;
+    }
+    ret = mutex_lock(&session_ctx.wait_mtx);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync read: lock session ctx failed.");
+        goto err1;
+    }
+    while (!session_ctx.cmd_is_cplt)
+    {
+        ret = cond_wait(&session_ctx.wait_cond, &session_ctx.wait_mtx);
+        if (ret != 0)
+        {
+            HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync read: wait session failed.");
+            goto err2;
+        }
+    }
+
+    err2:
+    mutex_unlock(&session_ctx.wait_mtx);
+    err1:
+    comm_session_cmd_ctx_destructor(&session_ctx);
+    err0:
+    comm_channel_release(channel);
+    return ret;
+}

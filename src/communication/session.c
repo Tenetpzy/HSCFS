@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <stdlib.h>
+#include <stdatomic.h>
 
 #include "communication/session.h"
 #include "communication/memory.h"
@@ -43,10 +44,12 @@ static void comm_session_cmd_ctx_init_async_info(comm_session_cmd_ctx *ctx,
 // 分配新的tid。同时下发多于UINT16_MAX个长命令时会出现tid重复，可能导致错误，暂时不处理。
 static uint16_t alloc_new_tid(void)
 {
-    static uint16_t tid = 0;
+    static _Atomic uint16_t tid = 0;
     if (tid == UINT16_MAX)
         tid = 0;
-    return ++tid;
+    uint16_t ret = tid + 1;
+    atomic_fetch_add(&tid, 1);
+    return ret;
 }
 
 // 分配comm_session_cmd_ctx结构体，并初始化属性
@@ -177,19 +180,19 @@ int comm_session_submit_cmd_ctx(comm_session_cmd_ctx *cmd_ctx)
 
     // 将cmd_ctx插入命令队列
     TAILQ_INSERT_TAIL(&session_env->cmd_queue, cmd_ctx, COMM_SESSION_CMD_QUEUE_FIELD);
-    int need_wakeup_polling = session_env->cmd_queue_size == 0 ? 1 : 0;
+    // int need_wakeup_polling = session_env->cmd_queue_size == 0 ? 1 : 0;
     session_env->cmd_queue_size++;
     ret = mutex_unlock(&session_env->cmd_queue_mtx);
     if (ret != 0)
         HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "unlock session env failed.");
     
     // 若之前命令队列为空，则唤醒轮询线程
-    if (need_wakeup_polling)
-    {
+    // if (need_wakeup_polling)
+    // {
         ret = cond_broadcast(&session_env->polling_thread_cond);
         if (ret != 0)
             HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "wakeup polling thread failed.");
-    }
+    // }
 
     return ret;
 }
@@ -299,8 +302,8 @@ static void polling_thread_move_cmd_between_queues(cmd_queue_t *tar, cmd_queue_t
     TAILQ_INSERT_TAIL(tar, element, COMM_SESSION_CMD_QUEUE_FIELD);
 }
 
-// 轮询线程处理一个已完成的命令
-static void polling_thread_process_cplt_cmd(polling_thread_env *thrd_env, comm_session_cmd_ctx *cmd)
+// 轮询线程处理一个已完成的命令。返回EBUSY则暂时无法获取该命令的锁，应当下次遍历时重试
+static int polling_thread_process_cplt_cmd(polling_thread_env *thrd_env, comm_session_cmd_ctx *cmd)
 {
     // 如果是异步命令，则调用上层回调函数，若有所有权，则释放资源
     if (cmd->cmd_sync_type == SESSION_ASYNC_CMD)
@@ -319,11 +322,11 @@ static void polling_thread_process_cplt_cmd(polling_thread_env *thrd_env, comm_s
         int ret = mutex_trylock(&cmd->wait_mtx);
         if (ret != 0)
         {
-            if (ret == EBUSY)  // 如果没获取到锁，则下轮遍历重试
-                return;
+            if (ret == EBUSY)
+                return EBUSY;
             HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "polling thread lock cond failed.");
             TAILQ_INSERT_TAIL(&thrd_env->err_queue, cmd, COMM_SESSION_CMD_QUEUE_FIELD);
-            return;
+            return 0;
         }
         cmd->cmd_is_cplt = 1;  // 设置完成标志，同步命令根据此标志判断命令在会话层是否处理完成
         ret = mutex_unlock(&cmd->wait_mtx);
@@ -335,6 +338,8 @@ static void polling_thread_process_cplt_cmd(polling_thread_env *thrd_env, comm_s
         if (ret != 0)
             HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "polling thread wakeup cond failed.");
     }
+
+    return 0;
 }
 
 // 轮询线程处理一个在cq_queue上收到CQE的命令
@@ -344,14 +349,20 @@ static void polling_thread_process_cmd_received_CQE(polling_thread_env *thrd_env
 
     // 如果命令不是长命令，则不需要再向SSD查询结果，命令已经完成
     if (!cmd->is_long_cmd)
-        polling_thread_process_cplt_cmd(thrd_env, cmd);
+    {
+        if (polling_thread_process_cplt_cmd(thrd_env, cmd) == EBUSY)
+            TAILQ_INSERT_TAIL(&thrd_env->cq_queue, cmd, COMM_SESSION_CMD_QUEUE_FIELD);
+    }
 
     // 如果是长命令
     else
     {
         // 命令下发返回的CQE出错，不用再查询结果了
         if (cmd->cmd_result == COMM_CMD_CQE_ERROR)
-            polling_thread_process_cplt_cmd(thrd_env, cmd);
+        {
+            if (polling_thread_process_cplt_cmd(thrd_env, cmd) == EBUSY)
+                TAILQ_INSERT_TAIL(&thrd_env->err_queue, cmd, COMM_SESSION_CMD_QUEUE_FIELD);
+        }
 
         // 如果是命令下发的CQE，将状态置为SESSION_CMD_TID_WAIT_QUERY后加入tid等待列表
         if (cmd->cmd_session_state == SESSION_CMD_RECEIVED_CQE)
@@ -502,7 +513,9 @@ static void polling_thread_process_tid_queue(polling_thread_env *thrd_env)
 
             // 当前已经收到查询结果命令的CQE
         case SESSION_CMD_TID_CPLT_QUERY:
-            polling_thread_process_cplt_cmd(thrd_env, cmd);
+            TAILQ_REMOVE(tid_wait_queue, cmd, COMM_SESSION_CMD_QUEUE_FIELD);
+            if (polling_thread_process_cplt_cmd(thrd_env, cmd) == EBUSY)
+                TAILQ_INSERT_TAIL(tid_wait_queue, cmd, COMM_SESSION_CMD_QUEUE_FIELD);
             break;
 
             // 忽略SESSION_CMD_TID_WAIT_QUERY，等待状态变为SESSION_CMD_TID_CAN_QUERY再处理
@@ -524,18 +537,17 @@ static int polling_thread_send_query_cplt_tid_cmd(polling_thread_env *thrd_env)
     comm_session_async_cmd_ctx_constructor(&thrd_env->cplt_tid_query_ctx, thrd_env->cplt_tid_query_handle, 
         SESSION_ADMIN_CMD, polling_thread_cplt_tid_query_callback, thrd_env, 0);
     int ret = comm_send_raw_cmd(thrd_env->cplt_tid_query_handle, thrd_env->cplt_tid_buffer, 
-        CPLT_TID_PER_POLL * sizeof(uint16_t), &cmd, comm_session_polling_thread_callback, thrd_env);
+        CPLT_TID_PER_POLL * sizeof(uint16_t), &cmd, 
+        comm_session_polling_thread_callback, &thrd_env->cplt_tid_query_ctx);
     if (ret != 0)
     {
         HSCFS_LOG(HSCFS_LOG_ERROR, "polling thread send cplt tid query cmd failed.");
         return ret;
     }
 
-    // 将命令加入会话层命令队列
-    ret = comm_session_submit_cmd_ctx(&thrd_env->cplt_tid_query_ctx);
-    if (ret != 0)
-        HSCFS_LOG(HSCFS_LOG_ERROR, "polling thread submit cplt tid query cmd ctx failed.");
-    return ret;
+    // 将命令加入cq队列
+    TAILQ_INSERT_TAIL(&thrd_env->cq_queue, &thrd_env->cplt_tid_query_ctx, COMM_SESSION_CMD_QUEUE_FIELD);
+    return 0;
 }
 
 // 轮询线程处理[已完成tid查询]的入口
@@ -578,7 +590,10 @@ static void polling_thread_process_cplt_tid_query(polling_thread_env *thrd_env)
         // 定时器已到期，发送查询已完成tid命令，标记任务正在进行
         ret = polling_thread_send_query_cplt_tid_cmd(thrd_env);
         if (ret != 0)
+        {
+            thrd_env->cplt_tid_query_state = CPLT_TID_POLL_ERROR;
             return;
+        }
         thrd_env->cplt_tid_query_state = CPLT_TID_POLL_RUNNING;
         break;
 
@@ -595,6 +610,7 @@ static void polling_thread_process_cplt_tid_query(polling_thread_env *thrd_env)
                 HSCFS_LOG(HSCFS_LOG_WARNING, "polling thread alloc cplt tid entry failed.");
                 return;
             }
+            entry->tid = thrd_env->cplt_tid_buffer[i];
             LIST_INSERT_HEAD(&thrd_env->cplt_tid_list, entry, CPLT_TID_LIST_ENTRY);
         }
         thrd_env->cplt_tid_query_state = CPLT_TID_POLL_DISABLE;
