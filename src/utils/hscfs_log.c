@@ -4,21 +4,20 @@
 #include <string.h>
 
 #include "utils/hscfs_log.h"
-#include "utils/hscfs_multithread.h"
 
 const char *log_level_str[] = {"DEBUG", "INFO", "WARING", "ERROR"};
 #define ERRNO_MSG_LEN 128
 #define PRINT_TO_STDERR(fmt, ...) \
-    fprintf(stderr, fmt, ##__VA_ARGS__)
+    vfprintf(stderr, fmt, ##__VA_ARGS__)
 
 void hscfs_log_print(hscfs_log_level log_level, const char *funcname, unsigned int lineno, const char *fmt, ...)
 {
-    PRINT_TO_STDERR("[%s:%u, %s]: ", funcname, lineno, log_level_str[log_level]);
+    fprintf(stderr, "[%s:%u, %s]: ", funcname, lineno, log_level_str[log_level]);
 
     va_list args;
     va_start(args, fmt);
-    PRINT_TO_STDERR(fmt, args);
-    PRINT_TO_STDERR("\n");
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
     va_end(args);
 }
 
@@ -31,5 +30,5 @@ void hscfs_log_errno(hscfs_log_level log_level, const char *funcname, unsigned i
     
     char errno_msg[ERRNO_MSG_LEN];
     if (strerror_r(err, errno_msg, sizeof(errno_msg)) == 0)
-        PRINT_TO_STDERR("error: %s\n", errno_msg);
+        fprintf(stderr, "error: %s\n", errno_msg);
 }

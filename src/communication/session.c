@@ -47,9 +47,8 @@ static uint16_t alloc_new_tid(void)
     static _Atomic uint16_t tid = 0;
     if (tid == UINT16_MAX)
         tid = 0;
-    uint16_t ret = tid + 1;
-    atomic_fetch_add(&tid, 1);
-    return ret;
+    uint16_t ret = atomic_fetch_add(&tid, 1);
+    return ret + 1;
 }
 
 // 分配comm_session_cmd_ctx结构体，并初始化属性
@@ -143,7 +142,7 @@ static comm_session_env* session_env_get_instance(void)
     return &session_env;
 }
 
-int comm_session_env_init(void)
+int comm_session_env_constructor(void)
 {
     comm_session_env *session_env = session_env_get_instance();
     int ret = 0;
@@ -166,6 +165,30 @@ int comm_session_env_init(void)
     return ret;
 }
 
+static void session_clear_queue(cmd_queue_t *q)
+{
+    comm_session_cmd_ctx *cmd, *nxtcmd;
+    TAILQ_FOREACH_SAFE(cmd, q, COMM_SESSION_CMD_QUEUE_FIELD, nxtcmd)
+    {
+        if (cmd->has_ownership)
+        {
+            comm_session_cmd_ctx_destructor(cmd);
+            comm_channel_release(cmd->channel);
+        }
+        TAILQ_REMOVE(q, cmd, COMM_SESSION_CMD_QUEUE_FIELD);
+        if (cmd->has_ownership)
+            free(cmd);
+    }
+}
+
+void comm_session_env_destructor()
+{
+    comm_session_env *session_env = session_env_get_instance();
+    cond_destroy(&session_env->polling_thread_cond);
+    mutex_destroy(&session_env->cmd_queue_mtx);
+    session_clear_queue(&session_env->cmd_queue);
+}
+
 int comm_session_submit_cmd_ctx(comm_session_cmd_ctx *cmd_ctx)
 {
     // 是否需要volatile?? mutex能否保证session_env对象成员写入后其他线程的可见性？
@@ -180,19 +203,19 @@ int comm_session_submit_cmd_ctx(comm_session_cmd_ctx *cmd_ctx)
 
     // 将cmd_ctx插入命令队列
     TAILQ_INSERT_TAIL(&session_env->cmd_queue, cmd_ctx, COMM_SESSION_CMD_QUEUE_FIELD);
-    // int need_wakeup_polling = session_env->cmd_queue_size == 0 ? 1 : 0;
+    int need_wakeup_polling = session_env->cmd_queue_size == 0 ? 1 : 0;
     session_env->cmd_queue_size++;
     ret = mutex_unlock(&session_env->cmd_queue_mtx);
     if (ret != 0)
         HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "unlock session env failed.");
     
     // 若之前命令队列为空，则唤醒轮询线程
-    // if (need_wakeup_polling)
-    // {
+    if (need_wakeup_polling)
+    {
         ret = cond_broadcast(&session_env->polling_thread_cond);
         if (ret != 0)
             HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "wakeup polling thread failed.");
-    // }
+    }
 
     return ret;
 }
@@ -293,6 +316,18 @@ static void polling_thread_env_destructor(polling_thread_env *self)
 {
     hscfs_timer_destructor(&self->cplt_tid_query_timer);
     comm_free_dma_mem(self->cplt_tid_buffer);
+    comm_session_cmd_ctx_destructor(&self->cplt_tid_query_ctx);
+    comm_channel_release(self->cplt_tid_query_handle);
+    session_clear_queue(&self->cq_queue);
+    session_clear_queue(&self->tid_queue);
+    session_clear_queue(&self->err_queue);
+
+    cplt_tid_entry *entry, *nxt;
+    LIST_FOREACH_SAFE(entry, &self->cplt_tid_list, CPLT_TID_LIST_ENTRY, nxt)
+    {
+        LIST_REMOVE(entry, CPLT_TID_LIST_ENTRY);
+        free(entry);
+    }
 }
 
 static void polling_thread_move_cmd_between_queues(cmd_queue_t *tar, cmd_queue_t *src, 
@@ -602,8 +637,23 @@ static void polling_thread_process_cplt_tid_query(polling_thread_env *thrd_env)
         // 将所有收到的tid加入cplt tid链表
         for (size_t i = 0; i < CPLT_TID_PER_POLL; ++i)
         {
-            if (thrd_env->cplt_tid_buffer[i] == INVALID_TID)
+            uint16_t tid = thrd_env->cplt_tid_buffer[i];
+            if (tid == INVALID_TID)
                 break;
+            // 查看cplt tid list中是否已经有该tid，如果已经有，则不添加
+            cplt_tid_entry *e;
+            int already_exist = 0;
+            LIST_FOREACH(e, &thrd_env->cplt_tid_list, CPLT_TID_LIST_ENTRY)
+            {
+                if (e->tid == tid)
+                {
+                    already_exist = 1;
+                    break;
+                }
+            }
+            if (already_exist)
+                continue;
+
             cplt_tid_entry *entry = (cplt_tid_entry *)malloc(sizeof(cplt_tid_entry));
             if (entry == NULL)
             {

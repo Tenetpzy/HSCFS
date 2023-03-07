@@ -282,29 +282,17 @@ int comm_send_raw_cmd(comm_channel_handle handle, void *buf, uint32_t buf_len, c
     if (cmd_cb_ctx == NULL)
         return ENOMEM;
 
-    struct spdk_nvme_cmd *nvme_cmd = (struct spdk_nvme_cmd *)malloc(sizeof(struct spdk_nvme_cmd));
-    if (nvme_cmd == NULL)
-    {
-        HSCFS_LOG(HSCFS_LOG_ERROR, "alloc nvme cmd failed.");
-        ret = ENOMEM;
-        goto err1;
-    }
-    build_nvme_cmd(nvme_cmd, raw_cmd, handle->dev);
+    struct spdk_nvme_cmd nvme_cmd;
+    build_nvme_cmd(&nvme_cmd, raw_cmd, handle->dev);
     
-    ret = spdk_nvme_ctrlr_cmd_admin_raw(handle->dev->nvme_ctrlr, nvme_cmd, buf, buf_len, 
+    ret = spdk_nvme_ctrlr_cmd_admin_raw(handle->dev->nvme_ctrlr, &nvme_cmd, buf, buf_len, 
         channel_inner_spdk_cmd_callback, cmd_cb_ctx);
     if (ret != 0)
     {
         ret = -ret;
         HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "spdk send raw cmd failed.");
-        goto err2;
+        free(cmd_cb_ctx);
     }
-    return ret;
-
-    err2:
-    free(nvme_cmd);
-    err1:
-    free(cmd_cb_ctx);
     return ret;
 }
 

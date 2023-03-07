@@ -77,6 +77,11 @@ static int cond_broadcast(cond_t *self)
     return pthread_cond_broadcast(self);
 }
 
+static int cond_destroy(cond_t *self)
+{
+    return pthread_cond_destroy(self);
+}
+
 
 #ifdef __cplusplus
 }

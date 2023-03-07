@@ -38,6 +38,9 @@ int comm_submit_async_read_request(comm_dev *dev, void *buffer, uint64_t lba, ui
         goto err2;
     }
 
+    comm_channel_release(channel);
+    return 0;
+
     err2:
     comm_session_cmd_ctx_destructor(session_ctx);
     free(session_ctx);
@@ -107,6 +110,12 @@ int comm_submit_raw_sync_cmd(comm_dev *dev, void *buf, uint32_t buf_len, comm_ra
         HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync raw cmd: construct session ctx failed.");
         goto err0;
     }
+
+    #ifdef HSCFS_DEBUG
+    // test tid alloc
+    HSCFS_LOG(HSCFS_LOG_INFO, "tid = %hu\n", session_ctx.tid);
+    #endif
+
     raw_cmd->dword13 = session_ctx.tid;
     ret = comm_send_raw_cmd(channel, buf, buf_len, raw_cmd, comm_session_polling_thread_callback, &session_ctx);
     if (ret != 0)

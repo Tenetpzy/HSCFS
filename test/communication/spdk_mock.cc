@@ -12,15 +12,13 @@ static const uint16_t INVALID_TID = 0;
 
 static int qpair_stub_alloc_map[test_channel_size];
 static std::vector<spdk_cmd_cb> qpair_io_cmds[test_channel_size], qpair_admin_cmds;
-static std::mutex admin_mtx;
+static std::mutex admin_mtx, io_mtx;
 spdk_nvme_cpl cpl_stub;
-
 std::queue<spdk_cmd_cb> cplt_tid_cmd;
 uint16_t ret_tid_list[max_ret_tid];
 
 using lba_buffer = char[lba_size];
 static std::unordered_map<uint64_t, lba_buffer> vir_lba_storage;
-static std::mutex storage_mtx;
 
 void spdk_stub_setup(void)
 {
@@ -75,15 +73,13 @@ int spdk_nvme_ns_cmd_read(struct spdk_nvme_ns *ns, struct spdk_nvme_qpair *qpair
 			  uint64_t lba, uint32_t lba_count, spdk_nvme_cmd_cb cb_fn,
 			  void *cb_arg, uint32_t io_flags)
 {
+    std::lock_guard<std::mutex> lg(io_mtx);
+    for (uint32_t cnt = 0; cnt < lba_count; ++cnt)
     {
-        std::lock_guard<std::mutex> lg(storage_mtx);
-        for (uint32_t cnt = 0; cnt < lba_count; ++cnt)
-        {
-            if (vir_lba_storage.count(lba + cnt))
-                memcpy(static_cast<char*>(payload) + cnt * lba_size, vir_lba_storage[lba + cnt], lba_size);
-            else
-                memcpy(static_cast<char*>(payload) + cnt * lba_size, "had not written.", sizeof("had not written."));
-        }
+        if (vir_lba_storage.count(lba + cnt))
+            memcpy(static_cast<char*>(payload) + cnt * lba_size, vir_lba_storage[lba + cnt], lba_size);
+        else
+            memcpy(static_cast<char*>(payload) + cnt * lba_size, "had not written.", sizeof("had not written."));
     }
     qpair_io_cmds[qpair_addr_to_idx(qpair)].emplace_back(INVALID_TID, cb_fn, cb_arg);
     return 0;
@@ -93,11 +89,9 @@ int spdk_nvme_ns_cmd_write(struct spdk_nvme_ns *ns, struct spdk_nvme_qpair *qpai
 			   uint64_t lba, uint32_t lba_count, spdk_nvme_cmd_cb cb_fn,
 			   void *cb_arg, uint32_t io_flags)
 {
-    {
-        std::lock_guard<std::mutex> lg(storage_mtx);
-        for (uint32_t cnt = 0; cnt < lba_count; ++cnt)
-            memcpy(vir_lba_storage[lba + cnt], static_cast<char*>(payload) + cnt * lba_size, lba_size);
-    }
+    std::lock_guard<std::mutex> lg(io_mtx);
+    for (uint32_t cnt = 0; cnt < lba_count; ++cnt)
+        memcpy(vir_lba_storage[lba + cnt], static_cast<char*>(payload) + cnt * lba_size, lba_size);
     qpair_io_cmds[qpair_addr_to_idx(qpair)].emplace_back(INVALID_TID, cb_fn, cb_arg);
     return 0;
 }
@@ -111,40 +105,40 @@ int spdk_nvme_ctrlr_cmd_admin_raw(struct spdk_nvme_ctrlr *ctrlr,
         return cmd->cdw12 == 0x10021 || cmd->cdw12 == 0x20021 || cmd->cdw12 == 0x30021;
     };
 
+    std::lock_guard<std::mutex> lg(admin_mtx);
+
+    if (cmd->cdw12 == 0x50021)  // 获取已完成tid列表
     {
-        if (cmd->cdw12 == 0x50021)  // 获取已完成tid列表
+        size_t request_cnt = static_cast<size_t>(len) / sizeof(uint32_t);
+        size_t cnt = std::min(request_cnt, max_ret_tid);
+        cnt = std::min(cnt, cplt_tid_cmd.size());
+        size_t i = 0;
+        for (; i < cnt; ++i)
         {
-            size_t request_cnt = static_cast<size_t>(len) / sizeof(uint32_t);
-            size_t cnt = std::min(request_cnt, max_ret_tid);
-            cnt = std::min(cnt, cplt_tid_cmd.size());
-            size_t i = 0;
-            for (; i < cnt; ++i)
-            {
-                auto &e = cplt_tid_cmd.front();
-                ret_tid_list[i] = e._tid;
-                cplt_tid_cmd.pop();
-            }
-            for (; i < request_cnt; ++i)
-                ret_tid_list[i] = INVALID_TID;
-            memcpy(buf, ret_tid_list, len);
+            auto &e = cplt_tid_cmd.front();
+            ret_tid_list[i] = e._tid;
+            cplt_tid_cmd.pop();
         }
-
-        else if (cmd->cdw12 == 0x60021) // 获取tid对应任务结果
-        {
-            static char tid_cmd_res[] = "tid stub";
-            memcpy(buf, tid_cmd_res, std::min(static_cast<size_t>(len), sizeof(tid_cmd_res)));
-        }
-
-        uint16_t tid = is_long_cmd(cmd) ? cmd->cdw13 : INVALID_TID;
-        std::lock_guard<std::mutex> lg(admin_mtx);
-        qpair_admin_cmds.emplace_back(tid, cb_fn, cb_arg);
+        for (; i < request_cnt; ++i)
+            ret_tid_list[i] = INVALID_TID;
+        memcpy(buf, ret_tid_list, len);
     }
+
+    else if (cmd->cdw12 == 0x60021) // 获取tid对应任务结果
+    {
+        static char tid_cmd_res[] = "tid stub";
+        memcpy(buf, tid_cmd_res, std::min(static_cast<size_t>(len), sizeof(tid_cmd_res)));
+    }
+
+    uint16_t tid = is_long_cmd(cmd) ? cmd->cdw13 : INVALID_TID;
+    qpair_admin_cmds.emplace_back(tid, cb_fn, cb_arg);
     return 0;
 }
 
 int32_t spdk_nvme_qpair_process_completions(struct spdk_nvme_qpair *qpair,
 		uint32_t max_completions)
 {
+    std::lock_guard<std::mutex> lg(io_mtx);
     size_t index = qpair_addr_to_idx(qpair);
     std::vector<spdk_cmd_cb> &qpair_cmds = qpair_io_cmds[index];
     size_t cpl_cnt = max_completions == 0 ? qpair_cmds.size() : max_completions;
@@ -159,6 +153,7 @@ int32_t spdk_nvme_qpair_process_completions(struct spdk_nvme_qpair *qpair,
 
 int32_t spdk_nvme_ctrlr_process_admin_completions(spdk_nvme_ctrlr *ctrlr)
 {
+    std::lock_guard<std::mutex> lg(admin_mtx);
     size_t cpl_cnt = qpair_admin_cmds.size();
     for (size_t i = 0; i < cpl_cnt; ++i)
     {
@@ -168,10 +163,7 @@ int32_t spdk_nvme_ctrlr_process_admin_completions(spdk_nvme_ctrlr *ctrlr)
         if (ctx._tid != INVALID_TID)
             cplt_tid_cmd.emplace(ctx);
     }
-    {
-        std::lock_guard<std::mutex> lg(admin_mtx);
-        qpair_admin_cmds.clear();
-    }
+    qpair_admin_cmds.clear();
     return static_cast<int32_t>(cpl_cnt);
 }
 
