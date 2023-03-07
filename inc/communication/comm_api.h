@@ -29,12 +29,16 @@ typedef enum comm_cmd_result
 // 通信层异步接口的回调函数
 typedef void (*comm_async_cb_func)(comm_cmd_result, void *);
 
-int comm_submit_async_read_request(comm_dev *dev, void *buffer, uint64_t lba, uint32_t lba_count,
-    comm_async_cb_func cb_func, void *cb_arg);
+typedef enum comm_io_direction
+{
+    COMM_IO_READ, COMM_IO_WRITE
+} comm_io_direction;
 
-int comm_submit_sync_read_request(comm_dev *dev, void *buffer, uint64_t lba, uint32_t lba_count);
+int comm_submit_async_rw_request(comm_dev *dev, void *buffer, uint64_t lba, uint32_t lba_count,
+    comm_async_cb_func cb_func, void *cb_arg, comm_io_direction dir);
 
-int comm_submit_raw_sync_cmd(comm_dev *dev, void *buf, uint32_t buf_len, comm_raw_cmd *raw_cmd);
+int comm_submit_sync_rw_request(comm_dev *dev, void *buffer, uint64_t lba, uint32_t lba_count, 
+    comm_io_direction dir);
 
 #ifdef __cplusplus
 }

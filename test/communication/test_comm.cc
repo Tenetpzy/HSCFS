@@ -9,6 +9,15 @@
 #include <thread>
 #include <cstdio>
 
+extern "C" {
+int comm_raw_sync_cmd_sender(comm_dev *dev, void *buf, uint32_t buf_len, comm_raw_cmd *raw_cmd,
+    uint8_t is_long_cmd, void *tid_res_buf, uint32_t tid_res_len);
+
+int comm_raw_async_cmd_sender(comm_dev *dev, void *buf, uint32_t buf_len, comm_raw_cmd *raw_cmd,
+    uint8_t is_long_cmd, void *tid_res_buf, uint32_t tid_res_len, 
+    comm_async_cb_func cb_func, void *cb_arg);
+}
+
 comm_dev dev;
 std::thread th;
 polling_thread_start_env polling_thread_arg;
@@ -16,7 +25,7 @@ polling_thread_start_env polling_thread_arg;
 TEST(comm_test, sync_read_single_thread)
 {
     char buf[lba_size];
-    if (comm_submit_sync_read_request(&dev, buf, 0, 1) != 0)
+    if (comm_submit_sync_rw_request(&dev, buf, 0, 1, COMM_IO_READ) != 0)
         throw std::runtime_error("submit sync read request error.");
     
     fprintf(stdout, "%s\n", buf);
@@ -25,7 +34,7 @@ TEST(comm_test, sync_read_single_thread)
 void sync_read_multiple_thread_test(size_t idx, comm_dev *dev)
 {
     char buf[lba_size];
-    if (comm_submit_sync_read_request(dev, buf, idx, 1) != 0)
+    if (comm_submit_sync_rw_request(dev, buf, idx, 1, COMM_IO_READ) != 0)
         throw std::runtime_error("submit sync read request error.");
     
     fprintf(stdout, "thread %lu: %s\n", idx, buf);
@@ -58,7 +67,7 @@ void async_read_test_thread(size_t index)
 {
     const size_t buf_size = 512;
     char *buffer = new char[buf_size];
-    int ret = comm_submit_async_read_request(&dev, buffer, 0, 1, async_read_test_cb, static_cast<void*>(buffer));
+    int ret = comm_submit_async_rw_request(&dev, buffer, 0, 1, async_read_test_cb, static_cast<void*>(buffer), COMM_IO_READ);
     if (ret != 0)
         throw std::runtime_error("send async read req failed.");
     fprintf(stdout, "thread %lu exit.\n", index);
@@ -88,7 +97,7 @@ void sync_raw_long_cmd_test()
     cmd.opcode = 0xc5;
     cmd.dword10 = cmd_res_len / 4;
     cmd.dword12 = 0x10021; // one of long cmd
-    if (comm_submit_raw_sync_cmd(&dev, cmd_result, cmd_res_len, &cmd) != 0)
+    if (comm_raw_sync_cmd_sender(&dev, NULL, 0, &cmd, 1, cmd_result, cmd_res_len) != 0)
         throw std::runtime_error("submit raw sync cmd failed.");
     fprintf(stdout, "%s\n", cmd_result);
 }
