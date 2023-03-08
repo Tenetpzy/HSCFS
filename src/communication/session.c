@@ -496,7 +496,7 @@ static void polling_thread_query_result_callback(comm_cmd_CQE_result result, voi
 static void polling_thread_send_query_result_cmd(polling_thread_env *thrd_env, comm_session_cmd_ctx *cmd)
 {
     comm_raw_cmd query_cmd = {0};
-    query_cmd.opcode = 0xc2;
+    query_cmd.opcode = VENDOR_GET_OPCODE;
     query_cmd.dword10 = cmd->tid_result_buf_len / 4;
     query_cmd.dword12 = 0x60021;
     query_cmd.dword13 = cmd->tid;
@@ -565,7 +565,7 @@ static int polling_thread_send_query_cplt_tid_cmd(polling_thread_env *thrd_env)
 {
     // 下发命令
     comm_raw_cmd cmd = {0};
-    cmd.opcode = 0xc2;
+    cmd.opcode = VENDOR_GET_OPCODE;
     cmd.dword10 = CPLT_TID_PER_POLL * sizeof(uint16_t) / 4;
     cmd.dword12 = 0x50021;
     cmd.dword13 = 0;

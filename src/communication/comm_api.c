@@ -233,3 +233,246 @@ int comm_raw_async_cmd_sender(comm_dev *dev, void *buf, uint32_t buf_len, comm_r
     return ret;
 }
 
+int comm_submit_sync_migrate_request(comm_dev *dev, migrate_task *task)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_SET_OPCODE;
+    cmd.dword10 = sizeof(migrate_task);
+    cmd.dword12 = 0x10021;
+    // dword13由comm_raw_sync_cmd_sender设置
+    int ret = comm_raw_sync_cmd_sender(dev, task, sizeof(migrate_task), &cmd, 1, NULL, 0);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit sync migrate request failed.");
+        return ret;
+    }
+    return 0;
+}
+
+int comm_submit_async_migrate_request(comm_dev *dev, migrate_task *task, comm_async_cb_func cb_func, void *cb_arg)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_SET_OPCODE;
+    cmd.dword10 = sizeof(migrate_task);
+    cmd.dword12 = 0x10021;
+    int ret = comm_raw_async_cmd_sender(dev, task, sizeof(migrate_task), &cmd, 1, NULL, 0, cb_func, cb_arg);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit async migrate request failed.");
+        return ret;
+    }
+    return 0;
+}
+
+int comm_submit_sync_path_lookup_request(comm_dev *dev, path_lookup_task *task, path_lookup_result *res)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_SET_OPCODE;
+    cmd.dword10 = sizeof(path_lookup_task);
+    cmd.dword12 = 0x20021;
+    int ret = comm_raw_sync_cmd_sender(dev, task, sizeof(path_lookup_task), &cmd, 1, res, sizeof(path_lookup_result));
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit sync path lookup request failed.");
+        return ret;
+    }
+    return 0;
+}
+
+int comm_submit_async_path_lookup_request(comm_dev *dev, path_lookup_task *task, path_lookup_result *res, 
+    comm_async_cb_func cb_func, void *cb_arg)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_SET_OPCODE;
+    cmd.dword10 = sizeof(path_lookup_task);
+    cmd.dword12 = 0x20021;
+    int ret = comm_raw_async_cmd_sender(dev, task, sizeof(path_lookup_task), &cmd, 1, 
+        res, sizeof(path_lookup_result), cb_func, cb_arg);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit async path lookup request failed.");
+        return ret;
+    }
+    return 0;
+}
+
+int comm_submit_sync_filemapping_search_request(comm_dev *dev, filemapping_search_task *task, 
+    void *res, uint32_t res_len)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_SET_OPCODE;
+    cmd.dword10 = sizeof(filemapping_search_task);
+    cmd.dword12 = 0x30021;
+    int ret = comm_raw_sync_cmd_sender(dev, task, sizeof(filemapping_search_task), &cmd, 1, res, res_len);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit sync filemapping search request failed.");
+        return ret;
+    }
+    return 0;
+}
+
+int comm_submit_async_filemapping_search_request(comm_dev *dev, filemapping_search_task *task, 
+    void *res, uint32_t res_len, comm_async_cb_func cb_func, void *cb_arg)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_SET_OPCODE;
+    cmd.dword10 = sizeof(filemapping_search_task);
+    cmd.dword12 = 0x30021;
+    int ret = comm_raw_async_cmd_sender(dev, task, sizeof(filemapping_search_task), &cmd, 1, res, res_len,
+        cb_func, cb_arg);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit async filemapping search request failed.");
+        return ret;
+    }
+    return 0;
+}
+
+int comm_submit_sync_update_metajournal_tail_request(comm_dev *dev, uint64_t origin_lpa, uint32_t write_block_num)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_SET_OPCODE;
+    cmd.dword12 = 0x40021;
+    cmd.dword13 = origin_lpa >> 32;
+    cmd.dword14 = origin_lpa & (UINT32_MAX);
+    cmd.dword15 = write_block_num;
+    int ret = comm_raw_sync_cmd_sender(dev, NULL, 0, &cmd, 0, NULL, 0);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit sync update metajournal tail request failed.");
+        return ret;
+    }
+    return 0;
+}
+
+int comm_submit_async_update_metajournal_tail_request(comm_dev *dev, uint64_t origin_lpa, uint32_t write_block_num,
+    comm_async_cb_func cb_func, void *cb_arg)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_SET_OPCODE;
+    cmd.dword12 = 0x40021;
+    cmd.dword13 = origin_lpa >> 32;
+    cmd.dword14 = origin_lpa & (UINT32_MAX);
+    cmd.dword15 = write_block_num;
+    int ret = comm_raw_async_cmd_sender(dev, NULL, 0, &cmd, 0, NULL, 0, cb_func, cb_arg);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit async update metajournal tail request failed.");
+        return ret;
+    }
+    return 0;
+}
+
+int comm_submit_fs_module_init_request(comm_dev *dev)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_SET_OPCODE;
+    cmd.dword12 = 0x80021;
+    int ret = comm_raw_sync_cmd_sender(dev, NULL, 0, &cmd, 0, NULL, 0);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit fs module init request failed.");
+        return ret;
+    }
+    return 0;
+}
+
+int comm_submit_fs_db_init_request(comm_dev *dev)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_SET_OPCODE;
+    cmd.dword12 = 0x90021;
+    int ret = comm_raw_sync_cmd_sender(dev, NULL, 0, &cmd, 0, NULL, 0);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit fs db init request failed.");
+        return ret;
+    }
+    return 0;   
+}
+
+int comm_submit_fs_recover_from_db_request(comm_dev *dev)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_SET_OPCODE;
+    cmd.dword12 = 0xA0021;
+    int ret = comm_raw_sync_cmd_sender(dev, NULL, 0, &cmd, 0, NULL, 0);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit fs recover from db request failed.");
+        return ret;
+    }
+    return 0;   
+}
+
+int comm_submit_clear_metajournal_request(comm_dev *dev)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_SET_OPCODE;
+    cmd.dword12 = 0xB0021;
+    int ret = comm_raw_sync_cmd_sender(dev, NULL, 0, &cmd, 0, NULL, 0);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit clear metajournal request failed.");
+        return ret;
+    }
+    return 0;
+}
+
+int comm_submit_start_apply_journal_request(comm_dev *dev)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_SET_OPCODE;
+    cmd.dword12 = 0xC0021;
+    int ret = comm_raw_sync_cmd_sender(dev, NULL, 0, &cmd, 0, NULL, 0);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit start apply journal request failed.");
+        return ret;
+    }
+    return 0;
+}
+
+int comm_submit_stop_apply_journal_request(comm_dev *dev)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_SET_OPCODE;
+    cmd.dword12 = 0xD0021;
+    int ret = comm_raw_sync_cmd_sender(dev, NULL, 0, &cmd, 0, NULL, 0);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit stop apply journal request failed.");
+        return ret;
+    }
+    return 0;
+}
+
+int comm_submit_sync_get_metajournal_head_request(comm_dev *dev, uint64_t *head_lpa)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_GET_OPCODE;
+    cmd.dword12 = 0x70021;
+    int ret = comm_raw_sync_cmd_sender(dev, head_lpa, 8, &cmd, 0, NULL, 0);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit sync get metajournal head request failed.");
+        return ret;
+    }
+    return 0;
+}
+
+int comm_submit_async_get_metajournal_head_request(comm_dev *dev, uint64_t *head_lpa, 
+    comm_async_cb_func cb_func, void *cb_arg)
+{
+    comm_raw_cmd cmd = {0};
+    cmd.opcode = VENDOR_GET_OPCODE;
+    cmd.dword12 = 0x70021;
+    int ret = comm_raw_async_cmd_sender(dev, head_lpa, 8, &cmd, 0, NULL, 0, cb_func, cb_arg);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit async get metajournal head request failed.");
+        return ret;
+    }
+    return 0;
+}

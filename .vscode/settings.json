@@ -75,7 +75,9 @@
         "hscfs_timer.c": "cpp",
         "session.h": "c",
         "stdint-gcc.h": "c",
-        "hscfs_multithread.h": "c"
+        "hscfs_multithread.h": "c",
+        "types.h": "c",
+        "vendor_cmds.h": "c"
     },
     "C_Cpp.intelliSenseEngineFallback": "enabled"
 }
