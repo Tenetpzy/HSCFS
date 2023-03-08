@@ -9,15 +9,6 @@
 #include <thread>
 #include <cstdio>
 
-extern "C" {
-int comm_raw_sync_cmd_sender(comm_dev *dev, void *buf, uint32_t buf_len, comm_raw_cmd *raw_cmd,
-    uint8_t is_long_cmd, void *tid_res_buf, uint32_t tid_res_len);
-
-int comm_raw_async_cmd_sender(comm_dev *dev, void *buf, uint32_t buf_len, comm_raw_cmd *raw_cmd,
-    uint8_t is_long_cmd, void *tid_res_buf, uint32_t tid_res_len, 
-    comm_async_cb_func cb_func, void *cb_arg);
-}
-
 comm_dev dev;
 std::thread th;
 polling_thread_start_env polling_thread_arg;
@@ -89,22 +80,19 @@ TEST(comm_test, async_read_multi_thread)
     }
 }
 
-void sync_raw_long_cmd_test()
+void sync_raw_long_cmd_test(size_t idx)
 {
     const size_t cmd_res_len = 128;
     char cmd_result[cmd_res_len];
-    comm_raw_cmd cmd;
-    cmd.opcode = 0xc5;
-    cmd.dword10 = cmd_res_len / 4;
-    cmd.dword12 = 0x10021; // one of long cmd
-    if (comm_raw_sync_cmd_sender(&dev, NULL, 0, &cmd, 1, cmd_result, cmd_res_len) != 0)
-        throw std::runtime_error("submit raw sync cmd failed.");
-    fprintf(stdout, "%s\n", cmd_result);
+    filemapping_search_task task;
+    if (comm_submit_sync_filemapping_search_request(&dev, &task, cmd_result, cmd_res_len) != 0)
+        throw std::runtime_error("send filemapping search failed.");
+    fprintf(stdout, "thread %lu: %s\n", idx, cmd_result);
 }
 
 TEST(comm_test, sync_raw_long_cmd_single)
 {
-    sync_raw_long_cmd_test();
+    sync_raw_long_cmd_test(0);
 }
 
 TEST(comm_test, sync_raw_long_cmd_multi_thread)
@@ -116,7 +104,7 @@ TEST(comm_test, sync_raw_long_cmd_multi_thread)
         fprintf(stdout, "test round: %lu\n", i);
         std::thread ths[th_num];
         for (size_t i = 0; i < th_num; ++i)
-            ths[i] = std::thread(sync_raw_long_cmd_test);
+            ths[i] = std::thread(sync_raw_long_cmd_test, i);
         for (size_t i = 0; i < th_num; ++i)
             ths[i].join();
         std::cout << std::endl;

@@ -72,7 +72,7 @@
         "nvme.h": "c",
         "env.h": "c",
         "queue_extras.h": "c",
-        "hscfs_timer.c": "cpp",
+        "hscfs_timer.c": "c",
         "session.h": "c",
         "stdint-gcc.h": "c",
         "hscfs_multithread.h": "c",
