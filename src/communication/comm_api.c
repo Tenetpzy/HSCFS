@@ -14,7 +14,7 @@ int comm_submit_async_rw_request(comm_dev *dev, void *buffer, uint64_t lba, uint
     comm_session_cmd_ctx *session_ctx = (comm_session_cmd_ctx *)malloc(sizeof(comm_session_cmd_ctx));
     if (session_ctx == NULL)
     {
-        HSCFS_LOG(HSCFS_LOG_ERROR, "async read: alloc session ctx failed.");
+        HSCFS_LOG(HSCFS_LOG_ERROR, "async rw: alloc session ctx failed.");
         ret = ENOMEM;
         goto err1;
     }
@@ -34,14 +34,14 @@ int comm_submit_async_rw_request(comm_dev *dev, void *buffer, uint64_t lba, uint
 
     if (ret != 0)
     {
-        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "async read: send read cmd failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "async rw: send read cmd failed.");
         goto err2;
     }
 
     ret = comm_session_submit_cmd_ctx(session_ctx);
     if (ret != 0)
     {
-        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "async read: submit ctx to session failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "async rw: submit ctx to session failed.");
         // 此处已经成功下发命令，而没有轮询，可能导致channel对应qpair资源始终被占用
         // 但发生此错误应是panic的，所以不做轮询处理
         goto err2;
@@ -66,7 +66,7 @@ int comm_submit_sync_rw_request(comm_dev *dev, void *buffer, uint64_t lba, uint3
     ret = comm_session_sync_cmd_ctx_constructor(&session_ctx, channel, SESSION_IO_CMD);
     if (ret != 0)
     {
-        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync read: construct session ctx failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync rw: construct session ctx failed.");
         goto err0;
     }
 
@@ -82,21 +82,21 @@ int comm_submit_sync_rw_request(comm_dev *dev, void *buffer, uint64_t lba, uint3
     }
     if (ret != 0)
     {
-        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync read: send read cmd failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync rw: send read cmd failed.");
         goto err1;
     }
 
     ret = comm_session_submit_cmd_ctx(&session_ctx);
     if (ret != 0)
     {
-        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync read: submit ctx to session failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync rw: submit ctx to session failed.");
         goto err1;
     }
 
     ret = mutex_lock(&session_ctx.wait_mtx);
     if (ret != 0)
     {
-        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync read: lock session ctx failed.");
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync rw: lock session ctx failed.");
         goto err1;
     }
     while (!session_ctx.cmd_is_cplt)
@@ -104,9 +104,15 @@ int comm_submit_sync_rw_request(comm_dev *dev, void *buffer, uint64_t lba, uint3
         ret = cond_wait(&session_ctx.wait_cond, &session_ctx.wait_mtx);
         if (ret != 0)
         {
-            HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync read: wait session failed.");
+            HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync rw: wait session failed.");
             goto err2;
         }
+    }
+
+    if (session_ctx.cmd_result != COMM_CMD_SUCCESS)
+    {
+        HSCFS_LOG(HSCFS_LOG_ERROR, "sync rw: cmd execute failed.");
+        ret = -1;
     }
 
     err2:
@@ -167,6 +173,12 @@ int comm_raw_sync_cmd_sender(comm_dev *dev, void *buf, uint32_t buf_len, comm_ra
             HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "sync raw cmd: wait session failed.");
             goto err3;
         }
+    }
+
+    if (session_ctx.cmd_result != COMM_CMD_SUCCESS)
+    {
+        HSCFS_LOG(HSCFS_LOG_ERROR, "sync raw cmd: cmd execute failed.");
+        ret = -1;
     }
 
     err3:
@@ -237,7 +249,7 @@ int comm_submit_sync_migrate_request(comm_dev *dev, migrate_task *task)
 {
     comm_raw_cmd cmd = {0};
     cmd.opcode = VENDOR_SET_OPCODE;
-    cmd.dword10 = sizeof(migrate_task);
+    cmd.dword10 = sizeof(migrate_task) / 4;
     cmd.dword12 = 0x10021;
     // dword13由comm_raw_sync_cmd_sender设置
     int ret = comm_raw_sync_cmd_sender(dev, task, sizeof(migrate_task), &cmd, 1, NULL, 0);
@@ -253,7 +265,7 @@ int comm_submit_async_migrate_request(comm_dev *dev, migrate_task *task, comm_as
 {
     comm_raw_cmd cmd = {0};
     cmd.opcode = VENDOR_SET_OPCODE;
-    cmd.dword10 = sizeof(migrate_task);
+    cmd.dword10 = sizeof(migrate_task) / 4;
     cmd.dword12 = 0x10021;
     int ret = comm_raw_async_cmd_sender(dev, task, sizeof(migrate_task), &cmd, 1, NULL, 0, cb_func, cb_arg);
     if (ret != 0)
@@ -268,7 +280,7 @@ int comm_submit_sync_path_lookup_request(comm_dev *dev, path_lookup_task *task, 
 {
     comm_raw_cmd cmd = {0};
     cmd.opcode = VENDOR_SET_OPCODE;
-    cmd.dword10 = sizeof(path_lookup_task);
+    cmd.dword10 = sizeof(path_lookup_task) / 4;
     cmd.dword12 = 0x20021;
     int ret = comm_raw_sync_cmd_sender(dev, task, sizeof(path_lookup_task), &cmd, 1, res, sizeof(path_lookup_result));
     if (ret != 0)
@@ -284,7 +296,7 @@ int comm_submit_async_path_lookup_request(comm_dev *dev, path_lookup_task *task,
 {
     comm_raw_cmd cmd = {0};
     cmd.opcode = VENDOR_SET_OPCODE;
-    cmd.dword10 = sizeof(path_lookup_task);
+    cmd.dword10 = sizeof(path_lookup_task) / 4;
     cmd.dword12 = 0x20021;
     int ret = comm_raw_async_cmd_sender(dev, task, sizeof(path_lookup_task), &cmd, 1, 
         res, sizeof(path_lookup_result), cb_func, cb_arg);
@@ -301,7 +313,7 @@ int comm_submit_sync_filemapping_search_request(comm_dev *dev, filemapping_searc
 {
     comm_raw_cmd cmd = {0};
     cmd.opcode = VENDOR_SET_OPCODE;
-    cmd.dword10 = sizeof(filemapping_search_task);
+    cmd.dword10 = sizeof(filemapping_search_task) / 4;
     cmd.dword12 = 0x30021;
     int ret = comm_raw_sync_cmd_sender(dev, task, sizeof(filemapping_search_task), &cmd, 1, res, res_len);
     if (ret != 0)
@@ -317,7 +329,7 @@ int comm_submit_async_filemapping_search_request(comm_dev *dev, filemapping_sear
 {
     comm_raw_cmd cmd = {0};
     cmd.opcode = VENDOR_SET_OPCODE;
-    cmd.dword10 = sizeof(filemapping_search_task);
+    cmd.dword10 = sizeof(filemapping_search_task) / 4;
     cmd.dword12 = 0x30021;
     int ret = comm_raw_async_cmd_sender(dev, task, sizeof(filemapping_search_task), &cmd, 1, res, res_len,
         cb_func, cb_arg);
@@ -452,6 +464,7 @@ int comm_submit_sync_get_metajournal_head_request(comm_dev *dev, uint64_t *head_
 {
     comm_raw_cmd cmd = {0};
     cmd.opcode = VENDOR_GET_OPCODE;
+    cmd.dword10 = 2;
     cmd.dword12 = 0x70021;
     int ret = comm_raw_sync_cmd_sender(dev, head_lpa, 8, &cmd, 0, NULL, 0);
     if (ret != 0)
@@ -467,6 +480,7 @@ int comm_submit_async_get_metajournal_head_request(comm_dev *dev, uint64_t *head
 {
     comm_raw_cmd cmd = {0};
     cmd.opcode = VENDOR_GET_OPCODE;
+    cmd.dword10 = 2;
     cmd.dword12 = 0x70021;
     int ret = comm_raw_async_cmd_sender(dev, head_lpa, 8, &cmd, 0, NULL, 0, cb_func, cb_arg);
     if (ret != 0)

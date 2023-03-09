@@ -1,13 +1,16 @@
 #include "communication/dev.h"
 #include "communication/comm_api.h"
 #include "communication/session.h"
+#include "communication/memory.h"
+#include "journal/journal_type.h"
 #include "spdk/nvme.h"
 
-#include "gtest/gtest.h"
+// #include "spdk_mock.h"  // for local test
 
 #include <stdexcept>
 #include <thread>
 #include <cstdio>
+#include <chrono>
 
 comm_dev dev;
 std::thread th;
@@ -15,7 +18,8 @@ polling_thread_start_env polling_thread_arg;
 
 struct spdk_nvme_transport_id g_trid;
 const size_t test_channel_size = 8;
-const uint64_t super_lba = 0;
+const uint64_t super_lpa = 0;
+const size_t lpa_size = 4096;
 
 // 测试的日志起止LPA
 const uint64_t test_journal_start_lpa = 1;
@@ -74,12 +78,14 @@ void init_spdk(void)
         printf("No device detected!\n");
         exit(1);
     }
-    printf("Initialization complete.\n");
+    printf("SPDK initialization complete.\n");
 }
 
 void host_env_init(void)
 {
     init_spdk();
+    // spdk_stub_setup();  // for local test
+
     if (comm_channel_controller_constructor(&dev.channel_ctrlr, &dev, test_channel_size) != 0)
         throw std::runtime_error("channel controller construct failed.");
     if (comm_session_env_constructor() != 0)
@@ -91,23 +97,84 @@ void host_env_init(void)
 
 void SSD_test_prepare(void)
 {
-    f2fs_spuer_block super_block;
-    super_block.meta_journal_start_blkoff = test_journal_start_lpa;
-    super_block.meta_journal_end_blkoff = test_journal_end_lpa;
+    f2fs_super_block super;
+    super.meta_journal_start_blkoff = test_journal_start_lpa;
+    super.meta_journal_end_blkoff = test_journal_end_lpa;
 
     // 写入super block
+    char *super_block = static_cast<char*>(comm_alloc_dma_mem(lpa_size));
+    if (super_block == NULL)
+        throw std::runtime_error("alloc super block memory failed.");
+    memcpy(super_block, &super, sizeof(f2fs_super_block));
+    printf("super block meta_journal_start_blkoff: %hu, end: %hu\n", 
+        reinterpret_cast<f2fs_super_block*>(super_block)->meta_journal_start_blkoff, 
+        reinterpret_cast<f2fs_super_block*>(super_block)->meta_journal_end_blkoff);
+    if (comm_submit_sync_rw_request(&dev, super_block, super_lpa, 1, COMM_IO_WRITE) != 0)
+        throw std::runtime_error("write super block failed.");
+    comm_free_dma_mem(super_block);
 
     // 文件系统模块初始化（DRAM中缓存SB）
+    if (comm_submit_fs_module_init_request(&dev) != 0)
+        throw std::runtime_error("fs module init failed.");
 
     // DB区域初始化（DB中存储SB）
+    if (comm_submit_fs_db_init_request(&dev) != 0)
+        throw std::runtime_error("fs db init failed.");
 
-    // 清空元数据日志（DB中日志首尾指针指向SB中的日志起始LPA）
-
+    // 清空元数据日志（DB中日志首尾指针指向SB中的日志区域起始LPA）
+    if (comm_submit_clear_metajournal_request(&dev) != 0)
+        throw std::runtime_error("clear journal failed.");
+    
+    // 启动元数据日志应用任务
+    if (comm_submit_start_apply_journal_request(&dev) != 0)
+        throw std::runtime_error("start journal apply failed.");
 }
 
 // 测试：
 /*
  * 写入若干END日志项，一个LPA写一个
- * 启动元数据日志应用
- * 轮询读取元数据首位置
+ * 轮询读取元数据首位置，直到元数据应用完成
  */
+void test_func(void)
+{
+    using namespace std::chrono_literals;
+
+    meta_journal_entry end_entry = {.len = sizeof(meta_journal_entry), .type = JOURNAL_TYPE_END};
+    char *block_buffer = static_cast<char*>(comm_alloc_dma_mem(lpa_size));
+    if (block_buffer == NULL)
+        throw std::runtime_error("alloc journal buffer failed.");
+    memcpy(block_buffer, &end_entry, sizeof(meta_journal_entry));
+    printf("journal block buffer .type = %hhu\n", reinterpret_cast<meta_journal_entry*>(block_buffer)->type);
+    for (uint64_t tarlpa = test_journal_start_lpa; tarlpa != test_journal_end_lpa; ++tarlpa)
+    {
+        if (comm_submit_sync_rw_request(&dev, block_buffer, tarlpa, 1, COMM_IO_WRITE) != 0)
+            throw std::runtime_error("write test journal failed.");
+    }
+
+    uint64_t *journal_head = static_cast<uint64_t*>(comm_alloc_dma_mem(8));
+    if (journal_head == NULL)
+        throw std::runtime_error("alloc journal head buffer failed.");
+    *journal_head = 0;
+    
+    size_t req_cnt = 0;
+    while (true)
+    {
+        std::this_thread::sleep_for(500ms);
+        printf("request journal head for %lu times...\n", ++req_cnt);
+        if (comm_submit_sync_get_metajournal_head_request(&dev, journal_head) != 0)
+            throw std::runtime_error("get journal head failed.");
+        if (*journal_head == test_journal_end_lpa)
+            break;
+    }
+
+    comm_free_dma_mem(journal_head);
+    comm_free_dma_mem(block_buffer);
+}
+
+int main()
+{
+    host_env_init();
+    SSD_test_prepare();
+    test_func();
+    return 0;
+}

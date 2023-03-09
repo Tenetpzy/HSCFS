@@ -1,5 +1,4 @@
-#ifndef __HSCFS_FS_H__
-#define __HSCFS_FS_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -7,7 +6,7 @@ extern "C" {
 
 #include "utils/types.h"
 
-struct f2fs_spuer_block
+struct f2fs_super_block
 {
     /*stable read only field*/
     __le32 magic;			/* Magic Number */
@@ -311,6 +310,4 @@ enum {
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif
