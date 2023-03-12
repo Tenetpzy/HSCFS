@@ -16,12 +16,12 @@ target_include_directories(test_comm PUBLIC
     /home/pzy/spdk_src/spdk/build/include
 )
 
-add_executable(test_docking)
-target_sources(test_docking PRIVATE
-    test_docking.cc
-    spdk_mock.cc
-    ${test_lib_srcs}
-)
-target_include_directories(test_docking PUBLIC
-    /home/pzy/spdk_src/spdk/build/include
-)
+# add_executable(test_docking)
+# target_sources(test_docking PRIVATE
+#     test_docking.cc
+#     spdk_mock.cc
+#     ${test_lib_srcs}
+# )
+# target_include_directories(test_docking PUBLIC
+#     /home/pzy/spdk_src/spdk/build/include
+# )

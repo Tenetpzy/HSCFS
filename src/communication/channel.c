@@ -282,7 +282,7 @@ int comm_send_raw_cmd(comm_channel_handle handle, void *buf, uint32_t buf_len, c
     if (cmd_cb_ctx == NULL)
         return ENOMEM;
 
-    struct spdk_nvme_cmd nvme_cmd;
+    struct spdk_nvme_cmd nvme_cmd = {0};
     build_nvme_cmd(&nvme_cmd, raw_cmd, handle->dev);
     
     ret = spdk_nvme_ctrlr_cmd_admin_raw(handle->dev->nvme_ctrlr, &nvme_cmd, buf, buf_len, 

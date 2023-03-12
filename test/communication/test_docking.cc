@@ -23,7 +23,7 @@ const size_t lpa_size = 4096;
 
 // 测试的日志起止LPA
 const uint64_t test_journal_start_lpa = 1;
-const uint64_t test_journal_lpa_num = 5;
+const uint64_t test_journal_lpa_num = 3;
 const uint64_t test_journal_end_lpa = 6; 
 
 bool probe_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid, struct spdk_nvme_ctrlr_opts *opts)
@@ -97,7 +97,7 @@ void host_env_init(void)
 
 void SSD_test_prepare(void)
 {
-    f2fs_super_block super;
+    f2fs_super_block super = {0};
     super.meta_journal_start_blkoff = test_journal_start_lpa;
     super.meta_journal_end_blkoff = test_journal_end_lpa;
 
@@ -109,7 +109,7 @@ void SSD_test_prepare(void)
     printf("super block meta_journal_start_blkoff: %hu, end: %hu\n", 
         reinterpret_cast<f2fs_super_block*>(super_block)->meta_journal_start_blkoff, 
         reinterpret_cast<f2fs_super_block*>(super_block)->meta_journal_end_blkoff);
-    if (comm_submit_sync_rw_request(&dev, super_block, super_lpa, 1, COMM_IO_WRITE) != 0)
+    if (comm_submit_sync_rw_request(&dev, super_block, super_lpa, 8, COMM_IO_WRITE) != 0)
         throw std::runtime_error("write super block failed.");
     comm_free_dma_mem(super_block);
 
@@ -133,28 +133,32 @@ void SSD_test_prepare(void)
 // 测试：
 /*
  * 写入若干END日志项，一个LPA写一个
+ * 更新SSD日志尾指针
  * 轮询读取元数据首位置，直到元数据应用完成
  */
 void test_func(void)
 {
     using namespace std::chrono_literals;
 
+    uint64_t endlpa = test_journal_start_lpa + test_journal_lpa_num;
     meta_journal_entry end_entry = {.len = sizeof(meta_journal_entry), .type = JOURNAL_TYPE_END};
     char *block_buffer = static_cast<char*>(comm_alloc_dma_mem(lpa_size));
     if (block_buffer == NULL)
         throw std::runtime_error("alloc journal buffer failed.");
     memcpy(block_buffer, &end_entry, sizeof(meta_journal_entry));
     printf("journal block buffer .type = %hhu\n", reinterpret_cast<meta_journal_entry*>(block_buffer)->type);
-    for (uint64_t tarlpa = test_journal_start_lpa; tarlpa != test_journal_end_lpa; ++tarlpa)
+    for (uint64_t tarlpa = test_journal_start_lpa; tarlpa < endlpa; ++tarlpa)
     {
-        if (comm_submit_sync_rw_request(&dev, block_buffer, tarlpa, 1, COMM_IO_WRITE) != 0)
+        if (comm_submit_sync_rw_request(&dev, block_buffer, tarlpa * 8, 8, COMM_IO_WRITE) != 0)
             throw std::runtime_error("write test journal failed.");
     }
+
+    if (comm_submit_sync_update_metajournal_tail_request(&dev, test_journal_start_lpa, test_journal_lpa_num) != 0)
+        throw std::runtime_error("update journal tail failed.");
 
     uint64_t *journal_head = static_cast<uint64_t*>(comm_alloc_dma_mem(8));
     if (journal_head == NULL)
         throw std::runtime_error("alloc journal head buffer failed.");
-    *journal_head = 0;
     
     size_t req_cnt = 0;
     while (true)
@@ -163,7 +167,7 @@ void test_func(void)
         printf("request journal head for %lu times...\n", ++req_cnt);
         if (comm_submit_sync_get_metajournal_head_request(&dev, journal_head) != 0)
             throw std::runtime_error("get journal head failed.");
-        if (*journal_head == test_journal_end_lpa)
+        if (*journal_head == endlpa)
             break;
     }
 

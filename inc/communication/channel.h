@@ -40,7 +40,7 @@ typedef void(*channel_cmd_cb_func)(comm_cmd_CQE_result result, void *arg);
 // 自定义命令的内容，由上层构造并传递给channel
 typedef struct comm_raw_cmd
 {
-    uint16_t opcode;
+    uint8_t opcode;
     uint32_t dword10;
     uint32_t dword12;
     uint32_t dword13;
