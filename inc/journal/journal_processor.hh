@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <list>
 
+#include "utils/declare_utils.hh"
+
 class hscfs_journal_container;
 
 // 事务日志记录，一个对象代表一个事务，记录该事务日志在SSD上持久化的LPA范围[start_lpa, end_lpa)
@@ -42,8 +44,7 @@ class hscfs_journal_processor
 {
 public:
     hscfs_journal_processor(uint64_t journal_start_lpa, uint64_t journal_end_lpa, uint64_t journal_fifo_pos);
-    hscfs_journal_processor(const hscfs_journal_processor&) = delete;
-    hscfs_journal_processor& operator=(const hscfs_journal_processor&) = delete;
+    no_copy_assignable(hscfs_journal_processor)
     ~hscfs_journal_processor();
 
     void process_journal();
@@ -76,6 +77,8 @@ private:
 
     // 当日志处理线程空闲时，睡眠等待新的日志，否则尝试获取新的日志
     void fetch_new_journal();
+    
+    void process_journal_list_head();
 };
 
 // 日志处理线程入口

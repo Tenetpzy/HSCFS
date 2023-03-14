@@ -5,14 +5,15 @@
 #include <condition_variable>
 #include <atomic>
 
+#include "utils/declare_utils.hh"
+
 class hscfs_journal_container;
 
 class hscfs_journal_commit_queue
 {
 public:
     hscfs_journal_commit_queue() : tx_id_to_alloc(0) { }
-    hscfs_journal_commit_queue(const hscfs_journal_commit_queue&) = delete;
-    hscfs_journal_commit_queue& operator=(const hscfs_journal_commit_queue&) = delete;
+    no_copy_assignable(hscfs_journal_commit_queue)
 
     // 获取实例之前，必须调用hscfs_journal_module_init初始化。
     static hscfs_journal_commit_queue* get_instance()
