@@ -24,6 +24,14 @@ public:
         SIT_journal.emplace_back(entry);
     }
 
+private:
+    std::vector<super_block_journal_entry> super_block_journal;
+    std::vector<NAT_journal_entry> NAT_journal;
+    std::vector<SIT_journal_entry> SIT_journal;
+
+    uint64_t tx_id;  // 事务号
+
+private:
     const std::vector<super_block_journal_entry>& get_super_block_journal() const noexcept
     {
         return super_block_journal;
@@ -39,14 +47,6 @@ public:
         return SIT_journal;
     }
 
-private:
-    std::vector<super_block_journal_entry> super_block_journal;
-    std::vector<NAT_journal_entry> NAT_journal;
-    std::vector<SIT_journal_entry> SIT_journal;
-
-    uint64_t tx_id;  // 事务号
-
-private:
     void set_tx_id(uint64_t id) noexcept
     {
         tx_id = id;
@@ -57,6 +57,8 @@ private:
         return tx_id;
     }
 
-    friend class hscfs_journal_commit_queue;
+    friend class hscfs_journal_process_env;
+    friend class hscfs_journal_writer;
+    friend class hscfs_journal_processor;
 };
  

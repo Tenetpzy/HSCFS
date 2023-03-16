@@ -5,7 +5,9 @@
 #include "journal/journal_container.hh"
 #include "journal/journal_type.h"
 #include "communication/memory.h"
+#include "communication/comm_api.h"
 #include "utils/hscfs_exceptions.hh"
+#include "utils/io_utils.hh"
 
 enum class journal_output_state
 {
@@ -139,20 +141,19 @@ protected:
      * value为日志条目在journal数组的下标
      */
     MapT j_map;
-    typedef typename MapT::iterator map_iterator_t;
+    using map_iterator_t = typename MapT::iterator;
     map_iterator_t output_it;
     size_t rest_output_num;
 };
 
 // super block日志项输出实现
-class super_journal_output_vector: 
-    public general_journal_output_vector<std::unordered_map<uint32_t, size_t>, super_block_journal_entry>
+using super_journal_output_vector_impl = general_journal_output_vector<std::unordered_map<uint32_t, size_t>, 
+    super_block_journal_entry>;
+class super_journal_output_vector: public super_journal_output_vector_impl
 {
 public:
-    using super_class_t = general_journal_output_vector<std::unordered_map<uint32_t, size_t>, super_block_journal_entry>;
-
     super_journal_output_vector(const std::vector<super_block_journal_entry> &super_journal):
-        super_class_t(super_journal, JOURNAL_TYPE_SUPER_BLOCK) {}
+        super_journal_output_vector_impl(super_journal, JOURNAL_TYPE_SUPER_BLOCK) {}
 
     void generate_output_vector() override
     {
@@ -163,14 +164,12 @@ public:
 };
 
 // NAT日志项输出实现
-class NAT_journal_output_vector:
-    public general_journal_output_vector<std::map<uint32_t, size_t>, NAT_journal_entry>
+using NAT_journal_output_vector_impl = general_journal_output_vector<std::map<uint32_t, size_t>, NAT_journal_entry>;
+class NAT_journal_output_vector: public NAT_journal_output_vector_impl
 {
 public:
-    using super_class_t = general_journal_output_vector<std::map<uint32_t, size_t>, NAT_journal_entry>;
-
     NAT_journal_output_vector(const std::vector<NAT_journal_entry> &NAT_journal):
-        super_class_t(NAT_journal, JOURNAL_TYPE_NATS) {}
+        NAT_journal_output_vector_impl(NAT_journal, JOURNAL_TYPE_NATS) {}
 
     void generate_output_vector() override
     {
@@ -181,14 +180,12 @@ public:
 };
 
 // SIT日志项输出实现
-class SIT_journal_output_vector:
-    public general_journal_output_vector<std::map<uint32_t, size_t>, SIT_journal_entry>
+using SIT_journal_output_vector_impl = general_journal_output_vector<std::map<uint32_t, size_t>, SIT_journal_entry>;
+class SIT_journal_output_vector: public SIT_journal_output_vector_impl
 {
 public:
-    using super_class_t = general_journal_output_vector<std::map<uint32_t, size_t>, SIT_journal_entry>;
-
     SIT_journal_output_vector(const std::vector<SIT_journal_entry> &SIT_journal):
-        super_class_t(SIT_journal, JOURNAL_TYPE_SITS) {}
+        SIT_journal_output_vector_impl(SIT_journal, JOURNAL_TYPE_SITS) {}
     
     void generate_output_vector() override
     {
@@ -240,8 +237,15 @@ void hscfs_journal_writer::append_end_entry()
     *reinterpret_cast<meta_journal_entry*>(p) = entry;
 }
 
-void hscfs_journal_writer::collect_pending_journal_to_write_buffer()
+void hscfs_journal_writer::async_write_callback(comm_cmd_result res, void *arg)
 {
+    async_vecio_synchronizer *syr = static_cast<async_vecio_synchronizer*>(arg);
+    syr->cplt_once(res);
+}
+
+uint64_t hscfs_journal_writer::collect_pending_journal_to_write_buffer()
+{
+    buffer_tail_idx = buffer_tail_off = 0;
     auto journal_vecs = journal_output_vec_generate();
     for (auto &entry: journal_vecs)
     {
@@ -289,4 +293,23 @@ void hscfs_journal_writer::collect_pending_journal_to_write_buffer()
         }
     }
     append_end_entry();
+    return buffer_tail_idx + 1;
+}
+
+void hscfs_journal_writer::write_to_SSD(uint64_t cur_tail)
+{
+    uint64_t io_num = buffer_tail_idx + 1;
+    async_vecio_synchronizer syr(io_num);
+    for (size_t i = 0; i <= buffer_tail_idx; ++i, ++cur_tail)
+    {
+        if (cur_tail == end_lpa)
+            cur_tail = start_lpa;
+        int ret = comm_submit_async_rw_request(dev, journal_buffer[i].get_ptr(), cur_tail, 
+            LPA_TO_LBA(cur_tail), async_write_callback, &syr, COMM_IO_WRITE);
+        if (ret != 0)
+            throw hscfs_io_error("journal writer: submit async write failed.");
+    }
+    comm_cmd_result res = syr.wait_cplt();
+    if (res != COMM_CMD_SUCCESS)
+        throw hscfs_io_error("journal writer: error occurred in async write process.");
 }

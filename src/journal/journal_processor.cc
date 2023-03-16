@@ -1,71 +1,216 @@
 #include "journal/journal_processor.hh"
-#include "journal/journal_commit_queue.hh"
+#include "journal/journal_process_env.hh"
 #include "journal/journal_container.hh"
 #include "communication/memory.h"
+#include "communication/comm_api.h"
+#include "utils/hscfs_exceptions.hh"
 
-void hscfs_journal_process_thread(uint64_t journal_start_lpa, uint64_t journal_end_lpa, uint64_t journal_fifo_pos)
+void hscfs_journal_process_thread(comm_dev *dev, uint64_t journal_start_lpa, uint64_t journal_end_lpa, 
+    uint64_t journal_fifo_pos)
 {
-    hscfs_journal_processor journal_processor(journal_start_lpa, journal_end_lpa, journal_fifo_pos);
+    hscfs_journal_processor journal_processor(dev, journal_start_lpa, journal_end_lpa, journal_fifo_pos);
     journal_processor.process_journal();
 }
 
-hscfs_journal_processor::hscfs_journal_processor(uint64_t journal_start_lpa, uint64_t journal_end_lpa, uint64_t journal_fifo_pos) :
-    start_lpa(journal_start_lpa), end_lpa(journal_end_lpa), tail_lpa(journal_fifo_pos)
+hscfs_journal_processor::hscfs_journal_processor(comm_dev *device, uint64_t journal_start_lpa, 
+    uint64_t journal_end_lpa, uint64_t journal_fifo_pos): journal_writer(device, journal_start_lpa, journal_end_lpa)
 {
-    head_lpa_ptr = static_cast<uint64_t*>(comm_alloc_dma_mem(sizeof(uint64_t)));
-    if (head_lpa_ptr == nullptr)
-        throw std::bad_alloc();
-    
-    // 由于SSD使用循环队列维护日志区域，当head_lpa == tail_lpa时视队列为空
-    // 所以head_lpa = (tail_lpa + 1) % n 时队列满，n为日志区域块数，时实际可用块要减1
-    cur_avail_lpa = total_avail_lpa = end_lpa - start_lpa - 1;
+    journal_pos_dma_buffer = static_cast<uint64_t*>(comm_alloc_dma_mem(16));
+    if (journal_pos_dma_buffer == nullptr) 
+        throw hscfs_alloc_error("journal processor: not enough DMA buffer.");
 
-    /* to do */
-    /* metajournal 写缓存初始化 */
+    // 将日志位置查询任务的定时器设置为阻塞式，到达轮询周期后，日志处理线程被唤醒并进行查询任务
+    if (hscfs_timer_constructor(&journal_poll_timer, 1) != 0)
+        throw hscfs_timer_error("journal processor: init timer failed.");
+    // 日志位置查询任务，周期100us
+    timespec journal_poll_time = {.tv_sec = 0, .tv_nsec = 100 * 1000};
+    // 定时器设置为周期定时器
+    hscfs_timer_set(&journal_poll_timer, &journal_poll_time, 1);
+    is_poll_timer_enabled = false;
+
+    // 由于SSD使用循环队列维护日志区域，当head_lpa == tail_lpa时视队列为空
+    // 所以head_lpa = (tail_lpa + 1) % n 时队列满，n为日志区域块数，实际可用块要减1
+    cur_avail_lpa = total_avail_lpa = journal_end_lpa - journal_start_lpa - 1;
+
+    dev = device;
+    head_lpa = tail_lpa = journal_fifo_pos;
+    start_lpa = journal_start_lpa;
+    end_lpa = journal_end_lpa;
+    cur_journal = nullptr;
 }
 
 hscfs_journal_processor::~hscfs_journal_processor()
 {
-    comm_free_dma_mem(head_lpa_ptr);
+    comm_free_dma_mem(journal_pos_dma_buffer);
 }
 
 void hscfs_journal_processor::process_journal()
 {
-    
+    while (true)
+    {
+        fetch_new_journal();
+        process_pending_journal();
+        process_cplt_journal();
+    }
 }
 
 /*
  * 当可用lpa等于整个日志区域时，说明所有已提交的日志均已应用完，不需要再轮询
- * 当journal_list为空时，从journal commit queue中取出的日志均已处理完毕
+ * 当journal_list和cur_journal都为空时，从journal commit queue中取出的日志均已处理完毕
  * 以上两个条件都满足，则日志处理线程空闲
  */
 bool hscfs_journal_processor::is_working() const
 {
-    return !(cur_avail_lpa == total_avail_lpa && journal_list.empty());
+    return !(cur_avail_lpa == total_avail_lpa && pending_journal_list.empty() && cur_journal == nullptr);
 }
 
 void hscfs_journal_processor::fetch_new_journal()
 {
-    hscfs_journal_commit_queue *journal_queue = hscfs_journal_commit_queue::get_instance();
-    std::unique_lock<std::mutex> mtx(journal_queue->mtx, std::defer_lock);  // 此时不锁定mtx
+    hscfs_journal_process_env *journal_queue = hscfs_journal_process_env::get_instance();
+    std::unique_lock<std::mutex> mtx(journal_queue->mtx);
 
-    // 若日志处理线程不空闲，则只尝试获取commit_queue锁，失败，或无新日志，则直接返回
     if (is_working())
     {
-        if (!mtx.try_lock())  return;
-        if (journal_queue->commit_queue.empty())  return;
+        if (journal_queue->commit_queue.empty())  
+            return;
     }
-    // 若空闲，则睡眠等待commit_queue上有新的日志
     else
-    {
-        mtx.lock();
         journal_queue->cond.wait(mtx, [journal_queue](){ return !journal_queue->commit_queue.empty(); });
-    }
 
     // 将commit_queue中所有日志按顺序移动到日志处理线程的journal_list尾部
     // 可能的BUG：若STL不保证按原顺序移动，则日志可能被乱序提交
-    journal_list.splice(journal_list.end(), journal_queue->commit_queue);
-
+    pending_journal_list.splice(pending_journal_list.end(), journal_queue->commit_queue);
     return;
 }
 
+void hscfs_journal_processor::process_pending_journal()
+{
+    if (cur_journal == nullptr)
+    {
+        if (!pending_journal_list.empty())
+        {
+            cur_journal = pending_journal_list.front();
+            pending_journal_list.pop_front();
+            cur_proc_state = journal_process_state::NEWLY_FETCHED;
+        }
+        else
+            return;
+    }
+
+    switch (cur_proc_state)
+    {
+    case journal_process_state::NEWLY_FETCHED:
+        write_journal_to_buffer();
+        break;
+
+    case journal_process_state::WRITTEN_IN_BUFFER:
+        if (write_journal_to_SSD() == true)
+        {
+            generate_tx_record();
+            cur_journal = nullptr;
+        }
+        break;
+    }
+}
+
+void hscfs_journal_processor::write_journal_to_buffer()
+{
+    journal_writer.set_pending_journal(cur_journal);
+    cur_journal_block_num = journal_writer.collect_pending_journal_to_write_buffer();
+    cur_proc_state = journal_process_state::WRITTEN_IN_BUFFER;
+}
+
+bool hscfs_journal_processor::write_journal_to_SSD()
+{
+    if (cur_journal_block_num <= cur_avail_lpa)
+    {
+        journal_writer.write_to_SSD(tail_lpa);
+        int ret = comm_submit_sync_update_metajournal_tail_request(dev, tail_lpa, cur_journal_block_num);
+        if (ret != 0)
+            throw hscfs_io_error("journal processor: update SSD journal tail failed.");
+
+        cur_journal_start_lpa = tail_lpa;
+        tail_lpa += cur_journal_block_num;
+        if (tail_lpa >= end_lpa)
+            tail_lpa = tail_lpa - end_lpa + start_lpa;
+        cur_journal_end_lpa = tail_lpa;
+        cur_avail_lpa -= cur_journal_block_num;
+        return true;
+    }
+    else
+        return false;
+}
+
+void hscfs_journal_processor::generate_tx_record()
+{
+    tx_record.emplace_back(cur_journal->get_tx_id(), cur_journal_start_lpa, cur_journal_end_lpa);
+}
+
+void hscfs_journal_processor::process_cplt_journal()
+{
+    if (cur_avail_lpa == total_avail_lpa)
+    {
+        disable_poll_timer();
+        return;
+    }
+    enable_poll_timer();
+    wait_poll_timer();
+
+    // 如果SSD应用了一部分日志，则确认哪些事务日志已经应用完，并做相应处理
+    if (sync_with_SSD_journal_pos())
+        process_tx_record();
+}
+
+void hscfs_journal_processor::enable_poll_timer()
+{
+    if (is_poll_timer_enabled)
+        return;
+    if (hscfs_timer_start(&journal_poll_timer) != 0)
+        throw hscfs_timer_error("journal porcessor: enable timer failed.");
+    is_poll_timer_enabled = true;
+}
+
+void hscfs_journal_processor::disable_poll_timer()
+{
+    if (!is_poll_timer_enabled)
+        return;
+    if (hscfs_timer_stop(&journal_poll_timer) != 0)
+        throw hscfs_timer_error("jounal processor: disable timer failed.");
+    is_poll_timer_enabled = false;
+}
+
+void hscfs_journal_processor::wait_poll_timer()
+{
+    if (hscfs_timer_check_expire(&journal_poll_timer, NULL) != 0)
+        throw hscfs_timer_error("jounal processor: wait timer failed.");
+}
+
+bool hscfs_journal_processor::sync_with_SSD_journal_pos()
+{
+    if (comm_submit_sync_get_metajournal_head_request(dev, journal_pos_dma_buffer) != 0)
+        throw hscfs_io_error("journal processor: submit get journal pos failed.");
+    uint64_t new_head_lpa = journal_pos_dma_buffer[0];
+    uint64_t new_avail_lpa = new_head_lpa >= head_lpa ? new_head_lpa - head_lpa :
+        new_head_lpa + end_lpa - start_lpa - head_lpa;
+    head_lpa = new_head_lpa;
+    cur_avail_lpa += new_avail_lpa;
+    return new_avail_lpa;
+}
+
+void hscfs_journal_processor::process_tx_record()
+{
+    while (true)
+    {
+        if (tx_record.empty())
+            break;
+        auto &tx_rc = tx_record.front();
+        if (tx_rc.is_applied(head_lpa, tail_lpa))
+        {
+            /* to do */
+            /* 调用淘汰保护模块，通知该事务日志已经应用完成 */
+            tx_record.pop_front();
+        }
+        else
+            break;
+    }
+}

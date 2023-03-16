@@ -1,0 +1,77 @@
+Date : 2023-03-16 12:26:38
+Directory : /home/pzy/my_programs/HSCFS
+Total : 38 files,  3944 codes, 649 comments, 745 blanks, all 5338 lines
+
+Languages
++----------+------------+------------+------------+------------+------------+
+| language | files      | code       | comment    | blank      | total      |
++----------+------------+------------+------------+------------+------------+
+| C++      |         25 |      2,183 |        330 |        414 |      2,927 |
+| C        |         13 |      1,761 |        319 |        331 |      2,411 |
++----------+------------+------------+------------+------------+------------+
+
+Directories
++----------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                           | files      | code       | comment    | blank      | total      |
++----------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                              |         38 |      3,944 |        649 |        745 |      5,338 |
+| inc                                                            |         22 |      1,119 |        378 |        338 |      1,835 |
+| inc/communication                                              |          6 |        259 |         98 |         96 |        453 |
+| inc/fs                                                         |          2 |        221 |         61 |         49 |        331 |
+| inc/journal                                                    |          6 |        246 |         67 |         81 |        394 |
+| inc/utils                                                      |          8 |        393 |        152 |        112 |        657 |
+| src                                                            |         10 |      1,946 |        181 |        269 |      2,396 |
+| src/communication                                              |          3 |      1,315 |        105 |        169 |      1,589 |
+| src/fs                                                         |          1 |         13 |          0 |          5 |         18 |
+| src/journal                                                    |          4 |        428 |         70 |         71 |        569 |
+| src/utils                                                      |          2 |        190 |          6 |         24 |        220 |
+| test                                                           |          6 |        879 |         90 |        138 |      1,107 |
+| test/communication                                             |          3 |        412 |         15 |         66 |        493 |
+| test/inc                                                       |          2 |        395 |         51 |         58 |        504 |
+| test/utils                                                     |          1 |         72 |         24 |         14 |        110 |
++----------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++----------------------------------------------------------------+----------+------------+------------+------------+------------+
+| filename                                                       | language | code       | comment    | blank      | total      |
++----------------------------------------------------------------+----------+------------+------------+------------+------------+
+| /home/pzy/my_programs/HSCFS/inc/communication/channel.h        | C        |         65 |         46 |         26 |        137 |
+| /home/pzy/my_programs/HSCFS/inc/communication/comm_api.h       | C        |         44 |         10 |         20 |         74 |
+| /home/pzy/my_programs/HSCFS/inc/communication/dev.h            | C        |         14 |          1 |          4 |         19 |
+| /home/pzy/my_programs/HSCFS/inc/communication/memory.h         | C++      |         21 |          2 |          7 |         30 |
+| /home/pzy/my_programs/HSCFS/inc/communication/session.h        | C        |         71 |         31 |         28 |        130 |
+| /home/pzy/my_programs/HSCFS/inc/communication/vendor_cmds.h    | C        |         44 |          8 |         11 |         63 |
+| /home/pzy/my_programs/HSCFS/inc/fs/block_buffer.hh             | C++      |         14 |          0 |          4 |         18 |
+| /home/pzy/my_programs/HSCFS/inc/fs/fs.h                        | C++      |        207 |         61 |         45 |        313 |
+| /home/pzy/my_programs/HSCFS/inc/journal/journal_container.hh   | C++      |         48 |          3 |         13 |         64 |
+| /home/pzy/my_programs/HSCFS/inc/journal/journal_module_init.hh | C++      |          5 |          9 |          3 |         17 |
+| /home/pzy/my_programs/HSCFS/inc/journal/journal_process_env.hh | C++      |         36 |          4 |         15 |         55 |
+| /home/pzy/my_programs/HSCFS/inc/journal/journal_processor.hh   | C++      |         77 |         40 |         27 |        144 |
+| /home/pzy/my_programs/HSCFS/inc/journal/journal_type.h         | C++      |         43 |          0 |         12 |         55 |
+| /home/pzy/my_programs/HSCFS/inc/journal/journal_writer.hh      | C++      |         37 |         11 |         11 |         59 |
+| /home/pzy/my_programs/HSCFS/inc/utils/declare_utils.hh         | C++      |          4 |          0 |          1 |          5 |
+| /home/pzy/my_programs/HSCFS/inc/utils/hscfs_exceptions.hh      | C++      |         26 |          0 |          6 |         32 |
+| /home/pzy/my_programs/HSCFS/inc/utils/hscfs_log.h              | C        |         17 |          0 |          7 |         24 |
+| /home/pzy/my_programs/HSCFS/inc/utils/hscfs_multithread.h      | C        |         67 |          2 |         19 |         88 |
+| /home/pzy/my_programs/HSCFS/inc/utils/hscfs_timer.h            | C++      |         47 |         17 |         16 |         80 |
+| /home/pzy/my_programs/HSCFS/inc/utils/io_utils.hh              | C++      |         31 |         11 |          6 |         48 |
+| /home/pzy/my_programs/HSCFS/inc/utils/queue_extras.h           | C        |        181 |        122 |         48 |        351 |
+| /home/pzy/my_programs/HSCFS/inc/utils/types.h                  | C        |         20 |          0 |          9 |         29 |
+| /home/pzy/my_programs/HSCFS/src/communication/channel.c        | C++      |        267 |         12 |         34 |        313 |
+| /home/pzy/my_programs/HSCFS/src/communication/comm_api.c       | C        |        443 |          6 |         43 |        492 |
+| /home/pzy/my_programs/HSCFS/src/communication/session.c        | C        |        605 |         87 |         92 |        784 |
+| /home/pzy/my_programs/HSCFS/src/fs/block_buffer.cc             | C++      |         13 |          0 |          5 |         18 |
+| /home/pzy/my_programs/HSCFS/src/journal/journal_module_init.cc | C++      |         12 |          0 |          3 |         15 |
+| /home/pzy/my_programs/HSCFS/src/journal/journal_process_env.cc | C++      |         17 |          0 |          4 |         21 |
+| /home/pzy/my_programs/HSCFS/src/journal/journal_processor.cc   | C++      |        176 |         15 |         26 |        217 |
+| /home/pzy/my_programs/HSCFS/src/journal/journal_writer.cc      | C++      |        223 |         55 |         38 |        316 |
+| /home/pzy/my_programs/HSCFS/src/utils/hscfs_log.c              | C        |         28 |          0 |          6 |         34 |
+| /home/pzy/my_programs/HSCFS/src/utils/hscfs_timer.c            | C        |        162 |          6 |         18 |        186 |
+| /home/pzy/my_programs/HSCFS/test/communication/spdk_mock.cc    | C++      |        154 |          1 |         25 |        180 |
+| /home/pzy/my_programs/HSCFS/test/communication/test_comm.cc    | C++      |        113 |          0 |         16 |        129 |
+| /home/pzy/my_programs/HSCFS/test/communication/test_docking.cc | C++      |        145 |         14 |         25 |        184 |
+| /home/pzy/my_programs/HSCFS/test/inc/spdk_mock.h               | C++      |         48 |          2 |         20 |         70 |
+| /home/pzy/my_programs/HSCFS/test/inc/stub.h                    | C++      |        347 |         49 |         38 |        434 |
+| /home/pzy/my_programs/HSCFS/test/utils/test_timer.cc           | C++      |         72 |         24 |         14 |        110 |
+| Total                                                          |          |      3,944 |        649 |        745 |      5,338 |
++----------------------------------------------------------------+----------+------------+------------+------------+------------+

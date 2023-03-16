@@ -80,5 +80,157 @@
         "vendor_cmds.h": "c",
         "list": "cpp"
     },
-    "C_Cpp.intelliSenseEngineFallback": "enabled"
+    "C_Cpp.intelliSenseEngineFallback": "enabled",
+    "VSCodeCounter.languages": {
+        "cpp": {
+            "aliases": [
+                "C++",
+                "Cpp",
+                "cpp"
+            ],
+            "filenames": [],
+            "extensions": [
+                ".cpp",
+                ".cc",
+                ".cxx",
+                ".c++",
+                ".hpp",
+                ".hh",
+                ".hxx",
+                ".h++",
+                ".h",
+                ".ii",
+                ".ino",
+                ".inl",
+                ".ipp",
+                ".ixx",
+                ".tpp",
+                ".txx",
+                ".hpp.in",
+                ".h.in"
+            ],
+            "lineComments": [
+                "//"
+            ],
+            "blockComments": [
+                [
+                    "/*",
+                    "*/"
+                ]
+            ],
+            "blockStrings": [
+                [
+                    "R(\"",
+                    "\")"
+                ]
+            ]
+        },
+        "ignore": {
+            "aliases": [
+                "Ignore",
+                "ignore"
+            ],
+            "filenames": [
+                ".vscodeignore"
+            ],
+            "extensions": [
+                ".gitignore_global",
+                ".gitignore",
+                ".npmignore"
+            ],
+            "lineComments": [
+                "#"
+            ],
+            "blockComments": [],
+            "blockStrings": []
+        },
+        "git-commit": {
+            "aliases": [
+                "Git Commit Message",
+                "git-commit"
+            ],
+            "filenames": [
+                "COMMIT_EDITMSG",
+                "MERGE_MSG"
+            ],
+            "extensions": [],
+            "lineComments": [
+                "#"
+            ],
+            "blockComments": [
+                [
+                    "#",
+                    " "
+                ]
+            ],
+            "blockStrings": []
+        },
+        "git-rebase": {
+            "aliases": [
+                "Git Rebase Message",
+                "git-rebase"
+            ],
+            "filenames": [
+                "git-rebase-todo"
+            ],
+            "extensions": [],
+            "lineComments": [
+                "#"
+            ],
+            "blockComments": [
+                [
+                    "#",
+                    " "
+                ]
+            ],
+            "blockStrings": []
+        },
+        "cmake": {
+            "aliases": [
+                "CMake"
+            ],
+            "filenames": [
+                "CMakelists.txt"
+            ],
+            "extensions": [
+                ".cmake"
+            ],
+            "lineComments": [],
+            "blockComments": [],
+            "blockStrings": []
+        },
+        "cmake-cache": {
+            "aliases": [
+                "CMake Cache"
+            ],
+            "filenames": [
+                "CMakeCache.txt"
+            ],
+            "extensions": [],
+            "lineComments": [],
+            "blockComments": [],
+            "blockStrings": []
+        },
+        "c": {
+            "aliases": [
+                "C",
+                "c"
+            ],
+            "filenames": [],
+            "extensions": [
+                ".c",
+                ".i"
+            ],
+            "lineComments": [
+                "//"
+            ],
+            "blockComments": [
+                [
+                    "/*",
+                    "*/"
+                ]
+            ],
+            "blockStrings": []
+        },
+    }
 }
