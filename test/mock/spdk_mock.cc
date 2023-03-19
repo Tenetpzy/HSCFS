@@ -3,6 +3,7 @@
 #include <vector>
 #include <queue>
 #include <mutex>
+#include <array>
 
 #include "spdk_mock.h"
 
@@ -13,11 +14,21 @@ static const uint16_t INVALID_TID = 0;
 static int qpair_stub_alloc_map[test_channel_size];
 static std::vector<spdk_cmd_cb> qpair_io_cmds[test_channel_size], qpair_admin_cmds;
 static std::mutex admin_mtx, io_mtx;
+
 spdk_nvme_cpl cpl_stub;
 std::queue<spdk_cmd_cb> cplt_tid_cmd;
 uint16_t ret_tid_list[max_ret_tid];
 
-using lba_buffer = char[lba_size];
+class lba_buffer
+{
+public:
+    char *get_ptr()
+    {
+        return buf;
+    }
+private:
+    char buf[lba_size];
+};
 static std::unordered_map<uint64_t, lba_buffer> vir_lba_storage;
 
 void spdk_stub_setup(void)
@@ -77,9 +88,9 @@ int spdk_nvme_ns_cmd_read(struct spdk_nvme_ns *ns, struct spdk_nvme_qpair *qpair
     for (uint32_t cnt = 0; cnt < lba_count; ++cnt)
     {
         if (vir_lba_storage.count(lba + cnt))
-            memcpy(static_cast<char*>(payload) + cnt * lba_size, vir_lba_storage[lba + cnt], lba_size);
+            memcpy(static_cast<char*>(payload) + cnt * lba_size, vir_lba_storage[lba + cnt].get_ptr(), lba_size);
         else
-            memcpy(static_cast<char*>(payload) + cnt * lba_size, "had not written.", sizeof("had not written."));
+            memcpy(static_cast<char*>(payload) + cnt * lba_size, "empty.", sizeof("empty."));
     }
     qpair_io_cmds[qpair_addr_to_idx(qpair)].emplace_back(INVALID_TID, cb_fn, cb_arg);
     return 0;
@@ -91,7 +102,7 @@ int spdk_nvme_ns_cmd_write(struct spdk_nvme_ns *ns, struct spdk_nvme_qpair *qpai
 {
     std::lock_guard<std::mutex> lg(io_mtx);
     for (uint32_t cnt = 0; cnt < lba_count; ++cnt)
-        memcpy(vir_lba_storage[lba + cnt], static_cast<char*>(payload) + cnt * lba_size, lba_size);
+        memcpy(vir_lba_storage[lba + cnt].get_ptr(), static_cast<char*>(payload) + cnt * lba_size, lba_size);
     qpair_io_cmds[qpair_addr_to_idx(qpair)].emplace_back(INVALID_TID, cb_fn, cb_arg);
     return 0;
 }
