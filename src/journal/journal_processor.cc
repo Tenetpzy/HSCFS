@@ -5,6 +5,7 @@
 #include "communication/comm_api.h"
 #include "utils/hscfs_exceptions.hh"
 
+// 日志处理线程入口
 void hscfs_journal_process_thread(comm_dev *dev, uint64_t journal_start_lpa, uint64_t journal_end_lpa, 
     uint64_t journal_fifo_pos)
 {
@@ -42,6 +43,8 @@ hscfs_journal_processor::hscfs_journal_processor(comm_dev *device, uint64_t jour
 hscfs_journal_processor::~hscfs_journal_processor()
 {
     comm_free_dma_mem(journal_pos_dma_buffer);
+    hscfs_timer_stop(&journal_poll_timer);
+    hscfs_timer_destructor(&journal_poll_timer);
 }
 
 void hscfs_journal_processor::process_journal()

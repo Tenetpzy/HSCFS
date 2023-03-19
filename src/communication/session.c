@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <stdatomic.h>
+#include <pthread.h>
 
 #include "communication/session.h"
 #include "communication/memory.h"
@@ -126,6 +127,8 @@ void comm_session_cmd_ctx_destructor(comm_session_cmd_ctx *self)
 /*****************************************************************************************/
 /* 会话层环境 */
 
+void* comm_session_polling_thread(void *arg);
+
 typedef TAILQ_HEAD(, comm_session_cmd_ctx) cmd_queue_t;
 
 typedef struct comm_session_env
@@ -134,6 +137,9 @@ typedef struct comm_session_env
     size_t cmd_queue_size;  // cmd_queue的大小
     cond_t polling_thread_cond;  // 轮询线程空闲且队列为空时进行等待的条件变量
     mutex_t cmd_queue_mtx;  // 保护命令队列，和polling_thread_cond相关的互斥锁
+
+    atomic_int polling_thread_exit_req;  // 外部控制轮询线程退出的请求
+    atomic_int polling_thread_is_exit;  // 轮询线程是否已完成资源释放
 } comm_session_env;
 
 static comm_session_env* session_env_get_instance(void)
@@ -142,8 +148,9 @@ static comm_session_env* session_env_get_instance(void)
     return &session_env;
 }
 
-int comm_session_env_constructor(void)
+int comm_session_env_init(comm_dev *dev)
 {
+    // 初始化会话层环境
     comm_session_env *session_env = session_env_get_instance();
     int ret = 0;
     ret = cond_init(&session_env->polling_thread_cond);
@@ -156,12 +163,43 @@ int comm_session_env_constructor(void)
     if (ret != 0)
     {
         HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "init session env condmtx failed.");
-        pthread_cond_destroy(&session_env->polling_thread_cond);
-        return ret;
+        goto err1;
     }
 
     TAILQ_INIT(&session_env->cmd_queue);
     session_env->cmd_queue_size = 0;
+    atomic_init(&session_env->polling_thread_exit_req, 0);
+    atomic_init(&session_env->polling_thread_is_exit, 0);
+
+    // 启动会话层轮询线程
+    polling_thread_start_env *polling_th_env = (polling_thread_start_env *)malloc(sizeof(polling_thread_start_env));
+    if (polling_th_env == NULL)
+    {
+        HSCFS_LOG(HSCFS_LOG_ERROR, "alloc session polling thread env failed.");
+        goto err2;
+    }
+    polling_th_env->dev = dev;
+    pthread_t th;
+    ret = pthread_create(&th, NULL, comm_session_polling_thread, polling_th_env);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "create session polling thread failed.");
+        goto err3;
+    }
+    ret = pthread_detach(th);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "session polling thread detach failed.");
+        goto err3;
+    }
+    return 0;
+
+    err3:
+    free(polling_th_env);
+    err2:
+    mutex_destroy(&session_env->cmd_queue_mtx);
+    err1:
+    pthread_cond_destroy(&session_env->polling_thread_cond);
     return ret;
 }
 
@@ -170,20 +208,27 @@ static void session_clear_queue(cmd_queue_t *q)
     comm_session_cmd_ctx *cmd, *nxtcmd;
     TAILQ_FOREACH_SAFE(cmd, q, COMM_SESSION_CMD_QUEUE_FIELD, nxtcmd)
     {
+        TAILQ_REMOVE(q, cmd, COMM_SESSION_CMD_QUEUE_FIELD);
         if (cmd->has_ownership)
         {
             comm_session_cmd_ctx_destructor(cmd);
             comm_channel_release(cmd->channel);
-        }
-        TAILQ_REMOVE(q, cmd, COMM_SESSION_CMD_QUEUE_FIELD);
-        if (cmd->has_ownership)
             free(cmd);
+        }
     }
 }
 
-void comm_session_env_destructor()
+void comm_session_env_fini()
 {
+    /* to do */
     comm_session_env *session_env = session_env_get_instance();
+    atomic_store(&session_env->polling_thread_exit_req, 1);
+    int ret = cond_broadcast(&session_env->polling_thread_cond);
+    if (ret != 0)
+        HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "wake up polling thread failed when exit.");
+    else
+        while (atomic_load(&session_env->polling_thread_is_exit) == 0);
+
     cond_destroy(&session_env->polling_thread_cond);
     mutex_destroy(&session_env->cmd_queue_mtx);
     session_clear_queue(&session_env->cmd_queue);
@@ -744,6 +789,11 @@ static void polling_thread_print_exit_log(void)
     HSCFS_LOG(HSCFS_LOG_ERROR, "polling thread exit.");
 }
 
+static int polling_thread_received_exit_request(comm_session_env *session_env)
+{
+    return atomic_load(&session_env->polling_thread_exit_req);
+}
+
 /* 
  * 会话层轮询线程
  * todo: 目前此线程没有设置取消机制。
@@ -755,7 +805,7 @@ void* comm_session_polling_thread(void *arg)
     if (polling_thread_env_constructor(&thrd_env, ((polling_thread_start_env*)arg)->dev) != 0)
     {
         polling_thread_print_exit_log();
-        return NULL;
+        goto out;
     }
 
     while (1)
@@ -766,7 +816,7 @@ void* comm_session_polling_thread(void *arg)
         {
             HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "polling thread fetch cmd failed.");
             polling_thread_print_exit_log();
-            return NULL;
+            goto out;
         }
 
         polling_thread_process_cq_queue(&thrd_env);  // 轮询cq等待队列
@@ -777,7 +827,19 @@ void* comm_session_polling_thread(void *arg)
         {
             HSCFS_LOG(HSCFS_LOG_ERROR, "polling thread error occured.");
             polling_thread_print_exit_log();
-            return NULL;
+            goto out;
         }
+
+        // if (polling_thread_received_exit_request(session_env))
+        // {
+        //     HSCFS_LOG(HSCFS_LOG_INFO, "polling thread received exit request.");
+        //     goto out;
+        // }
     }
+
+    out:
+    free(arg);
+    polling_thread_env_destructor(&thrd_env);
+    atomic_store(&session_env->polling_thread_is_exit, 1);
+    return NULL;
 }

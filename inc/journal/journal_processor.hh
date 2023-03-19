@@ -138,7 +138,3 @@ private:
      */
     void process_tx_record();
 };
-
-// 日志处理线程入口
-void hscfs_journal_process_thread(comm_dev *dev, uint64_t journal_start_lpa, uint64_t journal_end_lpa, 
-    uint64_t journal_fifo_pos);

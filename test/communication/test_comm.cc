@@ -117,13 +117,14 @@ int main(int argc, char **argv)
     ret = comm_channel_controller_constructor(&dev.channel_ctrlr, &dev, test_channel_size);
     if (ret != 0)
         throw std::runtime_error("channel controller construct failed.");
-    if (comm_session_env_constructor() != 0)
+    if (comm_session_env_init(&dev) != 0)
         throw std::runtime_error("session env init failed.");
-    polling_thread_arg.dev = &dev;
-    th = std::thread(comm_session_polling_thread, static_cast<void*>(&polling_thread_arg));
-    th.detach();
     spdk_stub_setup();
 
     ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    ret = RUN_ALL_TESTS();
+
+    // comm_session_env_fini();
+    // comm_channel_controller_destructor(&dev.channel_ctrlr);
+    return ret;
 }

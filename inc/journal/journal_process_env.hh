@@ -19,14 +19,14 @@ public:
     // 获取实例之前，必须调用hscfs_journal_module_init初始化。
     static hscfs_journal_process_env* get_instance()
     {
-        return g_env;
+        return &g_env;
     }
 
     // 提交日志，返回分配的事务号
     uint64_t commit_journal(hscfs_journal_container *journal);
 
 private:
-    static hscfs_journal_process_env *g_env;
+    static hscfs_journal_process_env g_env;
 
     // 日志管理层的日志提交队列，以及保护该队列的锁，用于通知日志处理线程的条件变量
     std::list<hscfs_journal_container*> commit_queue;
@@ -43,12 +43,9 @@ private:
         return atomic_fetch_add(&tx_id_to_alloc, 1UL);
     }
 
-    static void init()
-    {
-        g_env = new hscfs_journal_process_env;
-    }
+    static void init(comm_dev *dev, uint64_t journal_start_lpa, uint64_t journal_end_lpa, 
+        uint64_t journal_fifo_pos);
 
-    friend void hscfs_journal_module_init(comm_dev*, uint64_t, uint64_t, uint64_t);
     friend class hscfs_journal_processor;
 };
 

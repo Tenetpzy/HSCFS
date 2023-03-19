@@ -18,7 +18,7 @@ struct spdk_cmd_cb
     void *_cb_arg;
 	uint16_t _tid;
 
-    spdk_cmd_cb(uint16_t tid, spdk_nvme_cmd_cb cb_fn, void * cb_arg) : _tid(tid), _cb_fn(cb_fn), _cb_arg(cb_arg) {}
+    spdk_cmd_cb(uint16_t tid, spdk_nvme_cmd_cb cb_fn, void * cb_arg) : _cb_fn(cb_fn), _cb_arg(cb_arg), _tid(tid) {}
 };
 
 struct spdk_nvme_ctrlr{};

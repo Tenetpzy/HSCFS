@@ -88,11 +88,8 @@ void host_env_init(void)
 
     if (comm_channel_controller_constructor(&dev.channel_ctrlr, &dev, test_channel_size) != 0)
         throw std::runtime_error("channel controller construct failed.");
-    if (comm_session_env_constructor() != 0)
+    if (comm_session_env_init(&dev) != 0)
         throw std::runtime_error("session env init failed.");
-    polling_thread_arg.dev = &dev;
-    th = std::thread(comm_session_polling_thread, static_cast<void*>(&polling_thread_arg));
-    th.detach();
 }
 
 void SSD_test_prepare(void)
@@ -167,6 +164,7 @@ void test_func(void)
         printf("request journal head for %lu times...\n", ++req_cnt);
         if (comm_submit_sync_get_metajournal_head_request(&dev, journal_head) != 0)
             throw std::runtime_error("get journal head failed.");
+        printf("journal head: %lu\n", *journal_head);
         if (*journal_head == endlpa)
             break;
     }
