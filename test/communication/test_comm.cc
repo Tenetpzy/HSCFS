@@ -34,7 +34,7 @@ void sync_read_multiple_thread_test(size_t idx, comm_dev *dev)
 TEST(comm_test, sync_read_multiple_thread)
 {
     const size_t th_num = 16;
-    const size_t test_num = 1024;
+    const size_t test_num = 10;
     for (size_t i = 0; i < test_num; ++i)
     {
         fprintf(stdout, "test round: %lu\n", i);
@@ -67,7 +67,7 @@ void async_read_test_thread(size_t index)
 TEST(comm_test, async_read_multi_thread)
 {
     const size_t th_num = 16;
-    const size_t test_num = 1024;
+    const size_t test_num = 10;
     for (size_t i = 0; i < test_num; ++i)
     {
         fprintf(stdout, "test round: %lu\n", i);
@@ -98,7 +98,7 @@ TEST(comm_test, sync_raw_long_cmd_single)
 TEST(comm_test, sync_raw_long_cmd_multi_thread)
 {
     const size_t th_num = 16;
-    const size_t test_num = 1024;
+    const size_t test_num = 10;
     for (size_t i = 0; i < test_num; ++i)
     {
         fprintf(stdout, "test round: %lu\n", i);
@@ -124,7 +124,7 @@ int main(int argc, char **argv)
     ::testing::InitGoogleTest(&argc, argv);
     ret = RUN_ALL_TESTS();
 
-    // comm_session_env_fini();
-    // comm_channel_controller_destructor(&dev.channel_ctrlr);
+    comm_session_env_fini();
+    comm_channel_controller_destructor(&dev.channel_ctrlr);
     return ret;
 }

@@ -9,7 +9,7 @@ set(test_lib_srcs
 add_executable(test_comm)
 target_sources(test_comm PRIVATE 
     test_comm.cc
-    ${PROJECT_SOURCE_DIR}/test/mock/spdk_mock.cc
+    spdk_mock.cc
     ${test_lib_srcs}
 )
 target_include_directories(test_comm PUBLIC

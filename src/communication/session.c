@@ -138,7 +138,7 @@ typedef struct comm_session_env
     cond_t polling_thread_cond;  // 轮询线程空闲且队列为空时进行等待的条件变量
     mutex_t cmd_queue_mtx;  // 保护命令队列，和polling_thread_cond相关的互斥锁
 
-    atomic_int polling_thread_exit_req;  // 外部控制轮询线程退出的请求
+    int polling_thread_exit_req;  // 外部控制轮询线程退出的请求
     atomic_int polling_thread_is_exit;  // 轮询线程是否已完成资源释放
 } comm_session_env;
 
@@ -222,12 +222,27 @@ void comm_session_env_fini()
 {
     /* to do */
     comm_session_env *session_env = session_env_get_instance();
-    atomic_store(&session_env->polling_thread_exit_req, 1);
-    int ret = cond_broadcast(&session_env->polling_thread_cond);
+    int ret = mutex_lock(&session_env->cmd_queue_mtx);
     if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "session env destruct failed: lock session env failed.");
+        return;
+    }
+    session_env->polling_thread_exit_req = 1;
+    ret = mutex_unlock(&session_env->cmd_queue_mtx);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "session env destruct failed: unlock session env failed.");
+        return;
+    }
+
+    ret = cond_broadcast(&session_env->polling_thread_cond);
+    if (ret != 0)
+    {
         HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "wake up polling thread failed when exit.");
-    else
-        while (atomic_load(&session_env->polling_thread_is_exit) == 0);
+        return;
+    }
+    while (atomic_load(&session_env->polling_thread_is_exit) == 0);
 
     cond_destroy(&session_env->polling_thread_cond);
     mutex_destroy(&session_env->cmd_queue_mtx);
@@ -312,6 +327,8 @@ typedef struct polling_thread_env
     comm_session_cmd_ctx cplt_tid_query_ctx;  // 查询已完成tid任务的上下文
     comm_channel_handle cplt_tid_query_handle;  // 查询已完成tid任务使用的channel
     comm_dev *dev;  // 轮询的目标设备
+
+    int need_exit;  // 是否需要退出的标志
 } polling_thread_env;
 
 // 轮询线程向SSD发送[获取已完成tid]所使用的会话层回调。回调参数为polling_thread_env
@@ -352,7 +369,10 @@ static int polling_thread_env_constructor(polling_thread_env *self, comm_dev *de
     self->cplt_tid_query_handle = comm_channel_controller_get_channel(&device->channel_ctrlr);
     self->cplt_tid_query_state = CPLT_TID_POLL_DISABLE;
     self->dev = device;
-    // cplt_tid_query_ctx在每次发送该命令时初始化
+    self->need_exit = 0;
+    
+    comm_session_async_cmd_ctx_constructor(&self->cplt_tid_query_ctx, self->cplt_tid_query_handle, 
+        SESSION_ADMIN_CMD, polling_thread_cplt_tid_query_callback, self, 0);
 
     return 0;
 }
@@ -759,6 +779,10 @@ static int polling_thread_fetch_cmd_from_session(polling_thread_env *thrd_env, c
         }
         while (session_env->cmd_queue_size == 0)
         {
+            // 如果需要轮询线程退出，则不等待其它命令了
+            if (session_env->polling_thread_exit_req)
+                break;
+
             ret = cond_wait(&session_env->polling_thread_cond, &session_env->cmd_queue_mtx);
             if (ret != 0)
             {
@@ -768,6 +792,9 @@ static int polling_thread_fetch_cmd_from_session(polling_thread_env *thrd_env, c
             }
         }
     }
+
+    if (session_env->polling_thread_exit_req)
+        thrd_env->need_exit = 1;
 
     // 将会话层命令队列中的内容转移到线程内部的cq等待队列，并把命令队列清空
     TAILQ_CONCAT(&thrd_env->cq_queue, &session_env->cmd_queue, COMM_SESSION_CMD_QUEUE_FIELD);
@@ -789,9 +816,9 @@ static void polling_thread_print_exit_log(void)
     HSCFS_LOG(HSCFS_LOG_ERROR, "polling thread exit.");
 }
 
-static int polling_thread_received_exit_request(comm_session_env *session_env)
+static int polling_thread_received_exit_request(polling_thread_env *thrd_env)
 {
-    return atomic_load(&session_env->polling_thread_exit_req);
+    return thrd_env->need_exit;
 }
 
 /* 
@@ -830,11 +857,11 @@ void* comm_session_polling_thread(void *arg)
             goto out;
         }
 
-        // if (polling_thread_received_exit_request(session_env))
-        // {
-        //     HSCFS_LOG(HSCFS_LOG_INFO, "polling thread received exit request.");
-        //     goto out;
-        // }
+        if (polling_thread_received_exit_request(&thrd_env))
+        {
+            HSCFS_LOG(HSCFS_LOG_INFO, "polling thread received exit request.");
+            goto out;
+        }
     }
 
     out:
