@@ -79,7 +79,9 @@
         "types.h": "c",
         "vendor_cmds.h": "c",
         "list": "cpp",
-        "future": "cpp"
+        "future": "cpp",
+        "codecvt": "cpp",
+        "filesystem": "cpp"
     },
     "C_Cpp.intelliSenseEngineFallback": "enabled",
     "VSCodeCounter.languages": {

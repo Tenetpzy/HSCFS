@@ -5,12 +5,13 @@
             "includePath": [
                 "${workspaceFolder}/inc",
                 "${workspaceFolder}/test/inc",
+                "${workspaceFolder}/third_party/**",
                 "/home/pzy/spdk_src/spdk/build/include"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++",
             "cStandard": "gnu17",
-            "cppStandard": "gnu++17",
+            "cppStandard": "gnu++14",
             "intelliSenseMode": "linux-gcc-x64"
         }
     ],

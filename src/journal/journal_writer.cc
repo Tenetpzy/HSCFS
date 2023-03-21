@@ -304,8 +304,8 @@ void hscfs_journal_writer::write_to_SSD(uint64_t cur_tail)
     {
         if (cur_tail == end_lpa)
             cur_tail = start_lpa;
-        int ret = comm_submit_async_rw_request(dev, journal_buffer[i].get_ptr(), cur_tail, 
-            LPA_TO_LBA(cur_tail), async_write_callback, &syr, COMM_IO_WRITE);
+        int ret = comm_submit_async_rw_request(dev, journal_buffer[i].get_ptr(), LPA_TO_LBA(cur_tail), 
+            8, async_write_callback, &syr, COMM_IO_WRITE);
         if (ret != 0)
             throw hscfs_io_error("journal writer: submit async write failed.");
     }
