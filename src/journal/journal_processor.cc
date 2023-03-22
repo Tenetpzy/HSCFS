@@ -4,6 +4,7 @@
 #include "communication/memory.h"
 #include "communication/comm_api.h"
 #include "utils/hscfs_exceptions.hh"
+#include "utils/hscfs_log.h"
 
 // 日志处理线程入口
 void hscfs_journal_process_thread(comm_dev *dev, uint64_t journal_start_lpa, uint64_t journal_end_lpa, 
@@ -11,6 +12,7 @@ void hscfs_journal_process_thread(comm_dev *dev, uint64_t journal_start_lpa, uin
 {
     hscfs_journal_processor journal_processor(dev, journal_start_lpa, journal_end_lpa, journal_fifo_pos);
     journal_processor.process_journal();
+    HSCFS_LOG(HSCFS_LOG_INFO, "journal process thread exit.");
 }
 
 hscfs_journal_processor::hscfs_journal_processor(comm_dev *device, uint64_t journal_start_lpa, 
@@ -51,7 +53,12 @@ void hscfs_journal_processor::process_journal()
 {
     while (true)
     {
-        fetch_new_journal();
+        try {
+            fetch_new_journal();
+        }
+        catch (thread_interrupted &e) {
+            break;
+        }
         process_pending_journal();
         process_cplt_journal();
     }
@@ -69,20 +76,31 @@ bool hscfs_journal_processor::is_working() const
 
 void hscfs_journal_processor::fetch_new_journal()
 {
-    hscfs_journal_process_env *journal_queue = hscfs_journal_process_env::get_instance();
-    std::unique_lock<std::mutex> mtx(journal_queue->mtx);
+    hscfs_journal_process_env *process_env = hscfs_journal_process_env::get_instance();
+    auto check_if_interrupted = [process_env]() {
+        if (process_env->exit_req)
+            throw thread_interrupted();
+    };
+    std::unique_lock<std::mutex> mtx(process_env->mtx);
+
+    check_if_interrupted();
 
     if (is_working())
     {
-        if (journal_queue->commit_queue.empty())  
+        if (process_env->commit_queue.empty())  
             return;
     }
     else
-        journal_queue->cond.wait(mtx, [journal_queue](){ return !journal_queue->commit_queue.empty(); });
+    {
+        process_env->cond.wait(mtx, [process_env, &check_if_interrupted](){ 
+            check_if_interrupted();
+            return !process_env->commit_queue.empty(); 
+        });
+    }
 
     // 将commit_queue中所有日志按顺序移动到日志处理线程的journal_list尾部
     // 可能的BUG：若STL不保证按原顺序移动，则日志可能被乱序提交
-    pending_journal_list.splice(pending_journal_list.end(), journal_queue->commit_queue);
+    pending_journal_list.splice(pending_journal_list.end(), process_env->commit_queue);
     return;
 }
 

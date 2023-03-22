@@ -30,3 +30,5 @@ public:
     hscfs_timer_error(const std::string &s) : std::runtime_error(s) {}
     hscfs_timer_error(const char *s) : std::runtime_error(s) {}
 };
+
+class thread_interrupted {};

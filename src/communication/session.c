@@ -138,8 +138,8 @@ typedef struct comm_session_env
     cond_t polling_thread_cond;  // 轮询线程空闲且队列为空时进行等待的条件变量
     mutex_t cmd_queue_mtx;  // 保护命令队列，和polling_thread_cond相关的互斥锁
 
+    pthread_t polling_thread_handle;
     int polling_thread_exit_req;  // 外部控制轮询线程退出的请求
-    atomic_int polling_thread_is_exit;  // 轮询线程是否已完成资源释放
 } comm_session_env;
 
 static comm_session_env* session_env_get_instance(void)
@@ -168,8 +168,7 @@ int comm_session_env_init(comm_dev *dev)
 
     TAILQ_INIT(&session_env->cmd_queue);
     session_env->cmd_queue_size = 0;
-    atomic_init(&session_env->polling_thread_exit_req, 0);
-    atomic_init(&session_env->polling_thread_is_exit, 0);
+    session_env->polling_thread_exit_req = 0;
 
     // 启动会话层轮询线程
     polling_thread_start_env *polling_th_env = (polling_thread_start_env *)malloc(sizeof(polling_thread_start_env));
@@ -179,19 +178,14 @@ int comm_session_env_init(comm_dev *dev)
         goto err2;
     }
     polling_th_env->dev = dev;
-    pthread_t th;
-    ret = pthread_create(&th, NULL, comm_session_polling_thread, polling_th_env);
+    ret = pthread_create(&session_env->polling_thread_handle, NULL, 
+        comm_session_polling_thread, polling_th_env);
     if (ret != 0)
     {
         HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "create session polling thread failed.");
         goto err3;
     }
-    ret = pthread_detach(th);
-    if (ret != 0)
-    {
-        HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "session polling thread detach failed.");
-        goto err3;
-    }
+
     return 0;
 
     err3:
@@ -220,8 +214,9 @@ static void session_clear_queue(cmd_queue_t *q)
 
 void comm_session_env_fini()
 {
-    /* to do */
     comm_session_env *session_env = session_env_get_instance();
+
+    // 向轮询线程发送退出命令
     int ret = mutex_lock(&session_env->cmd_queue_mtx);
     if (ret != 0)
     {
@@ -235,14 +230,20 @@ void comm_session_env_fini()
         HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "session env destruct failed: unlock session env failed.");
         return;
     }
-
     ret = cond_broadcast(&session_env->polling_thread_cond);
     if (ret != 0)
     {
         HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "wake up polling thread failed when exit.");
         return;
     }
-    while (atomic_load(&session_env->polling_thread_is_exit) == 0);
+
+    // 等待轮询线程退出
+    ret = pthread_join(session_env->polling_thread_handle, NULL);
+    if (ret != 0)
+    {
+        HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "error when wait polling thread exit.");
+        return;
+    }
 
     cond_destroy(&session_env->polling_thread_cond);
     mutex_destroy(&session_env->cmd_queue_mtx);
@@ -752,23 +753,23 @@ static int polling_thread_is_working(polling_thread_env *thrd_env)
 static int polling_thread_fetch_cmd_from_session(polling_thread_env *thrd_env, comm_session_env *session_env)
 {
     int ret = 0;
+    int is_working = polling_thread_is_working(thrd_env);
 
     // 如果当前轮询线程活跃，则只尝试从会话层获取更多的命令。
     // 此处尝试对命令队列加锁。
-    if (polling_thread_is_working(thrd_env))
+    if (is_working)
     {
         ret = mutex_trylock(&session_env->cmd_queue_mtx);
         if (ret != 0)
         {
+            if (ret != EBUSY)
+                HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "polling thread trylock session env failed.");
             // 命令队列被接口层占用，放弃本次获取命令
-            if (ret == EBUSY)
-                return 0;
-            HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "polling thread trylock session env failed.");
             return 0;
         }
     }
 
-    // 如果当前轮询线程没有在工作，则睡眠等待会话层有命令可取
+    // 如果当前轮询线程没有在工作，直接锁定命令队列
     else
     {
         ret = mutex_lock(&session_env->cmd_queue_mtx);
@@ -777,6 +778,11 @@ static int polling_thread_fetch_cmd_from_session(polling_thread_env *thrd_env, c
             HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "polling thread lock session env failed.");
             return ret;
         }
+    }
+
+    // 如果没有在工作，则等待命令队列有命令可取，或收到退出命令
+    if (!is_working)
+    {
         while (session_env->cmd_queue_size == 0)
         {
             // 如果需要轮询线程退出，则不等待其它命令了
@@ -787,18 +793,20 @@ static int polling_thread_fetch_cmd_from_session(polling_thread_env *thrd_env, c
             if (ret != 0)
             {
                 HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "polling thread wait on condvar failed.");
-                mutex_unlock(&session_env->cmd_queue_mtx);  // 轮询线程已经崩了，unlock没必要再判返回值
+                mutex_unlock(&session_env->cmd_queue_mtx);
                 return ret;
             }
         }
     }
 
+    // 如果收到退出请求，则设置退出标志
     if (session_env->polling_thread_exit_req)
         thrd_env->need_exit = 1;
 
     // 将会话层命令队列中的内容转移到线程内部的cq等待队列，并把命令队列清空
     TAILQ_CONCAT(&thrd_env->cq_queue, &session_env->cmd_queue, COMM_SESSION_CMD_QUEUE_FIELD);
     session_env->cmd_queue_size = 0;
+
     ret = mutex_unlock(&session_env->cmd_queue_mtx);
     if (ret != 0)
         HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "polling thread unlock session env failed.");
@@ -867,6 +875,5 @@ void* comm_session_polling_thread(void *arg)
     out:
     free(arg);
     polling_thread_env_destructor(&thrd_env);
-    atomic_store(&session_env->polling_thread_is_exit, 1);
     return NULL;
 }
