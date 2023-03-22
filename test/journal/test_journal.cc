@@ -3,6 +3,7 @@
 #include "communication/comm_api.h"
 #include "fs/block_buffer.hh"
 #include "fmt/ostream.h"
+#include "gtest/gtest.h"
 
 #include <vector>
 #include <stdexcept>
@@ -289,3 +290,9 @@ int comm_submit_sync_get_metajournal_head_request(comm_dev *dev, uint64_t *head_
     return 0;
 }
 
+
+
+int main(int argc, char **argv)
+{
+    
+}
