@@ -11,8 +11,9 @@ extern "C" {
 
 // spdk内存分配接口
 void *spdk_zmalloc(size_t size, size_t align, uint64_t *phys_addr, int socket_id, uint32_t flags);
+void spdk_free(void *);
 
-static void *comm_alloc_dma_mem(size_t size)
+__attribute__((unused)) static void *comm_alloc_dma_mem(size_t size)
 {
     void *ret = spdk_zmalloc(size, 0, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
     if (ret == NULL)
@@ -20,7 +21,7 @@ static void *comm_alloc_dma_mem(size_t size)
     return ret; 
 }
 
-static void comm_free_dma_mem(void *buf)
+__attribute__((unused)) static void comm_free_dma_mem(void *buf)
 {
     spdk_free(buf);
 }

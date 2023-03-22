@@ -30,7 +30,10 @@ public:
     void init(comm_dev *dev, uint64_t journal_start_lpa, uint64_t journal_end_lpa, 
         uint64_t journal_fifo_pos);
     
-    // 停止日志处理线程
+    /* 
+     * 向日志处理线程发送停止命令，并等待其停止后返回
+     * 日志处理线程在处理完所有已经提交的日志后将会停止
+     */
     void stop_process_thread();
 
 private:

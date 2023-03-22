@@ -243,6 +243,17 @@ void hscfs_journal_writer::async_write_callback(comm_cmd_result res, void *arg)
     syr->cplt_once(res);
 }
 
+hscfs_journal_writer::hscfs_journal_writer(comm_dev *device, uint64_t journal_area_start_lpa, 
+    uint64_t journal_area_end_lpa)
+{
+    start_lpa = journal_area_start_lpa;
+    end_lpa = journal_area_end_lpa;
+    cur_journal = nullptr;
+    buffer_tail_idx = 0;
+    buffer_tail_off = 0;
+    dev = device;
+}
+
 uint64_t hscfs_journal_writer::collect_pending_journal_to_write_buffer()
 {
     buffer_tail_idx = buffer_tail_off = 0;

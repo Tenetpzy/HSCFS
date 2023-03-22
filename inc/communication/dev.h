@@ -6,6 +6,9 @@ extern "C" {
 
 #include "communication/channel.h"
 
+struct spdk_nvme_ctrlr;
+struct spdk_nvme_ns;
+
 // spdk设备信息
 typedef struct comm_dev
 {

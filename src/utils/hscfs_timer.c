@@ -52,9 +52,7 @@ int hscfs_timer_start(hscfs_timer *self)
 
 int hscfs_timer_stop(hscfs_timer *self)
 {
-    struct itimerspec itime;
-    itime.it_value.tv_nsec = 0;
-    itime.it_value.tv_sec = 0;
+    struct itimerspec itime = {0};
     int ret = timerfd_settime(self->timer_fd, 0, &itime, NULL);
     if (ret != 0)
         HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, errno, "stop hscfs timer failed.");

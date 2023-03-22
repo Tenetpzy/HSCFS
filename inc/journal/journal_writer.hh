@@ -16,9 +16,7 @@ struct comm_dev;
 class hscfs_journal_writer
 {
 public:
-    hscfs_journal_writer(comm_dev *device, uint64_t journal_area_start_lpa, uint64_t journal_area_end_lpa):
-        start_lpa(journal_area_start_lpa), end_lpa(journal_area_end_lpa), cur_journal(nullptr),
-        buffer_tail_idx(0), buffer_tail_off(0), dev(device) { }
+    hscfs_journal_writer(comm_dev *device, uint64_t journal_area_start_lpa, uint64_t journal_area_end_lpa);
     no_copy_assignable(hscfs_journal_writer)
 
     // 设置将要处理的日志

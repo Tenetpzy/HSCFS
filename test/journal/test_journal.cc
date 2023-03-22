@@ -1,6 +1,7 @@
 #include "journal/journal_container.hh"
 #include "journal/journal_process_env.hh"
 #include "communication/comm_api.h"
+#include "communication/dev.h"
 #include "fs/block_buffer.hh"
 #include "fmt/ostream.h"
 #include "gtest/gtest.h"
@@ -13,11 +14,30 @@
 #include <unordered_map>
 #include <memory>
 
+extern "C" {
+
+struct spdk_nvme_ctrlr{};
+struct spdk_nvme_ns{};
+
+void *spdk_zmalloc(size_t size, size_t align, uint64_t *phys_addr, int socket_id, uint32_t flags)
+{
+    return malloc(size);
+}
+
+void spdk_free(void *buf)
+{
+    free(buf);
+}
+
+}
+
 struct journal_area_mock
 {
     std::vector<hscfs_block_buffer> flash;
     uint64_t start_lpa, end_lpa, head_lpa, tail_lpa;
 } journal_area;
+
+comm_dev dev;
 
 class journal_entry_printer
 {
@@ -290,9 +310,46 @@ int comm_submit_sync_get_metajournal_head_request(comm_dev *dev, uint64_t *head_
     return 0;
 }
 
+class journal_test_env
+{
+public:
+    journal_test_env(uint64_t start, uint64_t end, uint64_t fifo_pos)
+    {
+        journal_area.start_lpa = start;
+        journal_area.end_lpa = end;
+        journal_area.head_lpa = journal_area.tail_lpa = fifo_pos;
 
+        journal_area.flash.clear();
+        journal_area.flash.resize(end - start); 
+    }
+};
+
+/* 
+ * 测试基本的写入功能
+ * 在一个块中写入少许日志
+ */
+TEST(journal, 1)
+{
+    uint64_t start_lpa = 1, end_lpa = 5, fifo_init = 1;
+    journal_test_env test_env(start_lpa, end_lpa, fifo_init);
+    hscfs_journal_process_env::get_instance()->init(&dev, start_lpa, end_lpa, fifo_init);
+
+    hscfs_journal_container journal;
+    for (uint32_t i = 0; i < 5; ++i)
+    {
+        super_block_journal_entry super_entry = {.Off = i, .newVal = 0};
+        NAT_journal_entry nat_entry = {.nid = i};
+        SIT_journal_entry sit_entry = {.segID = i};
+        journal.append_super_block_journal_entry(super_entry);
+        journal.append_NAT_journal_entry(nat_entry);
+        journal.append_SIT_journal_entry(sit_entry);
+    }
+    hscfs_journal_process_env::get_instance()->commit_journal(&journal);
+    hscfs_journal_process_env::get_instance()->stop_process_thread();
+}
 
 int main(int argc, char **argv)
 {
-    
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }

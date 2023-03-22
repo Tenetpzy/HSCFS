@@ -83,8 +83,6 @@ void hscfs_journal_processor::fetch_new_journal()
     };
     std::unique_lock<std::mutex> mtx(process_env->mtx);
 
-    check_if_interrupted();
-
     if (is_working())
     {
         if (process_env->commit_queue.empty())  
@@ -92,16 +90,20 @@ void hscfs_journal_processor::fetch_new_journal()
     }
     else
     {
-        process_env->cond.wait(mtx, [process_env, &check_if_interrupted](){ 
+        while (process_env->commit_queue.empty())
+        {
+            /*
+             * 若系统需要让日志处理线程退出，则不会再继续写日志
+             * 所以该线程在处理完commit_queue和自身正在处理的全部日志后，即此处，再检查是否退出
+             */
             check_if_interrupted();
-            return !process_env->commit_queue.empty(); 
-        });
+            process_env->cond.wait(mtx);
+        }
     }
 
     // 将commit_queue中所有日志按顺序移动到日志处理线程的journal_list尾部
     // 可能的BUG：若STL不保证按原顺序移动，则日志可能被乱序提交
     pending_journal_list.splice(pending_journal_list.end(), process_env->commit_queue);
-    return;
 }
 
 void hscfs_journal_processor::process_pending_journal()

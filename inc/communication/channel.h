@@ -10,6 +10,7 @@ extern "C" {
 #include "utils/hscfs_multithread.h"
 
 typedef struct comm_dev comm_dev;
+struct spdk_nvme_qpair;
 
 // 描述一个channel的信息
 typedef struct comm_channel
