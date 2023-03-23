@@ -63,6 +63,7 @@ protected:
      * 
      * 返回实际能写入的日志条目个数
      * 算法考虑日志项首部，且保证：若不是恰好把缓存写满，则在尾部留下NOP空间（除非输入的buffer_size本身无法写入NOP）
+     * 留下NOP空间指至少留下一个日志项首部长度。
      */
     static uint64_t generic_calculate_writable_entry_num(uint64_t buffer_size, uint64_t entry_size, 
         uint64_t expected_write_num)
@@ -70,21 +71,36 @@ protected:
         uint64_t ret;
         const uint64_t entry_header_len = sizeof(meta_journal_entry);
         uint64_t expected_write_len = entry_header_len + expected_write_num * entry_size;
+        
+        // 若期待写的长度小于buffer长度
         if (expected_write_len < buffer_size)
         {
+            // 如果全部写完，还能至少剩下header的空间（即NOP的空间），则可以全部写完
             if (buffer_size - expected_write_len >= entry_header_len)
                 ret = expected_write_num;
+            
+            // 如果全部写完无法留出NOP了，就计算最多能写多少个
+            // buffer长度减去NOP和该日志项首部(2 * entry_header_len)，就是能够存放日志条目的最大空间
             else if (buffer_size > 2 * entry_header_len)
                 ret = (buffer_size - 2 * entry_header_len) / entry_size;
             else
                 ret = 0;
         }
+
+        // 若buffer长度正好等于期待写的长度，则正好全部写完
         else if (expected_write_len == buffer_size)
             ret = expected_write_num;
+        
+        // buffer长度小于期待写长度
         else
         {
+            // buffer已经不够放一个首部了，不能再写
+            // 这种情况理论上不应该出现，因为需始终遵守留出NOP空间（最小即是首部）的协议
             if (buffer_size < entry_header_len)
                 ret = 0;
+            
+            // 计算最大能写的日志条目个数(buffer_size - entry_header_len) / entry_size
+            // 递归计算，以考虑NOP留空处理。递归时只可能进入前两个分支
             else
                 ret = generic_calculate_writable_entry_num(buffer_size, entry_size, 
                     (buffer_size - entry_header_len) / entry_size);

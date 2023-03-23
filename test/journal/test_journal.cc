@@ -9,6 +9,7 @@
 #include <vector>
 #include <stdexcept>
 #include <cstring>
+#include <cstdlib>
 #include <string>
 #include <iostream>
 #include <unordered_map>
@@ -199,6 +200,7 @@ static void print_journal_inner(const char *start)
 
         auto journal_printer = journal_printer_factory::generate(cur_journal_entry->type, p_journal);
         journal_printer->print();
+        std::cout << std::endl;
         if (cur_journal_entry->type == JOURNAL_TYPE_END)
             break;
         if (cur_journal_entry->type == JOURNAL_TYPE_NOP)
@@ -210,8 +212,9 @@ static void print_journal_inner(const char *start)
             }
             break;
         }
-        std::cout << std::endl;
         p_journal += cur_len;
+        if (p_journal - start == 4096)
+            break;
     }
 }
 
@@ -358,23 +361,90 @@ TEST(journal, write_in_one_block)
  */
 TEST(journal, write_across_block)
 {
+    uint64_t start_lpa = 1, end_lpa = 10, fifo_init = 1;
+    journal_test_env test_env(start_lpa, end_lpa, fifo_init);
+    auto proc_env = hscfs_journal_process_env::get_instance();
+    proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
+
+    std::srand(time(NULL));
+    const size_t siz = 4096 + 512;
+    hscfs_journal_container journal;
+
+    const size_t sit_write_num = siz / sizeof(SIT_journal_entry);
+    fmt::println(std::cout, "generate sit item num: {}", sit_write_num);
+    for (size_t i = 0; i < sit_write_num; ++i)
+    {
+        SIT_journal_entry entry = {.segID = static_cast<uint32_t>(std::rand())};
+        journal.append_SIT_journal_entry(entry);
+    }
+
+    const size_t nat_write_num = siz / sizeof(NAT_journal_entry);
+    fmt::println(std::cout, "generate nat item num: {}", nat_write_num);
+    for (size_t i = 0; i < nat_write_num; ++i)
+    {
+        NAT_journal_entry entry = {.nid = static_cast<uint32_t>(std::rand())};
+        journal.append_NAT_journal_entry(entry);
+    }
+
+    const size_t super_write_num = siz / sizeof(super_block_journal_entry);
+    fmt::println(std::cout, "generate super item num: {}", super_write_num);
+    for (size_t i = 0; i < super_write_num; ++i)
+    {
+        super_block_journal_entry entry = {.Off = static_cast<uint32_t>(std::rand())};
+        journal.append_super_block_journal_entry(entry);
+    }
+
+    proc_env->commit_journal(&journal);
+    proc_env->stop_process_thread();
+}
+
+/*
+ * 边界条件测试1
+ * 一个块内刚好写到只剩4字节
+ */
+TEST(journal, boundary1)
+{
     uint64_t start_lpa = 1, end_lpa = 5, fifo_init = 1;
     journal_test_env test_env(start_lpa, end_lpa, fifo_init);
     auto proc_env = hscfs_journal_process_env::get_instance();
     proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
 
-    const size_t sit_entry_size = sizeof(SIT_journal_entry);
-    const size_t write_num = (4096 + 512) / sit_entry_size;
-
     hscfs_journal_container journal;
-    for (size_t i = 0; i < write_num; ++i)
+    const size_t super_num = 4092 / sizeof(super_block_journal_entry);
+    for (uint32_t i = 0; i < super_num; ++i)
     {
-        SIT_journal_entry entry = {.segID = static_cast<uint32_t>(i)};
-        journal.append_SIT_journal_entry(entry);
+        super_block_journal_entry super_entry = {.Off = i, .newVal = 0};
+        journal.append_super_block_journal_entry(super_entry);
     }
     proc_env->commit_journal(&journal);
     proc_env->stop_process_thread();
 }
+
+/*
+ * 边界条件测试2
+ * 一个块内写下所有日志项，刚好写满
+ */
+TEST(journal, boundary2)
+{
+    uint64_t start_lpa = 1, end_lpa = 5, fifo_init = 1;
+    journal_test_env test_env(start_lpa, end_lpa, fifo_init);
+    auto proc_env = hscfs_journal_process_env::get_instance();
+    proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
+
+    hscfs_journal_container journal;
+    // 340个NAT条目+1个Super条目，刚好4096
+    for (uint32_t i = 0; i < 340; ++i)
+    {
+        NAT_journal_entry entry = {.nid = i};
+        journal.append_NAT_journal_entry(entry);
+    }
+    super_block_journal_entry sp_entry = {.Off = 0};
+    journal.append_super_block_journal_entry(sp_entry);
+    proc_env->commit_journal(&journal);
+    proc_env->stop_process_thread();
+}
+
+
 
 int main(int argc, char **argv)
 {
