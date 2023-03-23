@@ -69,11 +69,18 @@ protected:
         fmt::println(std::cout, "type: {}, len: {}", type_str, p_header->len);
     }
 
-    static ssize_t calculate_entry_num(size_t journal_len, size_t entry_len)
+    static size_t calculate_entry_num(size_t journal_len, size_t entry_len)
     {
+        auto err = [journal_len]() {
+            fmt::println(std::cerr, "invalid journal len: {}", journal_len);
+            abort();
+        };
+
+        if (journal_len < sizeof(meta_journal_entry) + entry_len)
+            err();
         size_t journal_entry_len = journal_len - sizeof(meta_journal_entry);
         if (journal_entry_len % entry_len)
-            return -1;
+            err();
         return journal_entry_len / entry_len;
     }
 };
@@ -87,16 +94,10 @@ public:
         auto p_header = reinterpret_cast<const meta_journal_entry*>(start_addr);
         println_header(p_header);
 
-        ssize_t num = calculate_entry_num(p_header->len, super_entry_len);
-        if (num < 0)
-        {
-            std::cout << "invalid super entry len\n";
-            throw std::logic_error("invalid super entry len.");
-        }
-
+        size_t num = calculate_entry_num(p_header->len, super_entry_len);
         fmt::println(std::cout, "total entry num: {}", num);
-        auto p_entry = reinterpret_cast<const super_block_journal_entry*>(start_addr + p_header->len);
-        for (ssize_t i = 1; i <= num; ++i, ++p_entry)
+        auto p_entry = reinterpret_cast<const super_block_journal_entry*>(start_addr + sizeof(meta_journal_entry));
+        for (size_t i = 1; i <= num; ++i, ++p_entry)
             fmt::println(std::cout, "entry {}: off = {}", i, p_entry->Off);
     }
 
@@ -113,16 +114,10 @@ public:
         auto p_header = reinterpret_cast<const meta_journal_entry*>(start_addr);
         println_header(p_header);
 
-        ssize_t num = calculate_entry_num(p_header->len, NAT_entry_len);
-        if (num < 0)
-        {
-            std::cout << "invalid NAT entry len\n";
-            throw std::logic_error("invalid NAT entry len.");
-        }
-
+        size_t num = calculate_entry_num(p_header->len, NAT_entry_len);
         fmt::println(std::cout, "total entry num: {}", num);
-        auto p_entry = reinterpret_cast<const NAT_journal_entry*>(start_addr + p_header->len);
-        for (ssize_t i = 1; i <= num; ++i, ++p_entry)
+        auto p_entry = reinterpret_cast<const NAT_journal_entry*>(start_addr + sizeof(meta_journal_entry));
+        for (size_t i = 1; i <= num; ++i, ++p_entry)
             fmt::println(std::cout, "entry {}: nid = {}", i, p_entry->nid);
     }
 
@@ -139,16 +134,10 @@ public:
         auto p_header = reinterpret_cast<const meta_journal_entry*>(start_addr);
         println_header(p_header);
 
-        ssize_t num = calculate_entry_num(p_header->len, SIT_entry_len);
-        if (num < 0)
-        {
-            std::cout << "invalid NAT entry len\n";
-            throw std::logic_error("invalid NAT entry len.");
-        }
-
+        size_t num = calculate_entry_num(p_header->len, SIT_entry_len);
         fmt::println(std::cout, "total entry num: {}", num);
-        auto p_entry = reinterpret_cast<const SIT_journal_entry*>(start_addr + p_header->len);
-        for (ssize_t i = 1; i <= num; ++i, ++p_entry)
+        auto p_entry = reinterpret_cast<const SIT_journal_entry*>(start_addr + sizeof(meta_journal_entry));
+        for (size_t i = 1; i <= num; ++i, ++p_entry)
             fmt::println(std::cout, "entry {}: segid = {}", i, p_entry->segID);
     }
 
@@ -200,6 +189,42 @@ public:
     };
 };
 
+static void print_journal_inner(const char *start)
+{
+    const char *p_journal = start;
+    while (true)
+    {
+        auto cur_journal_entry = reinterpret_cast<const meta_journal_entry*>(p_journal);
+        auto cur_len = cur_journal_entry->len;
+
+        auto journal_printer = journal_printer_factory::generate(cur_journal_entry->type, p_journal);
+        journal_printer->print();
+        if (cur_journal_entry->type == JOURNAL_TYPE_END)
+            break;
+        if (cur_journal_entry->type == JOURNAL_TYPE_NOP)
+        {
+            if (p_journal + cur_len - 4096 != start)
+            {
+                fmt::print(std::cout, "warning! Invalid NOP entry pos or len. \
+                    NOP at offset {}, len = {}", p_journal - start, cur_len);
+            }
+            break;
+        }
+        std::cout << std::endl;
+        p_journal += cur_len;
+    }
+}
+
+void print_buffer(const char *start)
+{
+    print_journal_inner(start);
+}
+
+static void print_block(uint64_t lpa)
+{
+    print_journal_inner(journal_area.flash[lpa].get_ptr());
+}
+
 int comm_submit_async_rw_request(comm_dev *dev, void *buffer, uint64_t lba, uint32_t lba_count,
     comm_async_cb_func cb_func, void *cb_arg, comm_io_direction dir)
 {
@@ -209,7 +234,7 @@ int comm_submit_async_rw_request(comm_dev *dev, void *buffer, uint64_t lba, uint
     {
         uint64_t tar_lba = lba + i;
         uint64_t tar_lpa = tar_lba >> 3;
-        uint64_t lpa_off = (tar_lba & 3) * 512;
+        uint64_t lpa_off = (tar_lba & 7) * 512;
         char *p1 = journal_area.flash[tar_lpa].get_ptr() + lpa_off;
         char *p2 = static_cast<char*>(buffer) + i * 512;
         if (dir == COMM_IO_READ)
@@ -253,7 +278,7 @@ int comm_submit_sync_get_metajournal_head_request(comm_dev *dev, uint64_t *head_
 {
     auto get_unapplied_lpa_num = [](const journal_area_mock &journal)
     {
-        if (journal.tail_lpa >= journal.start_lpa)
+        if (journal.tail_lpa >= journal.head_lpa)
             return journal.tail_lpa - journal.head_lpa;
         else
             return journal.tail_lpa + journal.end_lpa - journal.start_lpa - journal.head_lpa; 
@@ -278,31 +303,9 @@ int comm_submit_sync_get_metajournal_head_request(comm_dev *dev, uint64_t *head_
             cur_head = journal_area.start_lpa;
             continue;
         }
-
-        char *block_start_addr = journal_area.flash[cur_head].get_ptr();
-        char *p_journal = block_start_addr;
-        while (true)
-        {
-            meta_journal_entry *cur_journal_entry = reinterpret_cast<meta_journal_entry*>(p_journal);
-            auto cur_len = cur_journal_entry->len;
-
-            auto journal_printer = journal_printer_factory::generate(cur_journal_entry->type, p_journal);
-            journal_printer->print();
-            if (cur_journal_entry->type == JOURNAL_TYPE_END)
-                break;
-            if (cur_journal_entry->type == JOURNAL_TYPE_NOP)
-            {
-                if (p_journal + cur_len - 4096 != block_start_addr)
-                {
-                    fmt::print(std::cout, "warning! Invalid NOP entry pos or len. \
-                        NOP at offset {}, len = {}", p_journal - block_start_addr, cur_len);
-                }
-                break;
-            }
-            
-            p_journal += cur_len;
-        }
-
+        fmt::println(std::cout, "journal in LPA {}:", cur_head);
+        print_block(cur_head);
+        std::cout << std::endl;
         ++cur_head;
     }
 
@@ -310,6 +313,7 @@ int comm_submit_sync_get_metajournal_head_request(comm_dev *dev, uint64_t *head_
     return 0;
 }
 
+// 不用TEST_F，考虑到每个测试用例可能使用不同的日志范围
 class journal_test_env
 {
 public:
@@ -328,24 +332,48 @@ public:
  * 测试基本的写入功能
  * 在一个块中写入少许日志
  */
-TEST(journal, 1)
+TEST(journal, write_in_one_block)
 {
     uint64_t start_lpa = 1, end_lpa = 5, fifo_init = 1;
     journal_test_env test_env(start_lpa, end_lpa, fifo_init);
-    hscfs_journal_process_env::get_instance()->init(&dev, start_lpa, end_lpa, fifo_init);
+    auto proc_env = hscfs_journal_process_env::get_instance();
+    proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
 
     hscfs_journal_container journal;
     for (uint32_t i = 0; i < 5; ++i)
     {
         super_block_journal_entry super_entry = {.Off = i, .newVal = 0};
-        NAT_journal_entry nat_entry = {.nid = i};
-        SIT_journal_entry sit_entry = {.segID = i};
+        NAT_journal_entry nat_entry = {.nid = 4 - i};
+        SIT_journal_entry sit_entry = {.segID = 4 - i};
         journal.append_super_block_journal_entry(super_entry);
         journal.append_NAT_journal_entry(nat_entry);
         journal.append_SIT_journal_entry(sit_entry);
     }
-    hscfs_journal_process_env::get_instance()->commit_journal(&journal);
-    hscfs_journal_process_env::get_instance()->stop_process_thread();
+    proc_env->commit_journal(&journal);
+    proc_env->stop_process_thread();
+}
+
+/*
+ * 测试跨块写入
+ */
+TEST(journal, write_across_block)
+{
+    uint64_t start_lpa = 1, end_lpa = 5, fifo_init = 1;
+    journal_test_env test_env(start_lpa, end_lpa, fifo_init);
+    auto proc_env = hscfs_journal_process_env::get_instance();
+    proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
+
+    const size_t sit_entry_size = sizeof(SIT_journal_entry);
+    const size_t write_num = (4096 + 512) / sit_entry_size;
+
+    hscfs_journal_container journal;
+    for (size_t i = 0; i < write_num; ++i)
+    {
+        SIT_journal_entry entry = {.segID = static_cast<uint32_t>(i)};
+        journal.append_SIT_journal_entry(entry);
+    }
+    proc_env->commit_journal(&journal);
+    proc_env->stop_process_thread();
 }
 
 int main(int argc, char **argv)

@@ -8,6 +8,7 @@
 #include "communication/comm_api.h"
 #include "utils/hscfs_exceptions.hh"
 #include "utils/io_utils.hh"
+#include "utils/hscfs_log.h"
 
 enum class journal_output_state
 {
@@ -108,26 +109,27 @@ public:
 
     journal_output_state output_to_buffer(char **p_start_addr, char *end_addr) override
     {
+        size_t journal_entry_size = sizeof(journalT);
         if (rest_output_num == 0)
             return journal_output_state::REACH_END;
         
         size_t output_num = generic_calculate_writable_entry_num(end_addr - *p_start_addr, 
-            sizeof(journalT), rest_output_num);
+            journal_entry_size, rest_output_num);
         if (output_num == 0)
             return journal_output_state::NO_ENOUGH_BUFFER;
         
         char *p = *p_start_addr;
         meta_journal_entry header;
-        header.len = sizeof(meta_journal_entry) + output_num * sizeof(journalT);
+        header.len = sizeof(meta_journal_entry) + output_num * journal_entry_size;
         header.type = _journal_type;
         *reinterpret_cast<meta_journal_entry*>(p) = header;
-        p += sizeof(meta_journal_entry);
+        journalT *entry = reinterpret_cast<journalT*>(p + sizeof(meta_journal_entry));
 
-        for (size_t i = 0; i < output_num; ++i, ++output_it, p += sizeof(journalT))
-            *reinterpret_cast<journalT*>(p) = journal[output_it->second];
+        for (size_t i = 0; i < output_num; ++i, ++output_it, ++entry)
+            *entry = journal[output_it->second];
         
         rest_output_num -= output_num;
-        *p_start_addr = p;
+        *p_start_addr = reinterpret_cast<char*>(entry);
         return journal_output_state::OK;
     }
 
@@ -254,6 +256,10 @@ hscfs_journal_writer::hscfs_journal_writer(comm_dev *device, uint64_t journal_ar
     dev = device;
 }
 
+#ifdef HSCFS_DEBUG
+void print_buffer(const char *start);
+#endif
+
 uint64_t hscfs_journal_writer::collect_pending_journal_to_write_buffer()
 {
     buffer_tail_idx = buffer_tail_off = 0;
@@ -298,12 +304,26 @@ uint64_t hscfs_journal_writer::collect_pending_journal_to_write_buffer()
             // 如果当前缓存块已经写满，继续使用下一个缓存块
             if (buffer_tail_off == 4096)
             {
+                #ifdef HSCFS_DEBUG
+                HSCFS_LOG(HSCFS_LOG_INFO, "writer: journal in %lu th buffer block:\n", buffer_tail_idx);
+                print_buffer(get_ith_buffer_block(buffer_tail_idx));
+                #endif
+
                 buffer_tail_idx++;
                 buffer_tail_off = 0;
             }
         }
     }
     append_end_entry();
+
+    #ifdef HSCFS_DEBUG
+    for (size_t i = 0; i <= buffer_tail_idx; ++i)
+    {
+        HSCFS_LOG(HSCFS_LOG_INFO, "writer summary: journal in %lu th buffer block:\n", i);
+        print_buffer(get_ith_buffer_block(i));
+    }
+    #endif
+
     return buffer_tail_idx + 1;
 }
 
@@ -315,6 +335,12 @@ void hscfs_journal_writer::write_to_SSD(uint64_t cur_tail)
     {
         if (cur_tail == end_lpa)
             cur_tail = start_lpa;
+
+        #ifdef HSCFS_DEBUG
+        HSCFS_LOG(HSCFS_LOG_INFO, "writer: journal in %lu th buffer block which will be written to SSD:\n", i);
+        print_buffer(get_ith_buffer_block(i));
+        #endif
+
         int ret = comm_submit_async_rw_request(dev, journal_buffer[i].get_ptr(), LPA_TO_LBA(cur_tail), 
             8, async_write_callback, &syr, COMM_IO_WRITE);
         if (ret != 0)
