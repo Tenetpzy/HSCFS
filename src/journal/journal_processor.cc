@@ -124,7 +124,7 @@ void hscfs_journal_processor::process_pending_journal()
     {
     case journal_process_state::NEWLY_FETCHED:
         write_journal_to_buffer();
-        break;
+        // 此处无break，写到缓存后可直接尝试写入SSD，不用等到下一轮loop
 
     case journal_process_state::WRITTEN_IN_BUFFER:
         if (write_journal_to_SSD() == true)
@@ -161,7 +161,12 @@ bool hscfs_journal_processor::write_journal_to_SSD()
         return true;
     }
     else
+    {
+        HSCFS_LOG(HSCFS_LOG_DEBUG, "wait for SSD to have available journal space.\n");
+        HSCFS_LOG(HSCFS_LOG_DEBUG, "current available LPA num: %lu, current journal need LPA num: %lu\n", 
+            cur_avail_lpa, cur_journal_block_num);
         return false;
+    }
 }
 
 void hscfs_journal_processor::generate_tx_record()
@@ -231,6 +236,8 @@ void hscfs_journal_processor::process_tx_record()
         {
             /* to do */
             /* 调用淘汰保护模块，通知该事务日志已经应用完成 */
+            HSCFS_LOG(HSCFS_LOG_DEBUG, "transaction %lu completed, which applied journal area: "
+                "start = %lu, end = %lu\n", tx_rc.get_tx_id(), tx_rc.get_start_lpa(), tx_rc.get_end_lpa());
             tx_record.pop_front();
         }
         else

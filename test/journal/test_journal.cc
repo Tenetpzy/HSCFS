@@ -1,3 +1,14 @@
+/* ************************************************
+
+注意：
+日志层测试时，一次只能运行一个测试用例，必须使用--gtest_filter指定目标用例。
+
+原因：
+目前日志层环境是全局变量，且hscfs_journal_process_env::init只能在系统启动时调用一次。
+由于每个测试用例中，使用的初始化参数（日志区域起止LPA，FIFO指针位置）不同，每个用例都调用上述函数进行初始化。
+
+************************************************* */
+
 #include "journal/journal_container.hh"
 #include "journal/journal_process_env.hh"
 #include "communication/comm_api.h"
@@ -316,7 +327,7 @@ int comm_submit_sync_get_metajournal_head_request(comm_dev *dev, uint64_t *head_
     return 0;
 }
 
-// 不用TEST_F，考虑到每个测试用例可能使用不同的日志范围
+// 不用TEST_F，考虑到每个测试用例可能使用不同的日志范围，不能在程序开始时就指定
 class journal_test_env
 {
 public:
@@ -327,9 +338,29 @@ public:
         journal_area.head_lpa = journal_area.tail_lpa = fifo_pos;
 
         journal_area.flash.clear();
-        journal_area.flash.resize(end - start); 
+        journal_area.flash.resize(end); 
     }
 };
+
+void generate_random_journal(hscfs_journal_container *journal, size_t super_num, size_t nat_num, size_t sit_num)
+{
+    std::srand(time(nullptr));
+    for (size_t i = 0; i < sit_num; ++i)
+    {
+        SIT_journal_entry entry = {.segID = static_cast<uint32_t>(std::rand())};
+        journal->append_SIT_journal_entry(entry);
+    }
+    for (size_t i = 0; i < nat_num; ++i)
+    {
+        NAT_journal_entry entry = {.nid = static_cast<uint32_t>(std::rand())};
+        journal->append_NAT_journal_entry(entry);
+    }
+    for (size_t i = 0; i < super_num; ++i)
+    {
+        super_block_journal_entry entry = {.Off = static_cast<uint32_t>(std::rand())};
+        journal->append_super_block_journal_entry(entry);
+    }
+}
 
 /* 
  * 测试基本的写入功能
@@ -356,9 +387,7 @@ TEST(journal, write_in_one_block)
     proc_env->stop_process_thread();
 }
 
-/*
- * 测试跨块写入
- */
+// 测试跨块写入
 TEST(journal, write_across_block)
 {
     uint64_t start_lpa = 1, end_lpa = 10, fifo_init = 1;
@@ -366,35 +395,49 @@ TEST(journal, write_across_block)
     auto proc_env = hscfs_journal_process_env::get_instance();
     proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
 
-    std::srand(time(NULL));
     const size_t siz = 4096 + 512;
     hscfs_journal_container journal;
 
     const size_t sit_write_num = siz / sizeof(SIT_journal_entry);
     fmt::println(std::cout, "generate sit item num: {}", sit_write_num);
-    for (size_t i = 0; i < sit_write_num; ++i)
-    {
-        SIT_journal_entry entry = {.segID = static_cast<uint32_t>(std::rand())};
-        journal.append_SIT_journal_entry(entry);
-    }
-
     const size_t nat_write_num = siz / sizeof(NAT_journal_entry);
     fmt::println(std::cout, "generate nat item num: {}", nat_write_num);
-    for (size_t i = 0; i < nat_write_num; ++i)
-    {
-        NAT_journal_entry entry = {.nid = static_cast<uint32_t>(std::rand())};
-        journal.append_NAT_journal_entry(entry);
-    }
-
     const size_t super_write_num = siz / sizeof(super_block_journal_entry);
     fmt::println(std::cout, "generate super item num: {}", super_write_num);
-    for (size_t i = 0; i < super_write_num; ++i)
-    {
-        super_block_journal_entry entry = {.Off = static_cast<uint32_t>(std::rand())};
-        journal.append_super_block_journal_entry(entry);
-    }
+    
+    generate_random_journal(&journal, super_write_num, nat_write_num, sit_write_num);
 
     proc_env->commit_journal(&journal);
+    proc_env->stop_process_thread();
+}
+
+// 跨块多事务写入
+TEST(journal, cross_block_and_multi_tx)
+{
+    uint64_t start_lpa = 1, end_lpa = 15, fifo_init = 1;
+    journal_test_env test_env(start_lpa, end_lpa, fifo_init);
+    auto proc_env = hscfs_journal_process_env::get_instance();
+    proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
+
+    const size_t siz = 4096 + 512;
+
+    const size_t sit_write_num = siz / sizeof(SIT_journal_entry);
+    fmt::println(std::cout, "generate sit item num: {}", sit_write_num);
+    const size_t nat_write_num = siz / sizeof(NAT_journal_entry);
+    fmt::println(std::cout, "generate nat item num: {}", nat_write_num);
+    const size_t super_write_num = siz / sizeof(super_block_journal_entry);
+    fmt::println(std::cout, "generate super item num: {}", super_write_num);
+
+    const size_t tx_num = 2;
+    hscfs_journal_container journal[tx_num];;
+
+    for (size_t i = 0; i < tx_num; ++i)
+    {
+        generate_random_journal(&journal[i], super_write_num, nat_write_num, sit_write_num);
+        fmt::println(std::cerr, "transaction {} commit journal.", i);
+        proc_env->commit_journal(&journal[i]);
+    }
+
     proc_env->stop_process_thread();
 }
 
@@ -444,7 +487,55 @@ TEST(journal, boundary2)
     proc_env->stop_process_thread();
 }
 
+/*
+ * 边界条件测试3
+ * 日志指针回转测试
+ * 循环队列中头尾指针回到队列首的情况
+ */
+TEST(journal, boundary3)
+{
+    uint64_t start_lpa = 0, end_lpa = 10, fifo_init = 9;
+    journal_test_env test_env(start_lpa, end_lpa, fifo_init);
+    auto proc_env = hscfs_journal_process_env::get_instance();
+    proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
 
+    const size_t siz = 4096;
+    hscfs_journal_container journal;
+    generate_random_journal(&journal, siz / sizeof(super_block_journal_entry), 
+        siz / sizeof(NAT_journal_entry), siz / sizeof(SIT_journal_entry));
+    proc_env->commit_journal(&journal);
+
+    proc_env->stop_process_thread();
+
+    fmt::println(std::cerr, "after write: head = {}, tail = {}", journal_area.head_lpa, journal_area.tail_lpa);
+}
+
+/*
+ * 边界条件测试4
+ * 日志处理线程等待SSD有可用空间
+ */
+TEST(journal, boundary4)
+{
+    uint64_t start_lpa = 0, end_lpa = 4, fifo_init = 1;
+    journal_test_env test_env(start_lpa, end_lpa, fifo_init);
+    auto proc_env = hscfs_journal_process_env::get_instance();
+    proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
+
+    const size_t siz = 4096;
+    const size_t tx_num = 2;
+    hscfs_journal_container journal[tx_num];;
+
+    for (size_t i = 0; i < tx_num; ++i)
+    {
+        generate_random_journal(&journal[i], siz / sizeof(super_block_journal_entry), 
+            siz / sizeof(NAT_journal_entry), siz / sizeof(SIT_journal_entry));
+        fmt::println(std::cerr, "transaction {} committed journal.", i);
+        proc_env->commit_journal(&journal[i]);
+    }
+
+    proc_env->stop_process_thread();
+    fmt::println(std::cerr, "after write: head = {}, tail = {}", journal_area.head_lpa, journal_area.tail_lpa);
+}
 
 int main(int argc, char **argv)
 {

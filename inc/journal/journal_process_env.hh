@@ -54,7 +54,7 @@ private:
     // 同时超过UNIT64_MAX个事务运行则会分配重复tx_id，暂不考虑这种情况
     uint64_t alloc_tx_id() noexcept
     {
-        return atomic_fetch_add(&tx_id_to_alloc, 1UL);
+        return tx_id_to_alloc.fetch_add(1, std::memory_order_relaxed);
     }
 
     friend class hscfs_journal_processor;
