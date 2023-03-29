@@ -1,0 +1,1 @@
+add_executable(test_cache_manager test_cache_manager.cc)
