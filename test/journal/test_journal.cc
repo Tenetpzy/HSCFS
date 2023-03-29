@@ -43,9 +43,11 @@ void spdk_free(void *buf)
 
 }
 
+using namespace hscfs;
+
 struct journal_area_mock
 {
-    std::vector<hscfs_block_buffer> flash;
+    std::vector<block_buffer> flash;
     uint64_t start_lpa, end_lpa, head_lpa, tail_lpa;
 } journal_area;
 
@@ -342,7 +344,7 @@ public:
     }
 };
 
-void generate_random_journal(hscfs_journal_container *journal, size_t super_num, size_t nat_num, size_t sit_num)
+void generate_random_journal(journal_container *journal, size_t super_num, size_t nat_num, size_t sit_num)
 {
     std::srand(time(nullptr));
     for (size_t i = 0; i < sit_num; ++i)
@@ -370,10 +372,10 @@ TEST(journal, write_in_one_block)
 {
     uint64_t start_lpa = 1, end_lpa = 5, fifo_init = 1;
     journal_test_env test_env(start_lpa, end_lpa, fifo_init);
-    auto proc_env = hscfs_journal_process_env::get_instance();
+    auto proc_env = journal_process_env::get_instance();
     proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
 
-    hscfs_journal_container journal;
+    journal_container journal;
     for (uint32_t i = 0; i < 5; ++i)
     {
         super_block_journal_entry super_entry = {.Off = i, .newVal = 0};
@@ -392,11 +394,11 @@ TEST(journal, write_across_block)
 {
     uint64_t start_lpa = 1, end_lpa = 10, fifo_init = 1;
     journal_test_env test_env(start_lpa, end_lpa, fifo_init);
-    auto proc_env = hscfs_journal_process_env::get_instance();
+    auto proc_env = journal_process_env::get_instance();
     proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
 
     const size_t siz = 4096 + 512;
-    hscfs_journal_container journal;
+    journal_container journal;
 
     const size_t sit_write_num = siz / sizeof(SIT_journal_entry);
     fmt::println(std::cout, "generate sit item num: {}", sit_write_num);
@@ -416,7 +418,7 @@ TEST(journal, cross_block_and_multi_tx)
 {
     uint64_t start_lpa = 1, end_lpa = 15, fifo_init = 1;
     journal_test_env test_env(start_lpa, end_lpa, fifo_init);
-    auto proc_env = hscfs_journal_process_env::get_instance();
+    auto proc_env = journal_process_env::get_instance();
     proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
 
     const size_t siz = 4096 + 512;
@@ -429,7 +431,7 @@ TEST(journal, cross_block_and_multi_tx)
     fmt::println(std::cout, "generate super item num: {}", super_write_num);
 
     const size_t tx_num = 2;
-    hscfs_journal_container journal[tx_num];;
+    journal_container journal[tx_num];;
 
     for (size_t i = 0; i < tx_num; ++i)
     {
@@ -449,10 +451,10 @@ TEST(journal, boundary1)
 {
     uint64_t start_lpa = 1, end_lpa = 5, fifo_init = 1;
     journal_test_env test_env(start_lpa, end_lpa, fifo_init);
-    auto proc_env = hscfs_journal_process_env::get_instance();
+    auto proc_env = journal_process_env::get_instance();
     proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
 
-    hscfs_journal_container journal;
+    journal_container journal;
     const size_t super_num = 4092 / sizeof(super_block_journal_entry);
     for (uint32_t i = 0; i < super_num; ++i)
     {
@@ -471,10 +473,10 @@ TEST(journal, boundary2)
 {
     uint64_t start_lpa = 1, end_lpa = 5, fifo_init = 1;
     journal_test_env test_env(start_lpa, end_lpa, fifo_init);
-    auto proc_env = hscfs_journal_process_env::get_instance();
+    auto proc_env = journal_process_env::get_instance();
     proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
 
-    hscfs_journal_container journal;
+    journal_container journal;
     // 340个NAT条目+1个Super条目，刚好4096
     for (uint32_t i = 0; i < 340; ++i)
     {
@@ -496,11 +498,11 @@ TEST(journal, boundary3)
 {
     uint64_t start_lpa = 0, end_lpa = 10, fifo_init = 9;
     journal_test_env test_env(start_lpa, end_lpa, fifo_init);
-    auto proc_env = hscfs_journal_process_env::get_instance();
+    auto proc_env = journal_process_env::get_instance();
     proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
 
     const size_t siz = 4096;
-    hscfs_journal_container journal;
+    journal_container journal;
     generate_random_journal(&journal, siz / sizeof(super_block_journal_entry), 
         siz / sizeof(NAT_journal_entry), siz / sizeof(SIT_journal_entry));
     proc_env->commit_journal(&journal);
@@ -518,12 +520,12 @@ TEST(journal, boundary4)
 {
     uint64_t start_lpa = 0, end_lpa = 4, fifo_init = 1;
     journal_test_env test_env(start_lpa, end_lpa, fifo_init);
-    auto proc_env = hscfs_journal_process_env::get_instance();
+    auto proc_env = journal_process_env::get_instance();
     proc_env->init(&dev, start_lpa, end_lpa, fifo_init);
 
     const size_t siz = 4096;
     const size_t tx_num = 2;
-    hscfs_journal_container journal[tx_num];;
+    journal_container journal[tx_num];;
 
     for (size_t i = 0; i < tx_num; ++i)
     {

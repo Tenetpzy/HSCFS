@@ -3,19 +3,21 @@
 #include "utils/hscfs_exceptions.hh"
 #include <cstring>
 
-hscfs_block_buffer::hscfs_block_buffer()
+namespace hscfs {
+
+block_buffer::block_buffer()
 {
     buffer = static_cast<char*>(comm_alloc_dma_mem(4096));
     if (buffer == nullptr)
         throw hscfs_alloc_error("alloc block buffer failed.");
 }
 
-hscfs_block_buffer::hscfs_block_buffer(const hscfs_block_buffer &o): hscfs_block_buffer()
+block_buffer::block_buffer(const block_buffer &o): block_buffer()
 {
     std::memcpy(buffer, o.buffer, 4096);
 }
 
-hscfs_block_buffer::hscfs_block_buffer(hscfs_block_buffer &&o) noexcept
+block_buffer::block_buffer(block_buffer &&o) noexcept
 {
     if (this != &o)
     {
@@ -24,13 +26,13 @@ hscfs_block_buffer::hscfs_block_buffer(hscfs_block_buffer &&o) noexcept
     }
 }
 
-hscfs_block_buffer &hscfs_block_buffer::operator=(const hscfs_block_buffer &o)
+block_buffer &block_buffer::operator=(const block_buffer &o)
 {
     std::memcpy(buffer, o.buffer, 4096);
     return *this;
 }
 
-hscfs_block_buffer &hscfs_block_buffer::operator=(hscfs_block_buffer &&o) noexcept
+block_buffer &block_buffer::operator=(block_buffer &&o) noexcept
 {
     if (this != &o)
     {
@@ -41,7 +43,9 @@ hscfs_block_buffer &hscfs_block_buffer::operator=(hscfs_block_buffer &&o) noexce
     return *this;
 }
 
-hscfs_block_buffer::~hscfs_block_buffer()
+block_buffer::~block_buffer()
 {
     comm_free_dma_mem(buffer);
+}
+
 }

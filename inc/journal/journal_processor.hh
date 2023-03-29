@@ -7,14 +7,17 @@
 #include "utils/declare_utils.hh"
 #include "utils/hscfs_timer.h"
 
-class hscfs_journal_container;
 struct comm_dev;
 
+namespace hscfs {
+
+class journal_container;
+
 // 事务日志记录，一个对象代表一个事务，记录该事务日志在SSD上持久化的LPA范围[start_lpa, end_lpa)
-class hscfs_transaction_journal_record
+class transaction_journal_record
 {
 public:
-    hscfs_transaction_journal_record(uint64_t tx_id, uint64_t start_lpa, uint64_t end_lpa) :
+    transaction_journal_record(uint64_t tx_id, uint64_t start_lpa, uint64_t end_lpa) :
         _tx_id(tx_id), _start_lpa(start_lpa), _end_lpa(end_lpa) { }
 
     uint64_t get_tx_id() const noexcept { return _tx_id; }
@@ -53,13 +56,13 @@ private:
  * 
  * to do : 设置日志处理线程的退出机制
  */
-class hscfs_journal_processor
+class journal_processor
 {
 public:
-    hscfs_journal_processor(comm_dev *device, uint64_t journal_start_lpa, uint64_t journal_end_lpa, 
+    journal_processor(comm_dev *device, uint64_t journal_start_lpa, uint64_t journal_end_lpa, 
         uint64_t journal_fifo_pos);
-    no_copy_assignable(hscfs_journal_processor)
-    ~hscfs_journal_processor();
+    no_copy_assignable(journal_processor)
+    ~journal_processor();
 
     // 日志处理线程的入口
     void process_journal();
@@ -71,16 +74,16 @@ private:
     uint64_t *journal_pos_dma_buffer;  // 从SSD获取日志头尾指针的DMA缓存区
     uint64_t cur_avail_lpa, total_avail_lpa;  // 当前可用lpa数量与总共可用lpa数量
     
-    std::list<hscfs_journal_container*> pending_journal_list;  // 日志提交列表，从journal_process_env中取到此处
+    std::list<journal_container*> pending_journal_list;  // 日志提交列表，从journal_process_env中取到此处
 
     /*
      * 事务记录表
      * 确定首事务日志已经应用完毕后，移除它并通知淘汰保护模块
      * 表中事务按提交顺序排列，提交时按顺序写入SSD的Journal FIFO，所以也一定按顺序被应用
      */
-    std::list<hscfs_transaction_journal_record> tx_record;
+    std::list<transaction_journal_record> tx_record;
 
-    hscfs_journal_writer journal_writer;
+    journal_writer journal_writer;
 
     // 当前日志记录处理状态
     enum class journal_process_state
@@ -89,7 +92,7 @@ private:
         WRITTEN_IN_BUFFER,  // 写入buffer，但还没写入SSD(可能由于SSD侧日志空间不足)
     };
     uint64_t cur_journal_block_num;  // 当前日志记录占用的SSD block数目
-    hscfs_journal_container *cur_journal;  // 当前正在处理的日志记录
+    journal_container *cur_journal;  // 当前正在处理的日志记录
     journal_process_state cur_proc_state;  // 当前日志记录处理状态
     uint64_t cur_journal_start_lpa, cur_journal_end_lpa;  // 当前日志记录的持久化区域
 
@@ -138,3 +141,5 @@ private:
      */
     void process_tx_record();
 };
+
+}  // namespace hscfs

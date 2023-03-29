@@ -6,16 +6,18 @@
 #include "utils/hscfs_exceptions.hh"
 #include "utils/hscfs_log.h"
 
+namespace hscfs {
+
 // 日志处理线程入口
 void hscfs_journal_process_thread(comm_dev *dev, uint64_t journal_start_lpa, uint64_t journal_end_lpa, 
     uint64_t journal_fifo_pos)
 {
-    hscfs_journal_processor journal_processor(dev, journal_start_lpa, journal_end_lpa, journal_fifo_pos);
+    journal_processor journal_processor(dev, journal_start_lpa, journal_end_lpa, journal_fifo_pos);
     journal_processor.process_journal();
     HSCFS_LOG(HSCFS_LOG_INFO, "journal process thread exit.");
 }
 
-hscfs_journal_processor::hscfs_journal_processor(comm_dev *device, uint64_t journal_start_lpa, 
+journal_processor::journal_processor(comm_dev *device, uint64_t journal_start_lpa, 
     uint64_t journal_end_lpa, uint64_t journal_fifo_pos): journal_writer(device, journal_start_lpa, journal_end_lpa)
 {
     journal_pos_dma_buffer = static_cast<uint64_t*>(comm_alloc_dma_mem(16));
@@ -42,14 +44,14 @@ hscfs_journal_processor::hscfs_journal_processor(comm_dev *device, uint64_t jour
     cur_journal = nullptr;
 }
 
-hscfs_journal_processor::~hscfs_journal_processor()
+journal_processor::~journal_processor()
 {
     comm_free_dma_mem(journal_pos_dma_buffer);
     hscfs_timer_stop(&journal_poll_timer);
     hscfs_timer_destructor(&journal_poll_timer);
 }
 
-void hscfs_journal_processor::process_journal()
+void journal_processor::process_journal()
 {
     while (true)
     {
@@ -69,14 +71,14 @@ void hscfs_journal_processor::process_journal()
  * 当journal_list和cur_journal都为空时，从journal commit queue中取出的日志均已处理完毕
  * 以上两个条件都满足，则日志处理线程空闲
  */
-bool hscfs_journal_processor::is_working() const
+bool journal_processor::is_working() const
 {
     return !(cur_avail_lpa == total_avail_lpa && pending_journal_list.empty() && cur_journal == nullptr);
 }
 
-void hscfs_journal_processor::fetch_new_journal()
+void journal_processor::fetch_new_journal()
 {
-    hscfs_journal_process_env *process_env = hscfs_journal_process_env::get_instance();
+    journal_process_env *process_env = journal_process_env::get_instance();
     auto check_if_interrupted = [process_env]() {
         if (process_env->exit_req)
             throw thread_interrupted();
@@ -106,7 +108,7 @@ void hscfs_journal_processor::fetch_new_journal()
     pending_journal_list.splice(pending_journal_list.end(), process_env->commit_queue);
 }
 
-void hscfs_journal_processor::process_pending_journal()
+void journal_processor::process_pending_journal()
 {
     if (cur_journal == nullptr)
     {
@@ -136,14 +138,14 @@ void hscfs_journal_processor::process_pending_journal()
     }
 }
 
-void hscfs_journal_processor::write_journal_to_buffer()
+void journal_processor::write_journal_to_buffer()
 {
     journal_writer.set_pending_journal(cur_journal);
     cur_journal_block_num = journal_writer.collect_pending_journal_to_write_buffer();
     cur_proc_state = journal_process_state::WRITTEN_IN_BUFFER;
 }
 
-bool hscfs_journal_processor::write_journal_to_SSD()
+bool journal_processor::write_journal_to_SSD()
 {
     if (cur_journal_block_num <= cur_avail_lpa)
     {
@@ -169,12 +171,12 @@ bool hscfs_journal_processor::write_journal_to_SSD()
     }
 }
 
-void hscfs_journal_processor::generate_tx_record()
+void journal_processor::generate_tx_record()
 {
     tx_record.emplace_back(cur_journal->get_tx_id(), cur_journal_start_lpa, cur_journal_end_lpa);
 }
 
-void hscfs_journal_processor::process_cplt_journal()
+void journal_processor::process_cplt_journal()
 {
     if (cur_avail_lpa == total_avail_lpa)
     {
@@ -189,7 +191,7 @@ void hscfs_journal_processor::process_cplt_journal()
         process_tx_record();
 }
 
-void hscfs_journal_processor::enable_poll_timer()
+void journal_processor::enable_poll_timer()
 {
     if (is_poll_timer_enabled)
         return;
@@ -198,7 +200,7 @@ void hscfs_journal_processor::enable_poll_timer()
     is_poll_timer_enabled = true;
 }
 
-void hscfs_journal_processor::disable_poll_timer()
+void journal_processor::disable_poll_timer()
 {
     if (!is_poll_timer_enabled)
         return;
@@ -207,13 +209,13 @@ void hscfs_journal_processor::disable_poll_timer()
     is_poll_timer_enabled = false;
 }
 
-void hscfs_journal_processor::wait_poll_timer()
+void journal_processor::wait_poll_timer()
 {
     if (hscfs_timer_check_expire(&journal_poll_timer, NULL) != 0)
         throw hscfs_timer_error("jounal processor: wait timer failed.");
 }
 
-bool hscfs_journal_processor::sync_with_SSD_journal_pos()
+bool journal_processor::sync_with_SSD_journal_pos()
 {
     if (comm_submit_sync_get_metajournal_head_request(dev, journal_pos_dma_buffer) != 0)
         throw hscfs_io_error("journal processor: submit get journal pos failed.");
@@ -225,7 +227,7 @@ bool hscfs_journal_processor::sync_with_SSD_journal_pos()
     return new_avail_lpa;
 }
 
-void hscfs_journal_processor::process_tx_record()
+void journal_processor::process_tx_record()
 {
     while (true)
     {
@@ -244,3 +246,5 @@ void hscfs_journal_processor::process_tx_record()
             break;
     }
 }
+
+}  // namespace hscfs

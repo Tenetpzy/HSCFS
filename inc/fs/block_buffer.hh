@@ -2,15 +2,17 @@
 
 #include "utils/declare_utils.hh"
 
-class hscfs_block_buffer
+namespace hscfs {
+
+class block_buffer
 {
 public:
-    hscfs_block_buffer();
-    hscfs_block_buffer(const hscfs_block_buffer&);
-    hscfs_block_buffer(hscfs_block_buffer&&) noexcept;
-    hscfs_block_buffer &operator=(const hscfs_block_buffer&);
-    hscfs_block_buffer &operator=(hscfs_block_buffer&&) noexcept;
-    ~hscfs_block_buffer();
+    block_buffer();
+    block_buffer(const block_buffer&);
+    block_buffer(block_buffer&&) noexcept;
+    block_buffer &operator=(const block_buffer&);
+    block_buffer &operator=(block_buffer&&) noexcept;
+    ~block_buffer();
 
     char *get_ptr() const noexcept
     {
@@ -20,3 +22,5 @@ public:
 private:
     char *buffer;
 };
+
+}  // namespace hscfs

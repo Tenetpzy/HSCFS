@@ -9,18 +9,21 @@
 #include "fs/block_buffer.hh"
 #include "communication/comm_api.h"
 
-class hscfs_journal_container;
-class journal_output_vector;
 struct comm_dev;
 
-class hscfs_journal_writer
+namespace hscfs {
+
+class journal_container;
+class journal_output_vector;
+
+class journal_writer
 {
 public:
-    hscfs_journal_writer(comm_dev *device, uint64_t journal_area_start_lpa, uint64_t journal_area_end_lpa);
-    no_copy_assignable(hscfs_journal_writer)
+    journal_writer(comm_dev *device, uint64_t journal_area_start_lpa, uint64_t journal_area_end_lpa);
+    no_copy_assignable(journal_writer)
 
     // 设置将要处理的日志
-    void set_pending_journal(hscfs_journal_container *journal) noexcept
+    void set_pending_journal(journal_container *journal) noexcept
     {
         cur_journal = journal;
     }
@@ -47,11 +50,13 @@ private:
     static void async_write_callback(comm_cmd_result res, void *arg);
 
 private:
-    hscfs_journal_container *cur_journal;
+    journal_container *cur_journal;
     uint64_t start_lpa, end_lpa;  // SSD上日志区域的起止位置[start_lpa, end_lpa)
 
-    std::vector<hscfs_block_buffer> journal_buffer;  // 4KB缓存块的列表，按需增长
+    std::vector<block_buffer> journal_buffer;  // 4KB缓存块的列表，按需增长
     size_t buffer_tail_idx, buffer_tail_off;  // 当前缓存块列表中，使用到的最后一个缓存块下标和块中偏移
 
     comm_dev *dev;
 };
+
+}  // namespace hscfs

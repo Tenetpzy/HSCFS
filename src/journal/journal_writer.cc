@@ -10,6 +10,8 @@
 #include "utils/io_utils.hh"
 #include "utils/hscfs_log.h"
 
+namespace hscfs {
+
 enum class journal_output_state
 {
     OK, NO_ENOUGH_BUFFER, REACH_END
@@ -213,7 +215,7 @@ public:
     }
 };
 
-std::vector<std::unique_ptr<journal_output_vector>> hscfs_journal_writer::journal_output_vec_generate() const
+std::vector<std::unique_ptr<journal_output_vector>> journal_writer::journal_output_vec_generate() const
 {
     std::vector<std::unique_ptr<journal_output_vector>> ret;
     auto &SIT_journal = cur_journal->get_SIT_journal();
@@ -231,14 +233,14 @@ std::vector<std::unique_ptr<journal_output_vector>> hscfs_journal_writer::journa
     return ret;
 }
 
-char *hscfs_journal_writer::get_ith_buffer_block(size_t index)
+char *journal_writer::get_ith_buffer_block(size_t index)
 {
     if (index >= journal_buffer.size())
         journal_buffer.resize(index + 1);
     return journal_buffer[index].get_ptr();
 }
 
-void hscfs_journal_writer::fill_buffer_with_nop(char *start, char *end)
+void journal_writer::fill_buffer_with_nop(char *start, char *end)
 {
     uint16_t length = end - start;
     if (length < sizeof(meta_journal_entry))
@@ -247,7 +249,7 @@ void hscfs_journal_writer::fill_buffer_with_nop(char *start, char *end)
     *reinterpret_cast<meta_journal_entry*>(start) = entry;
 }
 
-void hscfs_journal_writer::append_end_entry()
+void journal_writer::append_end_entry()
 {
     char *p = get_ith_buffer_block(buffer_tail_idx);
     p += buffer_tail_off;
@@ -255,13 +257,13 @@ void hscfs_journal_writer::append_end_entry()
     *reinterpret_cast<meta_journal_entry*>(p) = entry;
 }
 
-void hscfs_journal_writer::async_write_callback(comm_cmd_result res, void *arg)
+void journal_writer::async_write_callback(comm_cmd_result res, void *arg)
 {
     async_vecio_synchronizer *syr = static_cast<async_vecio_synchronizer*>(arg);
     syr->cplt_once(res);
 }
 
-hscfs_journal_writer::hscfs_journal_writer(comm_dev *device, uint64_t journal_area_start_lpa, 
+journal_writer::journal_writer(comm_dev *device, uint64_t journal_area_start_lpa, 
     uint64_t journal_area_end_lpa)
 {
     start_lpa = journal_area_start_lpa;
@@ -276,7 +278,7 @@ hscfs_journal_writer::hscfs_journal_writer(comm_dev *device, uint64_t journal_ar
 void print_buffer(const char *start);
 #endif
 
-uint64_t hscfs_journal_writer::collect_pending_journal_to_write_buffer()
+uint64_t journal_writer::collect_pending_journal_to_write_buffer()
 {
     buffer_tail_idx = buffer_tail_off = 0;
     auto journal_vecs = journal_output_vec_generate();
@@ -343,7 +345,7 @@ uint64_t hscfs_journal_writer::collect_pending_journal_to_write_buffer()
     return buffer_tail_idx + 1;
 }
 
-void hscfs_journal_writer::write_to_SSD(uint64_t cur_tail)
+void journal_writer::write_to_SSD(uint64_t cur_tail)
 {
     uint64_t io_num = buffer_tail_idx + 1;
     async_vecio_synchronizer syr(io_num);
@@ -366,3 +368,5 @@ void hscfs_journal_writer::write_to_SSD(uint64_t cur_tail)
     if (res != COMM_CMD_SUCCESS)
         throw hscfs_io_error("journal writer: error occurred in async write process.");
 }
+
+}  // namespace hscfs

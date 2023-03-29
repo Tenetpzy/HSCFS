@@ -8,23 +8,26 @@
 
 #include "utils/declare_utils.hh"
 
-class hscfs_journal_container;
 struct comm_dev;
 
-class hscfs_journal_process_env
+namespace hscfs {
+
+class journal_container;
+
+class journal_process_env
 {
 public:
-    hscfs_journal_process_env() : tx_id_to_alloc(0) { }
-    no_copy_assignable(hscfs_journal_process_env)
-    ~hscfs_journal_process_env();
+    journal_process_env() : tx_id_to_alloc(0) { }
+    no_copy_assignable(journal_process_env)
+    ~journal_process_env();
 
-    static hscfs_journal_process_env* get_instance()
+    static journal_process_env* get_instance()
     {
         return &g_env;
     }
 
     // 提交日志，返回分配的事务号
-    uint64_t commit_journal(hscfs_journal_container *journal);
+    uint64_t commit_journal(journal_container *journal);
 
     // 日志处理环境初始化
     void init(comm_dev *dev, uint64_t journal_start_lpa, uint64_t journal_end_lpa, 
@@ -37,10 +40,10 @@ public:
     void stop_process_thread();
 
 private:
-    static hscfs_journal_process_env g_env;
+    static journal_process_env g_env;
 
     // 日志管理层的日志提交队列，以及保护该队列的锁，用于通知日志处理线程的条件变量
-    std::list<hscfs_journal_container*> commit_queue;
+    std::list<journal_container*> commit_queue;
     bool exit_req = 0;
     std::mutex mtx;
     std::condition_variable cond;
@@ -57,6 +60,7 @@ private:
         return tx_id_to_alloc.fetch_add(1, std::memory_order_relaxed);
     }
 
-    friend class hscfs_journal_processor;
+    friend class journal_processor;
 };
 
+}  // namespace hscfs

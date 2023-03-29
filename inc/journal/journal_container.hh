@@ -3,10 +3,12 @@
 #include <vector>
 #include "journal/journal_type.h"
 
+namespace hscfs {
+
 /*
  * 日志容器，用于存储事务生成的日志项
  */
-class hscfs_journal_container
+class journal_container
 {
 public:
     void append_super_block_journal_entry(const super_block_journal_entry &entry)
@@ -57,8 +59,9 @@ private:
         tx_id = id;
     }
 
-    friend class hscfs_journal_process_env;
-    friend class hscfs_journal_writer;
-    friend class hscfs_journal_processor;
+    friend class journal_process_env;
+    friend class journal_writer;
+    friend class journal_processor;
 };
- 
+
+}  // namespace hscfs

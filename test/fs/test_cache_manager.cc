@@ -3,6 +3,7 @@
 
 #include <vector>
 
+using namespace hscfs;
 using std::unique_ptr;
 using std::vector;
 

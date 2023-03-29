@@ -5,6 +5,8 @@
 #include <future>
 #include "communication/comm_api.h"
 
+namespace hscfs {
+
 /*
  * 异步向量I/O的同步器
  * 用于需要等待多个非连续缓冲区的异步I/O都完成的情景
@@ -46,3 +48,5 @@ private:
 };
 
 #define LPA_TO_LBA(lpa)  ((lpa) * 8)
+
+} // namespace hscfs

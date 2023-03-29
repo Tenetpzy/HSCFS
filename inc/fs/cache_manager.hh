@@ -6,6 +6,8 @@
 #include <memory>
 #include <cassert>
 
+namespace hscfs {
+
 /*
  * 缓存索引管理器
  * 缓存项类型为entry_t，要求缓存项具有唯一标识key(key_t类型)
@@ -211,3 +213,5 @@ private:
     index_t<key_t, entry_t> index;  // 缓存索引
     replacer_t<key_t> replacer;  // 置换器
 };
+
+}
