@@ -18,7 +18,7 @@ void hscfs_journal_process_thread(comm_dev *dev, uint64_t journal_start_lpa, uin
 }
 
 journal_processor::journal_processor(comm_dev *device, uint64_t journal_start_lpa, 
-    uint64_t journal_end_lpa, uint64_t journal_fifo_pos): journal_writer(device, journal_start_lpa, journal_end_lpa)
+    uint64_t journal_end_lpa, uint64_t journal_fifo_pos): jrnl_writer(device, journal_start_lpa, journal_end_lpa)
 {
     journal_pos_dma_buffer = static_cast<uint64_t*>(comm_alloc_dma_mem(16));
     if (journal_pos_dma_buffer == nullptr) 
@@ -140,8 +140,8 @@ void journal_processor::process_pending_journal()
 
 void journal_processor::write_journal_to_buffer()
 {
-    journal_writer.set_pending_journal(cur_journal);
-    cur_journal_block_num = journal_writer.collect_pending_journal_to_write_buffer();
+    jrnl_writer.set_pending_journal(cur_journal);
+    cur_journal_block_num = jrnl_writer.collect_pending_journal_to_write_buffer();
     cur_proc_state = journal_process_state::WRITTEN_IN_BUFFER;
 }
 
@@ -149,7 +149,7 @@ bool journal_processor::write_journal_to_SSD()
 {
     if (cur_journal_block_num <= cur_avail_lpa)
     {
-        journal_writer.write_to_SSD(tail_lpa);
+        jrnl_writer.write_to_SSD(tail_lpa);
         int ret = comm_submit_sync_update_metajournal_tail_request(dev, tail_lpa, cur_journal_block_num);
         if (ret != 0)
             throw hscfs_io_error("journal processor: update SSD journal tail failed.");

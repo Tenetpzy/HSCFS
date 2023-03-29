@@ -83,7 +83,7 @@ private:
      */
     std::list<transaction_journal_record> tx_record;
 
-    journal_writer journal_writer;
+    journal_writer jrnl_writer;
 
     // 当前日志记录处理状态
     enum class journal_process_state
