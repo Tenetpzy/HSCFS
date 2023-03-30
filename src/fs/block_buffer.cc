@@ -1,4 +1,4 @@
-#include "fs/block_buffer.hh"
+#include "cache/block_buffer.hh"
 #include "communication/memory.h"
 #include "utils/hscfs_exceptions.hh"
 #include <cstring>
