@@ -360,13 +360,13 @@ void journal_writer::write_to_SSD(uint64_t cur_tail)
         #endif
 
         int ret = comm_submit_async_rw_request(dev, journal_buffer[i].get_ptr(), LPA_TO_LBA(cur_tail), 
-            8, async_write_callback, &syr, COMM_IO_WRITE);
+            LBA_PER_LPA, async_write_callback, &syr, COMM_IO_WRITE);
         if (ret != 0)
-            throw hscfs_io_error("journal writer: submit async write failed.");
+            throw io_error("journal writer: submit async write failed.");
     }
     comm_cmd_result res = syr.wait_cplt();
     if (res != COMM_CMD_SUCCESS)
-        throw hscfs_io_error("journal writer: error occurred in async write process.");
+        throw io_error("journal writer: error occurred in async write process.");
 }
 
 }  // namespace hscfs

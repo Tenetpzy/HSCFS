@@ -48,5 +48,6 @@ private:
 };
 
 #define LPA_TO_LBA(lpa)  ((lpa) * 8)
+#define LBA_PER_LPA 8
 
 } // namespace hscfs

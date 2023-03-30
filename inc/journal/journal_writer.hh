@@ -37,7 +37,7 @@ public:
      * 调用者需保证SSD有足够的空间保存本次的日志
      * 
      * 异常：
-     * hscfs_io_error：通信层发生错误
+     * io_error：通信层发生错误
      * 其它系统异常
      */
     void write_to_SSD(uint64_t cur_tail);

@@ -20,7 +20,13 @@ public:
     void add(const key_t &key, std::unique_ptr<entry_t> &p_entry)
     {
         assert(index.count(key) == 0);
-        index[key].reset(p_entry.release());
+        index.emplace(key, p_entry.release());
+    }
+
+    void add(const key_t &key, std::unique_ptr<entry_t> &&p_entry)
+    {
+        assert(index.count(key) == 0);
+        index.emplace(key, p_entry);
     }
 
     std::unique_ptr<entry_t> remove(const key_t &key)
@@ -160,8 +166,8 @@ private:
  * 
  */
 template <typename key_t, typename entry_t, 
-    template <typename, typename> class index_t, 
-    template <typename> class replacer_t>
+    template <typename, typename> class index_t = cache_hash_index, 
+    template <typename> class replacer_t = lru_replacer>
 class generic_cache_manager
 {
 public:
@@ -169,6 +175,12 @@ public:
     void add(const key_t &key, std::unique_ptr<entry_t> &p_entry)
     {
         index.add(key, p_entry);
+        replacer.add(key);
+    }
+
+    void add(const key_t &key, std::unique_ptr<entry_t> &&p_entry)
+    {
+        index.add(key, std::move(p_entry));
         replacer.add(key);
     }
 

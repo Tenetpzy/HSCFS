@@ -29,7 +29,7 @@ typedef struct meta_journal_entry meta_journal_entry;
 struct NAT_journal_entry
 {
     u32 nid;
-    struct f2fs_nat_entry newValue;
+    struct hscfs_nat_entry newValue;
 } __attribute__((packed));
 
 typedef struct NAT_journal_entry NAT_journal_entry;
@@ -37,7 +37,7 @@ typedef struct NAT_journal_entry NAT_journal_entry;
 struct SIT_journal_entry
 {
     u32 segID;
-    struct f2fs_sit_entry newValue;
+    struct hscfs_sit_entry newValue;
 } __attribute__((packed));
 
 typedef struct SIT_journal_entry SIT_journal_entry;

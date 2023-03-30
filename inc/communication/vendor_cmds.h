@@ -9,7 +9,7 @@ extern "C" {
 struct migrate_task
 {
     uint32_t migrate_lpa_cnt;
-    struct f2fs_sit_entry victim_seg_info;
+    struct hscfs_sit_entry victim_seg_info;
     uint64_t migrate_dst_lpa;
     uint64_t migrate_src_lpa;
 }__attribute__((packed));

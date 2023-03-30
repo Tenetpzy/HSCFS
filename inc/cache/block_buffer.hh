@@ -4,6 +4,7 @@
 
 namespace hscfs {
 
+/* 块缓存区的容器，构造时分配4KB块缓存区，析构时释放 */
 class block_buffer
 {
 public:
@@ -14,7 +15,7 @@ public:
     block_buffer &operator=(block_buffer&&) noexcept;
     ~block_buffer();
 
-    char *get_ptr() const noexcept
+    char *get_ptr() noexcept
     {
         return buffer;
     }

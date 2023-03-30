@@ -94,7 +94,7 @@ void host_env_init(void)
 
 void SSD_test_prepare(void)
 {
-    f2fs_super_block super = {0};
+    hscfs_super_block super = {0};
     super.meta_journal_start_blkoff = test_journal_start_lpa;
     super.meta_journal_end_blkoff = test_journal_end_lpa;
 
@@ -102,10 +102,10 @@ void SSD_test_prepare(void)
     char *super_block = static_cast<char*>(comm_alloc_dma_mem(lpa_size));
     if (super_block == NULL)
         throw std::runtime_error("alloc super block memory failed.");
-    memcpy(super_block, &super, sizeof(f2fs_super_block));
+    memcpy(super_block, &super, sizeof(hscfs_super_block));
     printf("super block meta_journal_start_blkoff: %hu, end: %hu\n", 
-        reinterpret_cast<f2fs_super_block*>(super_block)->meta_journal_start_blkoff, 
-        reinterpret_cast<f2fs_super_block*>(super_block)->meta_journal_end_blkoff);
+        reinterpret_cast<hscfs_super_block*>(super_block)->meta_journal_start_blkoff, 
+        reinterpret_cast<hscfs_super_block*>(super_block)->meta_journal_end_blkoff);
     if (comm_submit_sync_rw_request(&dev, super_block, super_lpa, 8, COMM_IO_WRITE) != 0)
         throw std::runtime_error("write super block failed.");
     comm_free_dma_mem(super_block);

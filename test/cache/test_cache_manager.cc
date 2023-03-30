@@ -19,7 +19,7 @@ struct cache_obj
 class test_cache_manager: public ::testing::Test
 {
 protected:
-    using cache_manager_t = generic_cache_manager<int, cache_obj, cache_hash_index, lru_replacer>;
+    using cache_manager_t = generic_cache_manager<int, cache_obj>;
 
     void SetUp() override
     {

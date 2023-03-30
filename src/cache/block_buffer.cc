@@ -9,7 +9,7 @@ block_buffer::block_buffer()
 {
     buffer = static_cast<char*>(comm_alloc_dma_mem(4096));
     if (buffer == nullptr)
-        throw hscfs_alloc_error("alloc block buffer failed.");
+        throw alloc_error("alloc block buffer failed.");
 }
 
 block_buffer::block_buffer(const block_buffer &o): block_buffer()
