@@ -5,7 +5,7 @@ add_executable(test_journal
     ${PROJECT_SOURCE_DIR}/src/journal/journal_writer.cc
     ${PROJECT_SOURCE_DIR}/src/utils/hscfs_log.c
     ${PROJECT_SOURCE_DIR}/src/utils/hscfs_timer.c
-    ${PROJECT_SOURCE_DIR}/src/fs/block_buffer.cc
+    ${PROJECT_SOURCE_DIR}/src/cache/block_buffer.cc
 )
 
 target_link_libraries(test_journal fmt)

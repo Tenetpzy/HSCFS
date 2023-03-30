@@ -174,13 +174,13 @@ public:
 
     /* 
      * 获取键为key的缓存项，若不存在返回nullptr
-     * 视为对key的一次访问
+     * 若is_access为true，则视为对key的一次访问
      * 调用者不拥有该缓存项指针的所有权，不能释放 
      */
-    entry_t *get(const key_t &key)
+    entry_t *get(const key_t &key, bool is_access = true)
     {
         entry_t *ret = index.get(key);
-        if (ret != nullptr)
+        if (ret != nullptr && is_access)
             replacer.access(key);
         return ret;
     }
