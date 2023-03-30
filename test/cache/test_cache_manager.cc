@@ -1,4 +1,4 @@
-#include "fs/cache_manager.hh"
+#include "cache/cache_manager.hh"
 #include "gtest/gtest.h"
 
 #include <vector>

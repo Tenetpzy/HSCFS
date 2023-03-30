@@ -6,7 +6,7 @@
 #include <atomic>
 
 #include "utils/declare_utils.hh"
-#include "fs/block_buffer.hh"
+#include "cache/block_buffer.hh"
 #include "communication/comm_api.h"
 
 struct comm_dev;

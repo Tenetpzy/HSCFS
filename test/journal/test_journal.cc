@@ -13,7 +13,7 @@
 #include "journal/journal_process_env.hh"
 #include "communication/comm_api.h"
 #include "communication/dev.h"
-#include "fs/block_buffer.hh"
+#include "cache/block_buffer.hh"
 #include "fmt/ostream.h"
 #include "gtest/gtest.h"
 
