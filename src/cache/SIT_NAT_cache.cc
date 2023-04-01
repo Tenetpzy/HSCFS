@@ -22,7 +22,7 @@ SIT_NAT_cache_entry *SIT_NAT_cache::get_cache_entry(uint32_t lpa)
     // 若缓存数量超过阈值，则尝试置换。
     if (p == nullptr)
     {
-        auto tmp = std::make_unique<SIT_NAT_cache_entry>(new SIT_NAT_cache_entry(lpa));
+        auto tmp = std::make_unique<SIT_NAT_cache_entry>(lpa);
         tmp->read_content(dev);
         p = tmp.get();
 

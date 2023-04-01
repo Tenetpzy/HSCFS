@@ -4,7 +4,11 @@
 #include <list>
 #include <utility>
 #include <memory>
+#include <system_error>
 #include <cassert>
+
+#include "utils/hscfs_multithread.h"
+#include "utils/spin_lock_guard.hh"
 
 namespace hscfs {
 
@@ -224,6 +228,73 @@ public:
 private:
     index_t<key_t, entry_t> index;  // 缓存索引
     replacer_t<key_t> replacer;  // 置换器
+};
+
+
+/* 
+ * 线程安全的通用缓存管理器
+ * API语义与generic_cache_manager相同
+ */
+template <typename key_t, typename entry_t, 
+    template <typename, typename> class index_t = cache_hash_index, 
+    template <typename> class replacer_t = lru_replacer>
+class generic_cache_manager_safe
+{
+public:
+    generic_cache_manager_safe() 
+    {
+        int ret = spin_init(&lock);
+        if (ret != 0)
+            throw std::system_error(std::error_code(ret, std::generic_category()), 
+                "generic cache manager safe: init spin lock failed.");
+    }
+
+    ~generic_cache_manager_safe()
+    {
+        int ret = spin_destroy(&lock);
+        if (ret != 0)
+            HSCFS_ERRNO_LOG(HSCFS_LOG_WARNING, ret, "generic cache manager safe: destroy spin lock failed.");
+    }
+
+    void add(const key_t &key, std::unique_ptr<entry_t> &p_entry)
+    {
+        spin_lock_guard lg(&lock);
+        cache_manager.add(key, p_entry);
+    }
+
+    void add(const key_t &key, std::unique_ptr<entry_t> &&p_entry)
+    {
+        spin_lock_guard lg(&lock);
+        cache_manager.add(key, std::move(p_entry));
+    }
+
+    entry_t *get(const key_t &key, bool is_access = true)
+    {
+        spin_lock_guard lg(&lock);
+        return cache_manager.get(key, is_access);
+    }
+
+    void pin(const key_t &key)
+    {
+        spin_lock_guard lg(&lock);
+        cache_manager.pin(key);
+    }
+
+    void unpin(const key_t &key)
+    {
+        spin_lock_guard lg(&lock);
+        cache_manager.unpin(key);
+    }
+
+    std::unique_ptr<entry_t> replace_one()
+    {
+        spin_lock_guard lg(&lock);
+        return cache_manager.replace_one();
+    }
+
+private:
+    generic_cache_manager<key_t, entry_t, index_t, replacer_t> cache_manager;
+    spinlock_t lock;
 };
 
 }

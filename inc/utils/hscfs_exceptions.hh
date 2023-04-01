@@ -4,6 +4,8 @@
 
 namespace hscfs {
 
+// 若调用线程库，则直接抛出std::system_error
+
 class alloc_error: public std::bad_alloc
 {
 public:
