@@ -89,11 +89,15 @@ public:
         return key;
     }
 
-    /* 锁住key，让其不能被置换 */
+    /* 
+     * 锁住key，让其不能被置换
+     * 如果已经被锁住，什么也不做
+     */
     void pin(const key_t &key)
     {
-        assert(key_states.at(key).first == false);
-        auto &element = key_states[key];
+        auto &element = key_states.at(key);
+        if (element.first == true)
+            return;
         element.first = true;
         lru_list.erase(element.second);
         add_to_list_tail(pinned_list, key);
@@ -102,11 +106,13 @@ public:
     /*
      * 解锁key，使其可以被置换
      * unpin被视为一次访问，会将其放置到lru链表尾
+     * 如果没有被锁住，什么都不做
      */
     void unpin(const key_t &key)
     {
-        assert(key_states.at(key).first == true);
-        auto &element = key_states[key];
+        auto &element = key_states.at(key);
+        if (element.first == false)
+            return;
         element.first = false;
         pinned_list.erase(element.second);
         add_to_list_tail(lru_list, key);
