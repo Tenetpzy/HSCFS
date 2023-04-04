@@ -16,6 +16,8 @@ public:
         ref_count = 0;
     }
 
+    ~SIT_NAT_cache_entry();
+
     /* 同步从SSD读取lpa到cache中 */
     void read_content(comm_dev *dev);
 
@@ -55,7 +57,7 @@ private:
 
 /* 
  * SIT、NAT缓存控制器
- * 以lpa(uint32_t)作为key，SIT_NAT_cache_entry作为缓存项 
+ * 以lpa(uint32_t)作为key，SIT_NAT_cache_entry作为缓存项
  */
 class SIT_NAT_cache
 {
@@ -91,6 +93,7 @@ public:
 
     void unpin(uint32_t lpa) {
         cache_manager.unpin(lpa);
+        do_replace();
     }
 
 private:

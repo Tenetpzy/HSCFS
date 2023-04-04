@@ -10,5 +10,5 @@ add_executable(test_journal
 
 target_link_libraries(test_journal fmt)
 target_include_directories(test_journal PUBLIC
-    /home/pzy/spdk_src/spdk/build/include
+    ${SPDK_include_directory}
 )

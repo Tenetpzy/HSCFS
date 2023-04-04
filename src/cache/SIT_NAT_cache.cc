@@ -1,11 +1,19 @@
 #include "communication/comm_api.h"
 #include "utils/io_utils.hh"
 #include "utils/hscfs_exceptions.hh"
+#include "utils/hscfs_log.h"
 #include "cache/SIT_NAT_cache.hh"
 
 #include <cassert>
 
 namespace hscfs {
+
+SIT_NAT_cache_entry::~SIT_NAT_cache_entry()
+{
+    if (ref_count > 0)
+        HSCFS_LOG(HSCFS_LOG_WARNING, "SIT/NAT cache entry has non-zero refcount when destructed, refcount = %u,"
+            " lpa = %u", ref_count, lpa_);
+}
 
 void SIT_NAT_cache_entry::read_content(comm_dev *dev)
 {
@@ -37,7 +45,7 @@ SIT_NAT_cache_entry *SIT_NAT_cache::get_cache_entry(uint32_t lpa)
 
 void SIT_NAT_cache::do_replace()
 {
-    if (cur_size >= expect_size)
+    if (cur_size > expect_size)
     {
         while (true)
         {
@@ -47,8 +55,9 @@ void SIT_NAT_cache::do_replace()
                 // 正确性检查，被置换出来的缓存项引用计数应该为0
                 assert(p->get_ref_count() == 0);
                 --cur_size;
+                HSCFS_LOG(HSCFS_LOG_INFO, "relpace SIT/NAT cache entry, lpa = %u", p->get_lpa());
             }
-            if (p == nullptr || cur_size < expect_size)
+            if (p == nullptr || cur_size <= expect_size)
                 break;
         }
     }

@@ -43,6 +43,11 @@ block_buffer &block_buffer::operator=(block_buffer &&o) noexcept
     return *this;
 }
 
+void block_buffer::copy_content_from_buf(char *buf)
+{
+    std::memcpy(buffer, buf, 4096);
+}
+
 block_buffer::~block_buffer()
 {
     comm_free_dma_mem(buffer);

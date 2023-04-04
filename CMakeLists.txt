@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.0)
 
 project(HSCFS)
 
+set(SPDK_include_directory /home/pzy/spdk_src/spdk/build/include)
+
 add_subdirectory(third_party)
 
 add_subdirectory(test)

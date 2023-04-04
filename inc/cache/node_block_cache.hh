@@ -1,8 +1,14 @@
 #pragma once
 
 #include "cache/cache_manager.hh"
+#include "cache/block_buffer.hh"
 
 namespace hscfs {
+
+enum class node_block_cache_entry_state
+{
+    uptodate, dirty
+};
 
 class node_block_cache_entry
 {
@@ -14,7 +20,8 @@ private:
     uint32_t ref_count;
     node_block_cache_entry *parent;
     uint32_t origin_lpa, commit_lpa;
-    /* to do */
+    node_block_cache_entry_state state;
+    block_buffer node;
 };
 
 using node_block_cache = generic_cache_manager<uint32_t, node_block_cache_entry>;
