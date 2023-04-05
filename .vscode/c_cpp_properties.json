@@ -3,6 +3,7 @@
         {
             "name": "Linux",
             "includePath": [
+                "${workspaceFolder}/**",
                 "${workspaceFolder}/inc",
                 "${workspaceFolder}/test/inc",
                 "${workspaceFolder}/third_party/**",

@@ -2,9 +2,10 @@
 
 #include "cache/cache_manager.hh"
 #include "cache/block_buffer.hh"
-#include "fs/fs.h"
 
 struct comm_dev;
+struct hscfs_sit_block;
+struct hscfs_nat_block;
 
 namespace hscfs {
 
@@ -18,41 +19,46 @@ public:
 
     ~SIT_NAT_cache_entry();
 
-    /* 同步从SSD读取lpa到cache中 */
-    void read_content(comm_dev *dev);
-
-    uint32_t get_lpa() const noexcept {
-        return lpa_;
-    }
-    
-    uint32_t get_ref_count() const noexcept {
-        return ref_count;
-    }
-
-    void add_ref_count() noexcept {
-        ++ref_count;
-    }
-
-    void sub_ref_count() noexcept {
-        --ref_count;
-    } 
-
-    /* 
-     * 将缓存块地址转化成 hscfs_sit_block* 或 hscfs_nat_block* 返回
-     * 作为sit cache时，应使用get_cache_ptr_in_sit，作为nat cache时使用另一个
-     */
-    hscfs_sit_block *get_cache_ptr_in_sit() noexcept {
-        return reinterpret_cast<hscfs_sit_block*>(cache.get_ptr());
-    }
-
-    hscfs_nat_block *get_cache_ptr_in_nat() noexcept {
-        return reinterpret_cast<hscfs_nat_block*>(cache.get_ptr());
-    }
-
-private:
     uint32_t lpa_;
     uint32_t ref_count;
     block_buffer cache;
+};
+
+class SIT_NAT_cache;
+
+/*
+ * 由SIT_NAT_cache返回的缓存项控制句柄
+ * 句柄存在时，缓存项的引用计数+1，句柄析构时，缓存项的引用计数-1
+ * 通过句柄管理缓存项的引用计数和版本号，从句柄中获得缓存块的地址
+ */
+class SIT_NAT_cache_entry_handle
+{
+public:
+    SIT_NAT_cache_entry_handle(SIT_NAT_cache_entry *entry, SIT_NAT_cache *cache) 
+    {
+        entry_ = entry;
+        cache_ = cache;
+    }
+    ~SIT_NAT_cache_entry_handle();
+
+    void add_refcount();
+    void sub_refcount();
+    void add_host_version();
+    void add_SSD_version();
+    
+    hscfs_sit_block *get_sit_block_ptr() noexcept 
+    {
+        return reinterpret_cast<hscfs_sit_block*>(entry_->cache.get_ptr());
+    }
+
+    hscfs_nat_block *get_nat_block_ptr() noexcept 
+    {
+        return reinterpret_cast<hscfs_nat_block*>(entry_->cache.get_ptr());
+    }
+
+private:
+    SIT_NAT_cache_entry *entry_;
+    SIT_NAT_cache *cache_;
 };
 
 /* 
@@ -74,26 +80,35 @@ public:
      * 
      * 为了尽量防止上述进程终止的发生，HSCFS允许缓存项个数超过期望个数，超出限制时将尽可能进行置换。
      */
-    SIT_NAT_cache(comm_dev *device, size_t expect_cache_size) {
+    SIT_NAT_cache(comm_dev *device, size_t expect_cache_size) 
+    {
         dev = device;
         expect_size = expect_cache_size;
         cur_size = 0;
     }
 
     /* 
-     * 获取lpa缓存块
+     * 获取lpa对应缓存项句柄
      * lpa未被缓存时，将同步从SSD读取内容并缓存
+     * 会对缓存项调用add_refcount
      * 若缓存个数超过预期大小，则尝试进行释放 
      */
-    SIT_NAT_cache_entry *get_cache_entry(uint32_t lpa);
-
-    void pin(uint32_t lpa) {
-        cache_manager.pin(lpa);
+    SIT_NAT_cache_entry_handle get_cache_entry(uint32_t lpa) 
+    {
+        SIT_NAT_cache_entry *p = get_cache_entry_inner(lpa);
+        add_refcount(p);
+        do_replace();
+        return SIT_NAT_cache_entry_handle(p, this);
     }
 
-    void unpin(uint32_t lpa) {
-        cache_manager.unpin(lpa);
-        do_replace();
+    /* 
+     * 在处理已完成事务的日志时，可直接通过日志里的lpa增加缓存项版本号，
+     * 不必使用get_cache_entry获取handle再增加其版本号
+     */
+    void add_SSD_version(uint32_t lpa) 
+    {
+        SIT_NAT_cache_entry *p = get_cache_entry_inner(lpa);
+        sub_refcount(p);
     }
 
 private:
@@ -101,8 +116,79 @@ private:
     size_t expect_size, cur_size;
     comm_dev *dev;
 
+private:
+    /*
+     * 释放对entry的引用。
+     * 会对缓存项调用sub_refcount
+     */
+    void put_cache_entry(SIT_NAT_cache_entry *entry) 
+    {
+        sub_refcount(entry);
+    }
+
+    /*
+     * 将entry的引用计数+1
+     * 如果引用计数之前为0，则pin住缓存项
+     */
+    void add_refcount(SIT_NAT_cache_entry *entry) 
+    {
+        ++entry->ref_count;
+        if (entry->ref_count == 1)
+            cache_manager.pin(entry->lpa_);
+    }
+
+    /*
+     * 将entry的引用计数-1
+     * 如果引用计数减至0，则unpin缓存项
+     */
+    void sub_refcount(SIT_NAT_cache_entry *entry) 
+    {
+        --entry->ref_count;
+        if (entry->ref_count == 0)
+        {
+            cache_manager.unpin(entry->lpa_);
+            do_replace();
+        }
+    }
+
+    /* entry的主机侧/SSD版本号管理 */
+    void add_host_version(SIT_NAT_cache_entry *entry) 
+    {
+        add_refcount(entry);
+    }
+
+    void add_SSD_version(SIT_NAT_cache_entry *entry) 
+    {
+        sub_refcount(entry);
+    }
+
+    /* 
+     * 通过lpa在cache_manager中查找缓存项，找不到则从SSD读取。
+     * 不增加缓存项的refcount
+     */
+    SIT_NAT_cache_entry *get_cache_entry_inner(uint32_t lpa)
+    {
+        SIT_NAT_cache_entry *p = cache_manager.get(lpa);
+
+        // 如果缓存不命中，则从SSD读取。
+        if (p == nullptr)
+        {
+            auto tmp = std::make_unique<SIT_NAT_cache_entry>(lpa);
+            p = tmp.get();
+            read_lpa(p);
+            ++cur_size;
+            cache_manager.add(lpa, tmp);
+        }
+
+        return p;
+    }
+
     /* 若缓存数量超过阈值，则尝试置换。*/
     void do_replace();
+
+    void read_lpa(SIT_NAT_cache_entry *entry);
+
+    friend class SIT_NAT_cache_entry_handle;
 };
 
 }  // namespace hscfs
