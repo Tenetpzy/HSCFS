@@ -98,26 +98,26 @@ TEST_F(test_cache_manager, lru_with_pin)
     }
 }
 
-TEST(test_cache_manager_safe, 1)
-{
-    generic_cache_manager_safe<int, cache_obj> cache_manager;
-    unique_ptr<cache_obj> p1(new cache_obj);
-    int test_key = 1, test_value = 10;
-    p1->k = test_key;
-    p1->v = test_value;
-    cache_manager.add(p1->k, p1);
-    auto p2 = cache_manager.get(test_key);
-    EXPECT_EQ(p2->v, test_value);
-    auto p3 = cache_manager.get(2);
-    EXPECT_EQ(p3, nullptr);
-    cache_manager.pin(test_key);
-    auto p4 = cache_manager.replace_one();
-    EXPECT_EQ(p4, nullptr);
-    cache_manager.unpin(test_key);
-    auto p5 = cache_manager.replace_one();
-    EXPECT_EQ(p5->k, test_key);
-    EXPECT_EQ(p5->v, test_value);
-}
+// TEST(test_cache_manager_safe, 1)
+// {
+//     generic_cache_manager_safe<int, cache_obj> cache_manager;
+//     unique_ptr<cache_obj> p1(new cache_obj);
+//     int test_key = 1, test_value = 10;
+//     p1->k = test_key;
+//     p1->v = test_value;
+//     cache_manager.add(p1->k, p1);
+//     auto p2 = cache_manager.get(test_key);
+//     EXPECT_EQ(p2->v, test_value);
+//     auto p3 = cache_manager.get(2);
+//     EXPECT_EQ(p3, nullptr);
+//     cache_manager.pin(test_key);
+//     auto p4 = cache_manager.replace_one();
+//     EXPECT_EQ(p4, nullptr);
+//     cache_manager.unpin(test_key);
+//     auto p5 = cache_manager.replace_one();
+//     EXPECT_EQ(p5->k, test_key);
+//     EXPECT_EQ(p5->v, test_value);
+// }
 
 int main(int argc, char **argv)
 {

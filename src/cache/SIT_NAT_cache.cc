@@ -56,6 +56,8 @@ hscfs::SIT_NAT_cache_entry_handle::~SIT_NAT_cache_entry_handle()
     }
 }
 
+/* SIT_NAT_cache_entry_handle和SIT_NAT_cache循环依赖，故以下成员无法在类中定义 */
+
 void SIT_NAT_cache_entry_handle::add_refcount()
 {
     cache_->add_refcount(entry_);

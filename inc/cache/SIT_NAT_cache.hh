@@ -34,7 +34,7 @@ class SIT_NAT_cache;
 class SIT_NAT_cache_entry_handle
 {
 public:
-    SIT_NAT_cache_entry_handle(SIT_NAT_cache_entry *entry, SIT_NAT_cache *cache) 
+    SIT_NAT_cache_entry_handle(SIT_NAT_cache_entry *entry, std::shared_ptr<SIT_NAT_cache> &&cache) 
     {
         entry_ = entry;
         cache_ = cache;
@@ -58,14 +58,15 @@ public:
 
 private:
     SIT_NAT_cache_entry *entry_;
-    SIT_NAT_cache *cache_;
+    std::shared_ptr<SIT_NAT_cache> cache_;
 };
 
 /* 
  * SIT、NAT缓存控制器
  * 以lpa(uint32_t)作为key，SIT_NAT_cache_entry作为缓存项
+ * 此对象必须由shared_ptr管理
  */
-class SIT_NAT_cache
+class SIT_NAT_cache: public std::enable_shared_from_this<SIT_NAT_cache>
 {
 public:
     /* 
@@ -98,7 +99,7 @@ public:
         SIT_NAT_cache_entry *p = get_cache_entry_inner(lpa);
         add_refcount(p);
         do_replace();
-        return SIT_NAT_cache_entry_handle(p, this);
+        return SIT_NAT_cache_entry_handle(p, shared_from_this());
     }
 
     /* 

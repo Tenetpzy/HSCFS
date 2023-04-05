@@ -13,11 +13,11 @@ TEST(sit_cache_test, 1)
     using namespace std;
     using namespace hscfs;
     vector<uint32_t> test_lpa_seq = {1, 2, 3, 4, 5, 6, 7, 8};
-    SIT_NAT_cache cache(nullptr, 2);
+    auto cache = std::make_shared<SIT_NAT_cache>(nullptr, 2);
     for (auto i: test_lpa_seq)
     {
         fmt::println(std::cout, "getting lpa {}", i);
-        auto handle = cache.get_cache_entry(i);
+        auto handle = cache->get_cache_entry(i);
         EXPECT_EQ(handle.entry_->lpa_, i);
     }
 }
@@ -27,12 +27,12 @@ TEST(sit_cache_test, 2)
     using namespace std;
     using namespace hscfs;
     vector<uint32_t> test_lpa_seq = {1, 2, 3, 4, 5, 6, 7, 8};
-    SIT_NAT_cache cache(nullptr, 2);
+    auto cache = std::make_shared<SIT_NAT_cache>(nullptr, 2);
 
     for (auto i: test_lpa_seq)
     {
         fmt::println(std::cout, "getting lpa {}", i);
-        auto handle = cache.get_cache_entry(i);
+        auto handle = cache->get_cache_entry(i);
         EXPECT_EQ(handle.entry_->lpa_, i);
 
         if (i & 1U)
@@ -44,7 +44,7 @@ TEST(sit_cache_test, 2)
 
     for (uint32_t i = 1; i < 8; i += 2)
     {
-        auto handle = cache.get_cache_entry(i);
+        auto handle = cache->get_cache_entry(i);
         EXPECT_EQ(handle.entry_->lpa_, i);
         EXPECT_EQ(handle.entry_->ref_count, 2);
         handle.add_SSD_version();
