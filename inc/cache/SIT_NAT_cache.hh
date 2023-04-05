@@ -58,6 +58,8 @@ public:
 
 private:
     SIT_NAT_cache_entry *entry_;
+
+    /* 活跃segment对应的缓存项可能会常驻内存，为了确保析构的正确性，使用shared_ptr */
     std::shared_ptr<SIT_NAT_cache> cache_;
 };
 
@@ -108,7 +110,7 @@ public:
      */
     void add_SSD_version(uint32_t lpa) 
     {
-        SIT_NAT_cache_entry *p = get_cache_entry_inner(lpa);
+        SIT_NAT_cache_entry *p = get_cache_entry_inner(lpa, false);
         sub_refcount(p);
     }
 
@@ -167,9 +169,9 @@ private:
      * 通过lpa在cache_manager中查找缓存项，找不到则从SSD读取。
      * 不增加缓存项的refcount
      */
-    SIT_NAT_cache_entry *get_cache_entry_inner(uint32_t lpa)
+    SIT_NAT_cache_entry *get_cache_entry_inner(uint32_t lpa, bool is_access = true)
     {
-        SIT_NAT_cache_entry *p = cache_manager.get(lpa);
+        SIT_NAT_cache_entry *p = cache_manager.get(lpa, is_access);
 
         // 如果缓存不命中，则从SSD读取。
         if (p == nullptr)

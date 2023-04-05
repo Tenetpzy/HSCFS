@@ -47,7 +47,7 @@ namespace std {
         static const uint64_t mul = 0x1f1f1f1f1f1f1f1f;
         size_t operator()(const hscfs::dir_data_block_cache_entry_key &key) const
         {
-            return (key.ino * mul) ^ key.blkno;
+            return (static_cast<uint64_t>(key.ino) * mul) ^ key.blkno;
         }
     };
 }
