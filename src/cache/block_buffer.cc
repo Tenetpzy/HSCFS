@@ -28,7 +28,8 @@ block_buffer::block_buffer(block_buffer &&o) noexcept
 
 block_buffer &block_buffer::operator=(const block_buffer &o)
 {
-    std::memcpy(buffer, o.buffer, 4096);
+    if (this != &o)
+        std::memcpy(buffer, o.buffer, 4096);
     return *this;
 }
 

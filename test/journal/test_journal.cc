@@ -28,8 +28,12 @@
 
 extern "C" {
 
-struct spdk_nvme_ctrlr{};
-struct spdk_nvme_ns{};
+struct spdk_nvme_ctrlr{
+    int unused;
+};
+struct spdk_nvme_ns{
+    int unused;
+};
 
 void *spdk_zmalloc(size_t size, size_t align, uint64_t *phys_addr, int socket_id, uint32_t flags)
 {

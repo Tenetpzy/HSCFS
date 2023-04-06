@@ -21,8 +21,12 @@ struct spdk_cmd_cb
     spdk_cmd_cb(uint16_t tid, spdk_nvme_cmd_cb cb_fn, void * cb_arg) : _cb_fn(cb_fn), _cb_arg(cb_arg), _tid(tid) {}
 };
 
-struct spdk_nvme_ctrlr{};
-struct spdk_nvme_ns{};
+struct spdk_nvme_ctrlr{
+	int unused;
+};
+struct spdk_nvme_ns{
+	int unused;
+};
 
 static const size_t test_channel_size = 8;
 static const size_t lba_size = 512;

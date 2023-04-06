@@ -28,21 +28,38 @@ class SIT_NAT_cache;
 
 /*
  * 由SIT_NAT_cache返回的缓存项控制句柄
- * 句柄存在时，缓存项的引用计数+1，句柄析构时，缓存项的引用计数-1
- * 通过句柄管理缓存项的引用计数和版本号，从句柄中获得缓存块的地址
+ * 句柄的作用：句柄代表缓存项的读写引用计数。句柄存在时，缓存项的引用计数+1，句柄析构时，缓存项的引用计数-1
  */
 class SIT_NAT_cache_entry_handle
 {
 public:
+    SIT_NAT_cache_entry_handle() noexcept
+    {
+        entry_ = nullptr;
+    }
+
+    /* 此构造函数由SIT_NAT_cache使用，构造前增加了引用计数 */
     SIT_NAT_cache_entry_handle(SIT_NAT_cache_entry *entry, std::shared_ptr<SIT_NAT_cache> &&cache) 
     {
         entry_ = entry;
         cache_ = cache;
     }
+
+    SIT_NAT_cache_entry_handle(const SIT_NAT_cache_entry_handle &o);
+
+    SIT_NAT_cache_entry_handle(SIT_NAT_cache_entry_handle &&o) noexcept
+    {
+        entry_ = o.entry_;
+        cache_ = std::move(o.cache_);
+        o.entry_ = nullptr;
+    }
+
+    SIT_NAT_cache_entry_handle& operator=(const SIT_NAT_cache_entry_handle &o);
+    SIT_NAT_cache_entry_handle& operator=(SIT_NAT_cache_entry_handle &&o) noexcept;
+
     ~SIT_NAT_cache_entry_handle();
 
-    void add_refcount();
-    void sub_refcount();
+    /* 调用者应保证，在调用以下方法时，this是有效的（未被移动） */
     void add_host_version();
     void add_SSD_version();
     
@@ -59,8 +76,15 @@ public:
 private:
     SIT_NAT_cache_entry *entry_;
 
-    /* 活跃segment对应的缓存项可能会常驻内存，为了确保析构的正确性，使用shared_ptr */
+    /* 
+     * 活跃segment对应的缓存项可能会常驻内存，为了避免SIT_NAT_cache对象先析构，
+     * 导致此对象析构时引用悬挂指针，使用shared_ptr 
+     */
     std::shared_ptr<SIT_NAT_cache> cache_;
+
+    /* 封装entry_为nullptr的判断 */
+    void do_addref();
+    void do_subref();
 };
 
 /* 
@@ -96,7 +120,7 @@ public:
      * 会对缓存项调用add_refcount
      * 若缓存个数超过预期大小，则尝试进行释放 
      */
-    SIT_NAT_cache_entry_handle get_cache_entry(uint32_t lpa) 
+    SIT_NAT_cache_entry_handle get(uint32_t lpa) 
     {
         SIT_NAT_cache_entry *p = get_cache_entry_inner(lpa);
         add_refcount(p);
