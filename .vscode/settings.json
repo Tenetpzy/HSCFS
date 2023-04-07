@@ -83,7 +83,7 @@
         "codecvt": "cpp",
         "filesystem": "cpp"
     },
-    "C_Cpp.intelliSenseEngineFallback": "enabled",
+    "C_Cpp.intelliSenseEngineFallback": "disabled",
     "VSCodeCounter.languages": {
         "cpp": {
             "aliases": [

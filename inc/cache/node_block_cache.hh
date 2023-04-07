@@ -103,7 +103,7 @@ public:
     void set_new_lpa(uint32_t new_lpa) noexcept {
         entry->new_lpa = new_lpa;
     }
-    hscfs_node *get_node_block_ptr() noexcept {
+    hscfs_node *get_node_block_ptr() const noexcept {
         return reinterpret_cast<hscfs_node*>(entry->node.get_ptr());
     }
 

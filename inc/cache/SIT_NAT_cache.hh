@@ -63,12 +63,12 @@ public:
     void add_host_version();
     void add_SSD_version();
     
-    hscfs_sit_block *get_sit_block_ptr() noexcept 
+    hscfs_sit_block *get_sit_block_ptr() const noexcept 
     {
         return reinterpret_cast<hscfs_sit_block*>(entry_->cache.get_ptr());
     }
 
-    hscfs_nat_block *get_nat_block_ptr() noexcept 
+    hscfs_nat_block *get_nat_block_ptr() const noexcept 
     {
         return reinterpret_cast<hscfs_nat_block*>(entry_->cache.get_ptr());
     }

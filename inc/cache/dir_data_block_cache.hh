@@ -1,6 +1,5 @@
 #pragma once
 
-#include <string>
 #include "cache/block_buffer.hh"
 #include "cache/cache_manager.hh"
 
@@ -28,7 +27,6 @@ public:
     /* to do */
 
 private:
-    std::string name;  // 目录项名
     dir_data_block_cache_entry_key key;  // hash key
     uint32_t origin_lpa, commit_lpa;  // block的旧lpa，和写入时应写的新lpa
     uint32_t nid, nidoff;  // block的反向索引映射
@@ -53,6 +51,10 @@ namespace std {
 }
 
 namespace hscfs {
-    using dir_data_block_cache = generic_cache_manager<dir_data_block_cache_entry_key, 
-        dir_data_block_cache_entry>;
+
+class dir_data_block_cache
+{
+    /* to do */
+};
+
 }
