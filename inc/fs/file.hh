@@ -15,7 +15,7 @@ class file_handle
 };
 
 /* file对象的缓存 */
-class file_cache
+class file_obj_cache
 {
     /* to do */
 };

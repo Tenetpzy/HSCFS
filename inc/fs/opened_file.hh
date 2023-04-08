@@ -18,6 +18,15 @@ public:
         pos = 0;
     }
 
+    /* 打开文件时，关联到file对象 */
+    void open(file_handle &file);
+
+    /* 读文件 */
+    ssize_t read(void *buffer, size_t count);
+
+    /* 写文件 */
+    ssize_t write(void *buffer, size_t count);
+
 private:
     uint32_t flags;  // 打开文件时的flags
     uint32_t mode;  // 打开文件的mode

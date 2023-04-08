@@ -238,6 +238,7 @@ private:
 
 
 /* 
+ * comment：cache_manager内部加锁没有意义
  * 线程安全的通用缓存管理器
  * API语义与generic_cache_manager相同
  */
