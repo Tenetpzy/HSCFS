@@ -50,13 +50,14 @@ node_block_cache_entry_handle &node_block_cache_entry_handle::operator=(const no
     return *this;
 }
 
-node_block_cache_entry_handle &node_block_cache_entry_handle::operator=(node_block_cache_entry_handle &&o) noexcept
+node_block_cache_entry_handle &node_block_cache_entry_handle::operator=(node_block_cache_entry_handle &&o)
 {
     if (this != &o)
     {
         do_subref();
         entry = o.entry;
         cache = o.cache;
+        o.entry = nullptr;
     }
     return *this;
 }

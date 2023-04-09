@@ -80,7 +80,7 @@ public:
     }
 
     node_block_cache_entry_handle& operator=(const node_block_cache_entry_handle &o);
-    node_block_cache_entry_handle& operator=(node_block_cache_entry_handle &&o) noexcept;
+    node_block_cache_entry_handle& operator=(node_block_cache_entry_handle &&o);
 
     ~node_block_cache_entry_handle();
 
@@ -135,6 +135,8 @@ public:
      */
     node_block_cache_entry_handle add(block_buffer &&buffer, uint32_t nid, uint32_t parent_nid, uint32_t old_lpa)
     {
+        assert(cache_manager.get(nid, false) == nullptr);
+
         // 构造新的缓存项
         auto p_entry = std::make_unique<node_block_cache_entry>(std::move(buffer), nid, parent_nid, old_lpa);
 

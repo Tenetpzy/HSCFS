@@ -11,6 +11,7 @@ extern "C" {
 typedef pthread_mutex_t mutex_t;
 typedef pthread_spinlock_t spinlock_t;
 typedef pthread_cond_t cond_t;
+typedef pthread_rwlock_t rwlock_t;
 
 __attribute__((unused)) static int mutex_init(mutex_t *self)
 {
@@ -55,6 +56,34 @@ __attribute__((unused)) static int spin_unlock(spinlock_t *self)
 __attribute__((unused)) static int spin_destroy(spinlock_t *self)
 {
     return pthread_spin_destroy(self);
+}
+
+/* 默认读者优先 */
+__attribute__((unused)) static int rwlock_init(rwlock_t *self)
+{
+    return pthread_rwlock_init(self, NULL);
+}
+
+/* 加共享读锁 */
+__attribute__((unused)) static int rwlock_rdlock(rwlock_t *self)
+{
+    return pthread_rwlock_rdlock(self);
+}
+
+/* 加独占写锁 */
+__attribute__((unused)) static int rwlock_wrlock(rwlock_t *self)
+{
+    return pthread_rwlock_wrlock(self);
+}
+
+__attribute__((unused)) static int rwlock_unlock(rwlock_t *self)
+{
+    return pthread_rwlock_unlock(self);
+}
+
+__attribute__((unused)) static int rwlock_destroy(rwlock_t *self)
+{
+    return pthread_rwlock_destroy(self);
 }
 
 __attribute__((unused)) static int cond_init(cond_t *self)
