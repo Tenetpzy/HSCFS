@@ -1,7 +1,7 @@
 #include "cache/page_cache.hh"
-#include "utils/spin_lock_guard.hh"
+#include "utils/lock_guards.hh"
+#include "utils/hscfs_log.h"
 #include <system_error>
-#include "page_cache.hh"
 
 namespace hscfs {
 
@@ -16,10 +16,6 @@ page_cache::page_cache(size_t expect_size)
     if (ret != 0)
         throw std::system_error(std::error_code(ret, std::generic_category()), 
             "page cache: init dirty list spin failed.");
-    ret = rwlock_init(&shared_lock);
-    if (ret != 0)
-        throw std::system_error(std::error_code(ret, std::generic_category()), 
-            "page cache: init shared lock failed.");
 
     this->expect_size = expect_size;
     cur_size = 0;
@@ -34,7 +30,7 @@ page_cache::~page_cache()
 
 page_entry_handle page_cache::get(uint32_t blkoff)
 {
-    spin_lock_guard lg(&cache_lock);
+    spin_lock_guard lg(cache_lock);
     page_entry *p_entry = cache_manager.get(blkoff);
     
     /* 缓存项不存在，则需要新建一个 */
@@ -82,6 +78,30 @@ page_entry_handle page_cache::get(uint32_t blkoff)
     return page_entry_handle(p_entry, this);
 }
 
+// void page_cache::lock_shared()
+// {
+//     int ret = rwlock_rdlock(&shared_lock);
+//     if (ret != 0)
+//         throw std::system_error(std::error_code(ret, std::generic_category()), 
+//             "page cache: add shared lock failed.");
+// }
+
+// void page_cache::lock_mutex()
+// {
+//     int ret = rwlock_wrlock(&shared_lock);
+//     if (ret != 0)
+//         throw std::system_error(std::error_code(ret, std::generic_category()), 
+//             "page cache: add mutex lock failed.");
+// }
+
+// void page_cache::unlock()
+// {
+//     int ret = rwlock_unlock(&shared_lock);
+//     if (ret != 0)
+//         throw std::system_error(std::error_code(ret, std::generic_category()), 
+//             "page cache: unlock shared lock failed.");
+// }
+
 /* 调用者需要加cache_lock，除非能够保证调用时ref_count不会为0 */
 void page_cache::add_refcount(page_entry *entry)
 {
@@ -116,7 +136,7 @@ void page_cache::sub_refcount(page_entry *entry)
          * 因为ref_count从0增加到1，一定是通过调用page_cache.get方法，而该方法在加ref_count前需要加cache_lock
          * 此时将其unpin，然后解锁
          */
-        spin_lock_guard lg(&cache_lock);
+        spin_lock_guard lg(cache_lock);
         if (entry->ref_count.load() == 0)
         {
             /* 
@@ -154,7 +174,7 @@ void page_cache::do_replace()
 
 void page_cache::add_to_dirty_list(page_entry *entry)
 {
-    spin_lock_guard lg(&dirty_list_lock);
+    spin_lock_guard lg(dirty_list_lock);
     assert(entry->ref_count.load() >= 1);
     dirty_list.push_back(entry);
     add_refcount(entry);

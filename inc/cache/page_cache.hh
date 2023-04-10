@@ -110,6 +110,14 @@ private:
  * page_cache只作为page的缓存索引和置换管理器，不关心文件的实际大小
  * 
  * 调用者操作page cache时，必须获取page cache的共享锁或独占锁
+ * 
+ * page cache的共享/独占锁
+ * 加共享锁时，多个线程可并发调用page cache和page_entry_handle方法，它们会加cache_lock和dirty_list_lock锁
+ * 进行并发读写时，调用者加共享锁，此时通过调用get获取的page，读写访问需加page锁
+ * 
+ * 加独占锁时，只有1个线程可使用page cache，
+ * 独占锁保护区域内使用的page cache方法内部，可以不加cache_lock和dirty_list_lock锁
+ * 进行dirty page回写、文件截断时加独占锁
  */
 class page_cache
 {
@@ -130,16 +138,6 @@ private:
     spinlock_t cache_lock;  // 保护cache_manager
     std::vector<page_entry*> dirty_list;
     spinlock_t dirty_list_lock;
-
-    /*
-     * page cache的共享/独占锁
-     * 加共享锁时，多个线程可并发调用page cache和page_entry_handle方法，它们会加cache_lock和dirty_list_lock锁
-     * 进行读写时，调用者加共享锁，此时通过调用get获取的page，读写访问需加page锁
-     * 
-     * 加独占锁时，只有1个线程可使用page cache，
-     * 独占锁保护区域内使用的page cache方法内部，可以不加cache_lock和dirty_list_lock锁
-     */
-    rwlock_t shared_lock;
 
     size_t expect_size, cur_size;
 

@@ -8,7 +8,7 @@
 #include <cassert>
 
 #include "utils/hscfs_multithread.h"
-// #include "utils/spin_lock_guard.hh"
+// #include "utils/lock_guards.hh"
 
 namespace hscfs {
 

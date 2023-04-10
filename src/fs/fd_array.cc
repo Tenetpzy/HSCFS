@@ -1,6 +1,6 @@
 #include "fs/fd_array.hh"
 #include "utils/hscfs_log.h"
-#include "utils/spin_lock_guard.hh"
+#include "utils/lock_guards.hh"
 #include <system_error>
 #include <cassert>
 #include "fd_array.hh"
@@ -26,7 +26,7 @@ fd_array::~fd_array()
 
 int fd_array::alloc_fd(std::shared_ptr<opened_file> &p_file)
 {
-    spin_lock_guard lg(&lock);
+    spin_lock_guard lg(lock);
     int ret;
     if (!free_set.empty())
     {
@@ -46,7 +46,7 @@ int fd_array::alloc_fd(std::shared_ptr<opened_file> &p_file)
 
 void fd_array::free_fd(int fd)
 {
-    spin_lock_guard lg(&lock);
+    spin_lock_guard lg(lock);
     free_set.insert(fd);
     fd_arr[fd] = nullptr;
 }
