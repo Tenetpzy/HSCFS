@@ -78,30 +78,6 @@ page_entry_handle page_cache::get(uint32_t blkoff)
     return page_entry_handle(p_entry, this);
 }
 
-// void page_cache::lock_shared()
-// {
-//     int ret = rwlock_rdlock(&shared_lock);
-//     if (ret != 0)
-//         throw std::system_error(std::error_code(ret, std::generic_category()), 
-//             "page cache: add shared lock failed.");
-// }
-
-// void page_cache::lock_mutex()
-// {
-//     int ret = rwlock_wrlock(&shared_lock);
-//     if (ret != 0)
-//         throw std::system_error(std::error_code(ret, std::generic_category()), 
-//             "page cache: add mutex lock failed.");
-// }
-
-// void page_cache::unlock()
-// {
-//     int ret = rwlock_unlock(&shared_lock);
-//     if (ret != 0)
-//         throw std::system_error(std::error_code(ret, std::generic_category()), 
-//             "page cache: unlock shared lock failed.");
-// }
-
 /* 调用者需要加cache_lock，除非能够保证调用时ref_count不会为0 */
 void page_cache::add_refcount(page_entry *entry)
 {

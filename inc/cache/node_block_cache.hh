@@ -30,6 +30,23 @@ public:
 
     ~node_block_cache_entry();
 
+    uint32_t get_old_lpa() const noexcept {
+        return old_lpa;
+    }
+
+    uint32_t get_new_lpa() const noexcept {
+        return new_lpa;
+    }
+
+    void set_new_lpa(uint32_t new_lpa) noexcept {
+        this->new_lpa = new_lpa;
+    }
+
+    hscfs_node *get_node_block_ptr() noexcept {
+        return reinterpret_cast<hscfs_node*>(node.get_ptr());
+    }
+
+private:
     uint32_t nid;
     uint32_t parent_nid;
     uint32_t old_lpa, new_lpa;
@@ -39,6 +56,7 @@ public:
     node_block_cache_entry_state state;
     bool is_pinned;
 
+private:
     bool need_pinned() const noexcept
     {
         if (is_pinned)
@@ -50,6 +68,8 @@ public:
     {
         return ref_count == 0 && state == node_block_cache_entry_state::uptodate;
     }
+
+    friend class node_block_cache;
 };
 
 class node_block_cache;
@@ -93,18 +113,10 @@ public:
     void add_SSD_version();
     void mark_dirty();
     void clear_dirty();
-    
-    uint32_t get_old_lpa() const noexcept {
-        return entry->old_lpa;
-    }
-    uint32_t get_new_lpa() const noexcept {
-        return entry->new_lpa;
-    }
-    void set_new_lpa(uint32_t new_lpa) noexcept {
-        entry->new_lpa = new_lpa;
-    }
-    hscfs_node *get_node_block_ptr() const noexcept {
-        return reinterpret_cast<hscfs_node*>(entry->node.get_ptr());
+
+    node_block_cache_entry* operator->()
+    {
+        return entry;
     }
 
 private:
