@@ -66,12 +66,70 @@ class dir_data_block_cache;
 class dir_data_block_handle
 {
 public:
-    dir_data_block_handle(dir_data_block_entry *entry, dir_data_block_cache *cache);
-    /* to do: cpcs, mvcs, assign, mvassign, ds */
+    dir_data_block_handle(dir_data_block_entry *entry, dir_data_block_cache *cache)
+    {
+        this->entry = entry;
+        this->cache = cache;
+    }
+
+    dir_data_block_handle(const dir_data_block_handle &o)
+    {
+        entry = o.entry;
+        cache = o.cache;
+        do_addref();
+    }
+
+    dir_data_block_handle(dir_data_block_handle &&o)
+    {
+        entry = o.entry;
+        cache = o.cache;
+        o.entry = nullptr;
+    }
+
+    dir_data_block_handle& operator=(const dir_data_block_handle &o)
+    {
+        if (this != &o)
+        {
+            do_subref();
+            cache = o.cache;
+            entry = o.entry;
+            do_addref();
+        }
+        return *this;
+    }
+
+    dir_data_block_handle& operator=(dir_data_block_handle &&o)
+    {
+        if (this != &o)
+        {
+            do_subref();
+            cache = o.cache;
+            entry = o.entry;
+            o.entry = nullptr;
+        }
+        return *this;
+    }
+
+    ~dir_data_block_handle();
+
+    dir_data_block_entry* operator->()
+    {
+        return entry;
+    }
+
+    void mark_dirty()
+    {
+        cache->mark_dirty(*this);
+    }
 
 private:
     dir_data_block_entry *entry;
     dir_data_block_cache *cache;
+
+    void do_addref();
+    void do_subref();
+
+    friend class dir_data_block_cache;
 };
 
 }  // namespace hscfs
@@ -112,7 +170,7 @@ public:
     {
         auto p_entry = std::make_unique<dir_data_block_entry>(ino, blkoff, lpa, nid, nidoff, std::move(block));
         const dir_data_block_entry_key &key = p_entry->get_key();
-        assert(cache_manager.get(key) == false);
+        assert(cache_manager.get(key) == nullptr);
 
         dir_data_block_entry *raw_p = p_entry.get();
         cache_manager.add(key, p_entry);
@@ -121,6 +179,15 @@ public:
         do_relpace();
 
         return dir_data_block_handle(raw_p, this);
+    }
+
+    dir_data_block_handle get(uint32_t ino, uint32_t blkoff)
+    {
+        dir_data_block_entry_key key(ino, blkoff);
+        auto p_entry = cache_manager.get(key);
+        if (p_entry != nullptr)
+            add_refcount(p_entry);
+        return dir_data_block_handle(p_entry, this);
     }
 
 private:
@@ -144,7 +211,18 @@ private:
             cache_manager.unpin(entry->get_key());
     }
 
+    void mark_dirty(const dir_data_block_handle &handle)
+    {
+        if (handle.entry->state != dir_data_block_entry_state::dirty)
+        {
+            handle.entry->state = dir_data_block_entry_state::dirty;
+            dirty_list.emplace_back(handle);
+        }
+    }
+
     void do_relpace();
+
+    friend class dir_data_block_handle;
 };
 
 }

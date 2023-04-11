@@ -90,7 +90,12 @@ public:
         this->cache = cache;
     }
 
-    node_block_cache_entry_handle(const node_block_cache_entry_handle &o);
+    node_block_cache_entry_handle(const node_block_cache_entry_handle &o)
+    {
+        entry = o.entry;
+        cache = o.cache;
+        do_addref();
+    }
 
     node_block_cache_entry_handle(node_block_cache_entry_handle &&o) noexcept
     {
@@ -99,8 +104,29 @@ public:
         o.entry = nullptr;
     }
 
-    node_block_cache_entry_handle& operator=(const node_block_cache_entry_handle &o);
-    node_block_cache_entry_handle& operator=(node_block_cache_entry_handle &&o);
+    node_block_cache_entry_handle& operator=(const node_block_cache_entry_handle &o)
+    {
+        if (this != &o)
+        {
+            do_subref();
+            entry = o.entry;
+            cache = o.cache;
+            do_addref();
+        }
+        return *this;
+    }
+
+    node_block_cache_entry_handle& operator=(node_block_cache_entry_handle &&o)
+    {
+        if (this != &o)
+        {
+            do_subref();
+            entry = o.entry;
+            cache = o.cache;
+            o.entry = nullptr;
+        }
+        return *this;
+    }
 
     ~node_block_cache_entry_handle();
 
