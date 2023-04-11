@@ -3,6 +3,12 @@
 
 namespace hscfs {
 
+node_block_cache::~node_block_cache()
+{
+    if (!dirty_list.empty())
+        HSCFS_LOG(HSCFS_LOG_WARNING, "node block cache still has dirty block while destructed.");
+}
+
 void node_block_cache::do_replace()
 {
     if (cur_size > expect_size)
@@ -12,7 +18,7 @@ void node_block_cache::do_replace()
             auto p = cache_manager.replace_one();
             if (p != nullptr)
             {
-                assert(p->can_unpin() == true);
+                assert(p->ref_count == 0);
                 --cur_size;
                 HSCFS_LOG(HSCFS_LOG_INFO, "replace node block cache entry, nid = %u", p->nid);
 
@@ -59,12 +65,7 @@ void node_block_cache_entry_handle::add_SSD_version()
 
 void node_block_cache_entry_handle::mark_dirty()
 {
-    cache->mark_dirty(entry);
-}
-
-void node_block_cache_entry_handle::clear_dirty()
-{
-    cache->clear_dirty(entry);
+    cache->mark_dirty(*this);
 }
 
 void node_block_cache_entry_handle::do_addref()

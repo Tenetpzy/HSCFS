@@ -15,7 +15,6 @@ TEST(node_cache, 1)
         block_buffer buf1;
         auto handle1 = cache.add(std::move(buf1), 1, INVALID_NID, 1);
         EXPECT_EQ(handle1.entry->ref_count, 1);
-        EXPECT_EQ(handle1.entry->is_pinned, true);
         EXPECT_EQ(handle1.entry->state, node_block_cache_entry_state::uptodate);
         EXPECT_EQ(handle1.entry->old_lpa, 1);
 
@@ -52,12 +51,13 @@ TEST(node_cache, 1)
             * 1 <- 3
             * 4被换出
             */
+            cache.force_replace();
             EXPECT_EQ(handle2.entry->ref_count, 1);
 
             // 让3不被换出
             handle3.add_host_version();
             handle3.mark_dirty();
-            EXPECT_EQ(handle3.entry->ref_count, 2);
+            EXPECT_EQ(handle3.entry->ref_count, 3);
         }
         
         {
@@ -65,28 +65,38 @@ TEST(node_cache, 1)
             * 1 <- 3
             * 2被换出
             */
+            cache.force_replace();
             EXPECT_EQ(handle1.entry->ref_count, 2);
             auto handle3 = cache.get(3);
-            EXPECT_EQ(handle3.entry->ref_count, 2);
+            EXPECT_EQ(handle3.entry->ref_count, 3);
             EXPECT_EQ(handle3.entry->state, node_block_cache_entry_state::dirty);
             
             // 让3可以被换出
-            handle3.add_SSD_version();
-            handle3.clear_dirty();
+            {
+                handle3.add_SSD_version();
+                auto dirty_list = cache.get_dirty_list();
+                EXPECT_EQ(dirty_list.size(), 1);
+                EXPECT_EQ(dirty_list[0].entry, handle3.entry);
+                cache.clear_dirty_list();
+            }
+
             EXPECT_EQ(handle3.entry->ref_count, 1);
             EXPECT_EQ(handle3.entry->state, node_block_cache_entry_state::uptodate);
         }
 
         // 3被换出，缓存中只剩1
+        cache.force_replace();
         EXPECT_EQ(handle1.entry->ref_count, 1);
     }
 
     node_block_cache_entry_handle tmp_handle;
     {
-        auto handle1 = cache.get(1);
-        EXPECT_EQ(handle1.entry->ref_count, 1);
+        {
+            auto handle1 = cache.get(1);
+            EXPECT_EQ(handle1.entry->ref_count, 1);
+        }
         
-        // 让1被换出
+        // 加入5，让1自动被换出
         block_buffer buf5;
         auto handle5 = cache.add(std::move(buf5), 5, INVALID_NID, 5);
         tmp_handle = handle5;

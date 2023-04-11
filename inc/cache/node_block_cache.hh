@@ -5,6 +5,7 @@
 #include "fs/fs.h"
 
 #include <cassert>
+#include <vector>
 
 namespace hscfs {
 
@@ -25,7 +26,6 @@ public:
         this->new_lpa = INVALID_LPA;
         this->ref_count = 0;
         this->state = node_block_cache_entry_state::uptodate;
-        this->is_pinned = false;
     }
 
     ~node_block_cache_entry();
@@ -54,20 +54,6 @@ private:
 
     uint32_t ref_count;
     node_block_cache_entry_state state;
-    bool is_pinned;
-
-private:
-    bool need_pinned() const noexcept
-    {
-        if (is_pinned)
-            return false;
-        return ref_count > 0 || state == node_block_cache_entry_state::dirty;
-    }
-
-    bool can_unpin() const noexcept
-    {
-        return ref_count == 0 && state == node_block_cache_entry_state::uptodate;
-    }
 
     friend class node_block_cache;
 };
@@ -138,7 +124,6 @@ public:
     void add_host_version();
     void add_SSD_version();
     void mark_dirty();
-    void clear_dirty();
 
     node_block_cache_entry* operator->()
     {
@@ -151,6 +136,8 @@ private:
 
     void do_addref();
     void do_subref();
+    
+    friend class node_block_cache;
 };
 
 class node_block_cache
@@ -162,6 +149,8 @@ public:
         expect_size = expect_cache_size;
         cur_size = 0;
     }
+
+    ~node_block_cache();
 
     /*
      * 将一个node block加入缓存，返回缓存项句柄
@@ -209,52 +198,55 @@ public:
         return node_block_cache_entry_handle(p_entry, this);
     }
 
+    std::vector<node_block_cache_entry_handle> get_dirty_list() const noexcept
+    {
+        return dirty_list;
+    }
+
+    /* 将dirty list中的缓存项置为uptodate状态，并清空dirty list */
+    void clear_dirty_list()
+    {
+        for (auto &handle :dirty_list)
+        {
+            assert(handle.entry->state == node_block_cache_entry_state::dirty &&
+                handle.entry->ref_count >= 1);
+            handle.entry->state = node_block_cache_entry_state::uptodate;
+        }
+        dirty_list.clear();
+    }
+
+    void force_replace()
+    {
+        do_replace();
+    }
+
 private:
     size_t expect_size, cur_size;
     generic_cache_manager<uint32_t, node_block_cache_entry> cache_manager;
+    std::vector<node_block_cache_entry_handle> dirty_list;
 
 private:
-    void pin(node_block_cache_entry *entry)
-    {
-        assert(entry->is_pinned == false);
-        entry->is_pinned = true;
-        cache_manager.pin(entry->nid);
-    }
-
-    void unpin(node_block_cache_entry *entry)
-    {
-        assert(entry->is_pinned == true);
-        entry->is_pinned = false;
-        cache_manager.unpin(entry->nid);
-        do_replace();  // 若缓存项数量已超出阈值，被unpin的缓存项将立刻换出
-    }
-
     void add_refcount(node_block_cache_entry *entry)
     {
         ++entry->ref_count;
-        if (entry->need_pinned())
-            pin(entry);
+        if (entry->ref_count == 1)
+            cache_manager.pin(entry->nid);
     }
 
     void sub_refcount(node_block_cache_entry *entry)
     {
         --entry->ref_count;
-        if (entry->can_unpin())
-            unpin(entry);
+        if (entry->ref_count == 0)
+            cache_manager.unpin(entry->nid);
     }
 
-    void mark_dirty(node_block_cache_entry *entry)
+    void mark_dirty(const node_block_cache_entry_handle &handle)
     {
-        entry->state = node_block_cache_entry_state::dirty;
-        if (entry->need_pinned())
-            pin(entry);
-    }
-
-    void clear_dirty(node_block_cache_entry *entry)
-    {
-        entry->state = node_block_cache_entry_state::uptodate;
-        if (entry->can_unpin())
-            unpin(entry);
+        if (handle.entry->state != node_block_cache_entry_state::dirty)
+        {
+            handle.entry->state = node_block_cache_entry_state::dirty;
+            dirty_list.emplace_back(handle);
+        }
     }
 
     void do_replace();
