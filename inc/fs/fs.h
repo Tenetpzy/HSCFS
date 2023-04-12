@@ -80,11 +80,11 @@ struct hscfs_super_block
 #define MAX_INLINE_DATA		(sizeof(__le32) * (DEF_ADDRS_PER_INODE))
 
 struct hscfs_inode {
-	__le16 i_mode;			/* file mode */
+	__le16 i_mode;			/* file mode，暂不使用 */
 	__u8 i_inline;			/* file inline flags */
     __u8 i_rsv0;
-	__le32 i_uid;			/* user ID */
-	__le32 i_gid;			/* group ID */
+	__le32 i_rsv1;			/* user ID，不使用，更改为rsv */
+	__le32 i_nlink;			/* group ID，不使用，用作硬链接计数字段 */
     __le32 i_atime_nsec;		/* access time in nano scale */
 	__le32 i_ctime_nsec;		/* change time in nano scale */
 	__le32 i_mtime_nsec;		/* modification time in nano scale */

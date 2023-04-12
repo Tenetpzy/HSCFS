@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include "cache/cache_manager.hh"
 
 namespace hscfs {
 
@@ -32,7 +33,7 @@ struct hash<hscfs::dentry_key>
 
 namespace hscfs {
 
-class super_manager;
+class file_system_manager;
 
 enum class dentry_state
 {
@@ -44,16 +45,21 @@ enum class dentry_state
 class dentry
 {
 public:
+    
+
+private:
     dentry_key key;
     uint32_t ino;  // 目录项的inode
-    super_manager *super;
+    uint8_t type;  // 目录项的文件类型
     dentry *parent;  // 目录树中的父目录，根目录为nullptr
 
     uint32_t blkno, slotno;  // 目录项在目录文件中的位置(块号，块内slot号)
     bool is_dentry_pos_valid;  // blkno和slotno字段是否有效(由SSD path lookup返回的中间节点则不一定有效)
-
+    
+    file_system_manager *fs_manager;
     uint32_t ref_count;
     dentry_state state;
+    bool is_sync_with_SSD;
 };
 
 class dentry_handle
@@ -63,7 +69,14 @@ class dentry_handle
 
 class dentry_cache
 {
+public:
     /* to do */
+
+    dentry_handle get(uint32_t dir_ino, const std::string &name);
+
+private:
+    size_t expect_size, cur_size;
+    generic_cache_manager<dentry_key, dentry> cache_manager;
 };
 
 }  // namespace hscfs
