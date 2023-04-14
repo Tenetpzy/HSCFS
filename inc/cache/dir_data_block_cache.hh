@@ -122,6 +122,11 @@ public:
         cache->mark_dirty(*this);
     }
 
+    bool is_empty() const noexcept
+    {
+        return entry == nullptr;
+    }
+
 private:
     dir_data_block_entry *entry;
     dir_data_block_cache *cache;

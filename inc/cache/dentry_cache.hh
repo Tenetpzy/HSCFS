@@ -46,6 +46,10 @@ class dentry
 {
 public:
     
+    uint32_t get_ino() const noexcept
+    {
+        return ino;
+    }
 
 private:
     dentry_key key;
@@ -62,9 +66,33 @@ private:
     bool is_sync_with_SSD;
 };
 
+
+class dentry_cache;
+
 class dentry_handle
 {
+public:
+    dentry_handle(dentry *entry, dentry_cache *cache)
+    {
+        this->entry = entry;
+        this->cache = cache;
+    }
+
+    bool is_empty() const noexcept
+    {
+        return entry == nullptr;
+    }
+
+    dentry* operator->() const noexcept
+    {
+        return entry;
+    }
+
     /* to do */
+
+private:
+    dentry *entry;
+    dentry_cache *cache;
 };
 
 class dentry_cache

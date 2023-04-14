@@ -37,4 +37,7 @@ public:
 
 class thread_interrupted {};
 
+/* 用户调用API时输入的路径字符串不合法 */
+class user_path_invalid: public std::exception {};
+
 }  // namespace hscfs
