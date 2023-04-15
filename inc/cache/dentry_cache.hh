@@ -198,7 +198,13 @@ public:
         return dentry_handle(raw_p, this);
     }
 
-    dentry_handle get(uint32_t dir_ino, const std::string &name);
+    dentry_handle get(uint32_t dir_ino, const std::string &name)
+    {
+        dentry *entry = cache_manager.get(dentry_key(dir_ino, name));
+        if (entry != nullptr)
+            add_refcount(entry);
+        return dentry_handle(entry, this);
+    }
 
 private:
     size_t expect_size, cur_size;
