@@ -274,8 +274,8 @@ journal_writer::journal_writer(comm_dev *device, uint64_t journal_area_start_lpa
     dev = device;
 }
 
-#ifdef HSCFS_DEBUG
-void print_buffer(const char *start);
+#ifdef CONFIG_PRINT_DEBUG_INFO
+void print_journal_block(const char *start);
 #endif
 
 uint64_t journal_writer::collect_pending_journal_to_write_buffer()
@@ -322,25 +322,12 @@ uint64_t journal_writer::collect_pending_journal_to_write_buffer()
             // 如果当前缓存块已经写满，继续使用下一个缓存块
             if (buffer_tail_off == 4096)
             {
-                #ifdef HSCFS_DEBUG
-                HSCFS_LOG(HSCFS_LOG_INFO, "writer: journal in %lu th buffer block:\n", buffer_tail_idx);
-                print_buffer(get_ith_buffer_block(buffer_tail_idx));
-                #endif
-
                 buffer_tail_idx++;
                 buffer_tail_off = 0;
             }
         }
     }
     append_end_entry();
-
-    #ifdef HSCFS_DEBUG
-    for (size_t i = 0; i <= buffer_tail_idx; ++i)
-    {
-        HSCFS_LOG(HSCFS_LOG_INFO, "writer summary: journal in %lu th buffer block:\n", i);
-        print_buffer(get_ith_buffer_block(i));
-    }
-    #endif
 
     return buffer_tail_idx + 1;
 }
@@ -354,9 +341,9 @@ void journal_writer::write_to_SSD(uint64_t cur_tail)
         if (cur_tail == end_lpa)
             cur_tail = start_lpa;
 
-        #ifdef HSCFS_DEBUG
-        HSCFS_LOG(HSCFS_LOG_INFO, "writer: journal in %lu th buffer block which will be written to SSD:\n", i);
-        print_buffer(get_ith_buffer_block(i));
+        #ifdef CONFIG_PRINT_DEBUG_INFO
+        HSCFS_LOG(HSCFS_LOG_INFO, "journal writer: journal in %lu th buffer block which will be written to SSD:\n", i);
+        print_journal_block(get_ith_buffer_block(i));
         #endif
 
         int ret = comm_submit_async_rw_request(dev, journal_buffer[i].get_ptr(), LPA_TO_LBA(cur_tail), 

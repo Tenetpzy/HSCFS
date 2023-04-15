@@ -6,7 +6,7 @@ include_directories(
 link_directories(/usr/local/lib)
 
 add_compile_options(-g3 -O0 -Wall)
-# add_compile_options(-DHSCFS_DEBUG)
+# add_compile_options(-DCONFIG_PRINT_DEBUG_INFO)
 link_libraries(gtest pthread)
 
 add_subdirectory(utils)

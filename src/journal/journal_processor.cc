@@ -81,7 +81,10 @@ void journal_processor::fetch_new_journal()
     journal_process_env *process_env = journal_process_env::get_instance();
     auto check_if_interrupted = [process_env]() {
         if (process_env->exit_req)
+        {
+            process_env->exit_req = 0;
             throw thread_interrupted();
+        }
     };
     std::unique_lock<std::mutex> mtx(process_env->mtx);
 

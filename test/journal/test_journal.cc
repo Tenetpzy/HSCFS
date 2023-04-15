@@ -1,11 +1,14 @@
 /* ************************************************
 
 注意：
-日志层测试时，一次只能运行一个测试用例，必须使用--gtest_filter指定目标用例。
+（已修复）日志层测试时，一次只能运行一个测试用例，必须使用--gtest_filter指定目标用例，否则可能segment fault.
 
 原因：
-目前日志层环境是全局变量，且hscfs_journal_process_env::init只能在系统启动时调用一次。
-由于每个测试用例中，使用的初始化参数（日志区域起止LPA，FIFO指针位置）不同，每个用例都调用上述函数进行初始化。
+目前日志层环境是全局变量，且退出请求exit_flag一旦置位，不会被复位，
+可能导致后续新启动的日志线程拿到置位的exit_flag，直接退出，但测试线程仍写入了日志，然后等待日志线程退出，
+此时，早已退出的日志线程没有处理该日志。等到下一测试用例拿到上一测试用例写入的日志时，该日志所在内存已被释放。
+
+已修复该问题，一次可运行全部测试用例，但会导致事务号语义上的错误（所有测试用例共享全局事务号）。
 
 ************************************************* */
 
@@ -57,192 +60,13 @@ struct journal_area_mock
 
 comm_dev dev;
 
-class journal_entry_printer
-{
-public:
-    journal_entry_printer(const char *start)
-    {
-        start_addr = start;
-    }
-    virtual ~journal_entry_printer() = default;
-
-    virtual void print() = 0;
-
-protected:
-    const char *start_addr;
-
-    static void println_header(const meta_journal_entry *p_header)
-    {
-        static std::unordered_map<uint8_t, std::string> str_of_type = {
-            {JOURNAL_TYPE_NATS, "NAT"}, {JOURNAL_TYPE_SITS, "SIT"}, 
-            {JOURNAL_TYPE_SUPER_BLOCK, "SUPER"}, {JOURNAL_TYPE_NOP, "NOP"}, 
-            {JOURNAL_TYPE_END, "END"}  
-        };
-        std::string type_str;
-        if (str_of_type.count(p_header->type))
-            type_str = str_of_type[p_header->type];
-        else
-            type_str = "UNKNOWN";
-        
-        fmt::println(std::cout, "type: {}, len: {}", type_str, p_header->len);
-    }
-
-    static size_t calculate_entry_num(size_t journal_len, size_t entry_len)
-    {
-        auto err = [journal_len]() {
-            fmt::println(std::cerr, "invalid journal len: {}", journal_len);
-            abort();
-        };
-
-        if (journal_len < sizeof(meta_journal_entry) + entry_len)
-            err();
-        size_t journal_entry_len = journal_len - sizeof(meta_journal_entry);
-        if (journal_entry_len % entry_len)
-            err();
-        return journal_entry_len / entry_len;
-    }
-};
-
-class super_entry_printer: public journal_entry_printer
-{
-public:
-    super_entry_printer(const char *start): journal_entry_printer(start) {}
-    void print() override
-    {
-        auto p_header = reinterpret_cast<const meta_journal_entry*>(start_addr);
-        println_header(p_header);
-
-        size_t num = calculate_entry_num(p_header->len, super_entry_len);
-        fmt::println(std::cout, "total entry num: {}", num);
-        auto p_entry = reinterpret_cast<const super_block_journal_entry*>(start_addr + sizeof(meta_journal_entry));
-        for (size_t i = 1; i <= num; ++i, ++p_entry)
-            fmt::println(std::cout, "entry {}: off = {}", i, p_entry->Off);
-    }
-
-private:
-    const uint16_t super_entry_len = sizeof(super_block_journal_entry);
-};
-
-class NAT_entry_printer: public journal_entry_printer
-{
-public:
-    NAT_entry_printer(const char *start): journal_entry_printer(start) {}
-    void print() override
-    {
-        auto p_header = reinterpret_cast<const meta_journal_entry*>(start_addr);
-        println_header(p_header);
-
-        size_t num = calculate_entry_num(p_header->len, NAT_entry_len);
-        fmt::println(std::cout, "total entry num: {}", num);
-        auto p_entry = reinterpret_cast<const NAT_journal_entry*>(start_addr + sizeof(meta_journal_entry));
-        for (size_t i = 1; i <= num; ++i, ++p_entry)
-            fmt::println(std::cout, "entry {}: nid = {}", i, p_entry->nid);
-    }
-
-private:
-    const uint16_t NAT_entry_len = sizeof(NAT_journal_entry);
-};
-
-class SIT_entry_printer: public journal_entry_printer
-{
-public:
-    SIT_entry_printer(const char *start): journal_entry_printer(start) {}
-    void print() override
-    {
-        auto p_header = reinterpret_cast<const meta_journal_entry*>(start_addr);
-        println_header(p_header);
-
-        size_t num = calculate_entry_num(p_header->len, SIT_entry_len);
-        fmt::println(std::cout, "total entry num: {}", num);
-        auto p_entry = reinterpret_cast<const SIT_journal_entry*>(start_addr + sizeof(meta_journal_entry));
-        for (size_t i = 1; i <= num; ++i, ++p_entry)
-            fmt::println(std::cout, "entry {}: segid = {}", i, p_entry->segID);
-    }
-
-private:
-    const uint16_t SIT_entry_len = sizeof(SIT_journal_entry);
-};
-
-class NOP_END_entry_printer: public journal_entry_printer
-{
-public:
-    NOP_END_entry_printer(const char *start): journal_entry_printer(start) {}
-    void print() override
-    {
-        auto p_header = reinterpret_cast<const meta_journal_entry*>(start_addr);
-        println_header(p_header);
-    }
-};
-
-class journal_printer_factory
-{
-public:
-    static std::unique_ptr<journal_entry_printer> generate(uint8_t type, const char *start)
-    {
-        std::unique_ptr<journal_entry_printer> ret;
-        switch (type)
-        {
-        case JOURNAL_TYPE_SUPER_BLOCK:
-            ret.reset(new super_entry_printer(start));
-            break;
-        
-        case JOURNAL_TYPE_NATS:
-            ret.reset(new NAT_entry_printer(start));
-            break;
-        
-        case JOURNAL_TYPE_SITS:
-            ret.reset(new SIT_entry_printer(start));
-            break;
-        
-        case JOURNAL_TYPE_NOP:
-        case JOURNAL_TYPE_END:
-            ret.reset(new NOP_END_entry_printer(start));
-            break;
-
-        default:
-            throw std::logic_error("journal printer factory: invalid type.");
-            break;
-        }
-        return ret;
-    };
-};
-
-static void print_journal_inner(const char *start)
-{
-    const char *p_journal = start;
-    while (true)
-    {
-        auto cur_journal_entry = reinterpret_cast<const meta_journal_entry*>(p_journal);
-        auto cur_len = cur_journal_entry->len;
-
-        auto journal_printer = journal_printer_factory::generate(cur_journal_entry->type, p_journal);
-        journal_printer->print();
-        std::cout << std::endl;
-        if (cur_journal_entry->type == JOURNAL_TYPE_END)
-            break;
-        if (cur_journal_entry->type == JOURNAL_TYPE_NOP)
-        {
-            if (p_journal + cur_len - 4096 != start)
-            {
-                fmt::print(std::cout, "warning! Invalid NOP entry pos or len. \
-                    NOP at offset {}, len = {}", p_journal - start, cur_len);
-            }
-            break;
-        }
-        p_journal += cur_len;
-        if (p_journal - start == 4096)
-            break;
-    }
-}
-
-void print_buffer(const char *start)
-{
-    print_journal_inner(start);
+namespace hscfs {
+void print_journal_block(const char *start);
 }
 
 static void print_block(uint64_t lpa)
 {
-    print_journal_inner(journal_area.flash[lpa].get_ptr());
+    print_journal_block(journal_area.flash[lpa].get_ptr());
 }
 
 int comm_submit_async_rw_request(comm_dev *dev, void *buffer, uint64_t lba, uint32_t lba_count,
