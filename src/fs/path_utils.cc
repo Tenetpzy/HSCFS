@@ -5,6 +5,7 @@
 #include "utils/hscfs_exceptions.hh"
 #include "utils/hscfs_log.h"
 #include "ssd/path_lookup.hh"
+#include "path_utils.hh"
 
 namespace hscfs {
 
@@ -79,27 +80,37 @@ bool path_helper::is_prefix_valid(const std::string &user_path, const std::strin
     return user_path.find(prefix) == 0;
 }
 
+void path_lookup_processor::set_abs_path(const std::string &abs_path)
+{
+    start_dentry = fs_manager->get_root_dentry();
+    path = abs_path;
+}
+
 dentry_handle path_lookup_processor::do_path_lookup()
 {
-    path_parser p_parser(abs_path);
+    path_parser p_parser(path);
     dentry_cache *d_cache = fs_manager->get_dentry_cache();
-    dentry_handle cur_dir = fs_manager->get_root_dentry();
+    dentry_handle cur_dentry = start_dentry;  // cur_dentry为当前搜索到的目录项
 
-    for (auto itr = p_parser.begin(), end_itr = p_parser.end(); itr != end_itr; )
+    for (auto itr = p_parser.begin(), end_itr = p_parser.end(); itr != end_itr; itr.next())
     {
-        std::string component_name = itr.get();
-        dentry_handle component_dentry = d_cache->get(cur_dir->get_ino(), component_name);
-        
-        /* 如果当前目录项在缓存中不命中，则交给SSD进行查找 */
+        /* 如果当前目录项不是目录，则不再查找，返回不存在 */
+        if (cur_dentry->get_type() != HSCFS_FT_DIR)
+            return dentry_handle();
+
+        std::string component_name = itr.get();  // component_name为下一项的名称
+        dentry_handle component_dentry = d_cache->get(cur_dentry->get_ino(), component_name);
+
+        /* 如果下一个目录项在缓存中不命中 */
         if (component_dentry.is_empty())
         {
             ssd_path_lookup_controller ctrlr(fs_manager->get_device());
-            ctrlr.construct_task(p_parser, cur_dir->get_ino(), itr);
+            ctrlr.construct_task(p_parser, cur_dentry->get_ino(), itr);
             ctrlr.do_pathlookup();
 
             /* 将ssd查找的结果插入dentry cache，并直接在结果上继续path lookup */
             uint32_t *p_res_ino = ctrlr.get_first_addr_of_result_inos();
-            while (itr != end_itr)
+            for (; itr != end_itr; itr.next())
             {
                 component_name = itr.get();
 
@@ -107,15 +118,29 @@ dentry_handle path_lookup_processor::do_path_lookup()
                 if (*p_res_ino == INVALID_NID)
                 {
                     HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: dentry [%u:%s] does not exist.", 
-                        cur_dir->get_ino(), component_name.c_str());
+                        cur_dentry->get_ino(), component_name.c_str());
                     return dentry_handle();
                 }
 
-                HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: result of SSD, dentry [%u:%s]'s inode is %u.",
-                    cur_dir->get_ino(), component_name.c_str(), *p_res_ino);
+                HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: result of SSD: dentry [%u:%s]'s inode is %u.",
+                    cur_dentry->get_ino(), component_name.c_str(), *p_res_ino);
+                
+                /* 将component加入dentry cache，并置当前缓存项为component */
+                cur_dentry = d_cache->add(cur_dentry->get_ino(), cur_dentry, *p_res_ino, component_name, fs_manager);
             }
+
+            /* 在SSD返回的结果上成功完成了path lookup */
+            return cur_dentry;
         }
+
+        /* 下一个缓存项在缓存中找到了，置当前缓存项为下一个缓存项，继续 */
+        HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: dentry [%u:%s]'s inode is %u.",
+            cur_dentry->get_ino(), component_name.c_str(), component_dentry->get_ino());
+        cur_dentry = component_dentry;
     }
+
+    /* 成功查找到了最后一级目录项，返回 */
+    return cur_dentry;
 }
 
 } // namespace hscfs

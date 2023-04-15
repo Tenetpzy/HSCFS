@@ -66,6 +66,9 @@ public:
         return key;
     }
 
+    /* 得到文件类型。若为UNKNOWN，则通过读inode page获取 */
+    uint8_t get_type() const noexcept;
+
 private:
     dentry_key key;
     uint32_t ino;  // 目录项的inode

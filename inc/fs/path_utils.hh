@@ -53,7 +53,6 @@ private:
 /*
  * 路径字符串解析器
  * 文件名（目录项名）可以包含除了'/'和'\0'外的所有字符
- * 用户使用的路径字符串必须是如下格式："${hscfs_prefix}"
  */
 class path_parser
 {
@@ -121,9 +120,12 @@ public:
         this->fs_manager = fs_manager;
     }
 
-    void set_abs_path(const std::string &path)
+    void set_abs_path(const std::string &abs_path);
+
+    void set_rel_path(const dentry_handle &start_dir_dentry, const std::string &rel_path)
     {
-        abs_path = path;
+        start_dentry = start_dir_dentry;
+        path = rel_path;
     }
 
     /*
@@ -135,7 +137,8 @@ public:
 
 private:
     file_system_manager *fs_manager;
-    std::string abs_path;
+    std::string path;
+    dentry_handle start_dentry;
 };
 
 }
