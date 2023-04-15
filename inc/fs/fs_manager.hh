@@ -4,6 +4,8 @@
 #include <mutex>
 #include "cache/dentry_cache.hh"
 
+struct comm_dev;
+
 namespace hscfs {
 
 class super_cache;
@@ -29,6 +31,8 @@ public:
     dentry_handle get_root_dentry() const noexcept;
 
     dentry_cache* get_dentry_cache() const noexcept;
+
+    comm_dev* get_device() const noexcept;
 
 private:
 

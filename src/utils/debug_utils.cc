@@ -3,8 +3,8 @@
 
 #include "fmt/ostream.h"
 #include "journal/journal_type.h"
-
 #include "fs/path_utils.hh"
+#include "utils/hscfs_log.h"
 
 namespace hscfs {
 
@@ -197,7 +197,17 @@ void print_journal_block(const char *start)
 void print_path_lookup_task(const path_parser &path_parser, uint32_t start_ino, 
     path_dentry_iterator start_itr, uint32_t depth)
 {
-    
+    HSCFS_LOG(HSCFS_LOG_INFO, "send path lookup task:\n");
+    fmt::println(std::cerr, "start inode: {}, depth: {}", start_ino, depth);
+    fmt::print(std::cerr, "target path: ");
+    for (uint32_t i = 0; i < depth; ++i, start_itr.next())
+    {
+        assert(start_itr != path_parser.end());
+        if (i)
+            fmt::print(std::cerr, "/");
+        fmt::print(std::cerr, "{}", start_itr.get());
+    }
+    fmt::print(std::cerr, "\n\n");
 }
 
 /***********************************************************/

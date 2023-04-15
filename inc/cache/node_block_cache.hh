@@ -123,7 +123,7 @@ public:
 
     void add_host_version();
     void add_SSD_version();
-    void mark_dirty();
+    void mark_dirty() const noexcept;
 
     node_block_cache_entry* operator->()
     {
@@ -229,6 +229,7 @@ private:
     void add_refcount(node_block_cache_entry *entry)
     {
         ++entry->ref_count;
+        /* 引用计数同时维护了淘汰保护、脏、被引用、读写等状态。只要引用计数不为0，就需要pin */
         if (entry->ref_count == 1)
             cache_manager.pin(entry->nid);
     }
@@ -242,6 +243,7 @@ private:
 
     void mark_dirty(const node_block_cache_entry_handle &handle)
     {
+        /* 保证node block缓存项如果是dirty状态，一定至少有一个引用计数 */
         if (handle.entry->state != node_block_cache_entry_state::dirty)
         {
             handle.entry->state = node_block_cache_entry_state::dirty;

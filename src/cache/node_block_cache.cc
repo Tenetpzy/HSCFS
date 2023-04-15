@@ -1,5 +1,6 @@
 #include "cache/node_block_cache.hh"
 #include "utils/hscfs_log.h"
+#include "node_block_cache.hh"
 
 namespace hscfs {
 
@@ -63,7 +64,7 @@ void node_block_cache_entry_handle::add_SSD_version()
     cache->sub_refcount(entry);
 }
 
-void node_block_cache_entry_handle::mark_dirty()
+void node_block_cache_entry_handle::mark_dirty() const noexcept
 {
     cache->mark_dirty(*this);
 }

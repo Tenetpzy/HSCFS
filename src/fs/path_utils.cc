@@ -1,7 +1,10 @@
 #include <cassert>
 #include "fs/path_utils.hh"
 #include "fs/fs_manager.hh"
+#include "fs/fs.h"
 #include "utils/hscfs_exceptions.hh"
+#include "utils/hscfs_log.h"
+#include "ssd/path_lookup.hh"
 
 namespace hscfs {
 
@@ -87,10 +90,30 @@ dentry_handle path_lookup_processor::do_path_lookup()
         std::string component_name = itr.get();
         dentry_handle component_dentry = d_cache->get(cur_dir->get_ino(), component_name);
         
-        // 如果当前目录项在缓存中不命中，则交给SSD进行查找
+        /* 如果当前目录项在缓存中不命中，则交给SSD进行查找 */
         if (component_dentry.is_empty())
         {
-            
+            ssd_path_lookup_controller ctrlr(fs_manager->get_device());
+            ctrlr.construct_task(p_parser, cur_dir->get_ino(), itr);
+            ctrlr.do_pathlookup();
+
+            /* 将ssd查找的结果插入dentry cache，并直接在结果上继续path lookup */
+            uint32_t *p_res_ino = ctrlr.get_first_addr_of_result_inos();
+            while (itr != end_itr)
+            {
+                component_name = itr.get();
+
+                /* 路径还没有搜索完，遇到了invalid_nid，则代表目录不存在，返回空handle */
+                if (*p_res_ino == INVALID_NID)
+                {
+                    HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: dentry [%u:%s] does not exist.", 
+                        cur_dir->get_ino(), component_name.c_str());
+                    return dentry_handle();
+                }
+
+                HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: result of SSD, dentry [%u:%s]'s inode is %u.",
+                    cur_dir->get_ino(), component_name.c_str(), *p_res_ino);
+            }
         }
     }
 }
