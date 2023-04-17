@@ -1,5 +1,6 @@
 #include "cache/dir_data_block_cache.hh"
 #include "utils/hscfs_log.h"
+#include "dir_data_block_cache.hh"
 
 namespace hscfs {
 
@@ -43,6 +44,11 @@ dir_data_block_handle::~dir_data_block_handle()
                 "%s", e.what());
         }
     }
+}
+
+void dir_data_block_handle::mark_dirty()
+{
+    cache->mark_dirty(*this);
 }
 
 void dir_data_block_handle::do_addref()

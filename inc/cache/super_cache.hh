@@ -16,7 +16,8 @@ public:
 
     void read_super_block();
 
-    hscfs_super_block* operator->() {
+    hscfs_super_block* operator->()
+    {
         return &super_block;
     }
 

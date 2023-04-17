@@ -1,6 +1,8 @@
 #include "cache/block_buffer.hh"
 #include "communication/memory.h"
+#include "communication/comm_api.h"
 #include "utils/hscfs_exceptions.hh"
+#include "utils/io_utils.hh"
 #include <cstring>
 
 namespace hscfs {
@@ -47,6 +49,13 @@ block_buffer &block_buffer::operator=(block_buffer &&o) noexcept
 void block_buffer::copy_content_from_buf(char *buf)
 {
     std::memcpy(buffer, buf, 4096);
+}
+
+void block_buffer::read_from_lpa(comm_dev *dev, uint32_t lpa)
+{
+    int ret = comm_submit_sync_rw_request(dev, buffer, LPA_TO_LBA(lpa), LBA_PER_LPA, COMM_IO_READ);
+    if (ret != 0)
+        throw io_error("read lpa failed.");
 }
 
 block_buffer::~block_buffer()

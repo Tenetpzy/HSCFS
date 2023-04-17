@@ -117,10 +117,7 @@ public:
         return entry;
     }
 
-    void mark_dirty()
-    {
-        cache->mark_dirty(*this);
-    }
+    void mark_dirty();
 
     bool is_empty() const noexcept
     {

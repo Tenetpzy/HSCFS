@@ -235,5 +235,6 @@
             ],
             "blockStrings": []
         },
-    }
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }

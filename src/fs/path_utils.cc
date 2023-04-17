@@ -110,7 +110,7 @@ dentry_handle path_lookup_processor::do_path_lookup()
 
             /* 将ssd查找的结果插入dentry cache，并直接在结果上继续path lookup */
             uint32_t *p_res_ino = ctrlr.get_first_addr_of_result_inos();
-            for (; itr != end_itr; itr.next())
+            for (; itr != end_itr; itr.next(), ++p_res_ino)
             {
                 component_name = itr.get();
 

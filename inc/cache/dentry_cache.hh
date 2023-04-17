@@ -67,7 +67,7 @@ public:
     }
 
     /* 得到文件类型。若为UNKNOWN，则通过读inode page获取 */
-    uint8_t get_type() const noexcept;
+    uint8_t get_type();
 
 private:
     dentry_key key;

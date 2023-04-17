@@ -9,6 +9,8 @@ struct comm_dev;
 namespace hscfs {
 
 class super_cache;
+class node_block_cache;
+class SIT_NAT_cache;
 
 /*
  * super_manager, SIT cache, NAT cache等对象的组合容器
@@ -31,6 +33,8 @@ public:
     dentry_handle get_root_dentry() const noexcept;
 
     dentry_cache* get_dentry_cache() const noexcept;
+    node_block_cache* get_node_cache() const noexcept;
+    SIT_NAT_cache* get_nat_cache() const noexcept;
 
     comm_dev* get_device() const noexcept;
 

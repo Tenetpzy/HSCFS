@@ -1,6 +1,9 @@
 #pragma once
 
 #include "utils/declare_utils.hh"
+#include <cstdint>
+
+struct comm_dev;
 
 namespace hscfs {
 
@@ -13,6 +16,7 @@ public:
     block_buffer(block_buffer&&) noexcept;
     block_buffer &operator=(const block_buffer&);
     block_buffer &operator=(block_buffer&&) noexcept;
+    ~block_buffer();
 
     /*
      * 将buf指向的4KB块拷贝到block_buffer中
@@ -20,8 +24,9 @@ public:
      * 要将它们插入node block缓存，目前的设计只能进行拷贝
      */
     void copy_content_from_buf(char *buf);
-    ~block_buffer();
 
+    /* 从SSD读lpa到buffer中，同步，完成读操作后返回 */
+    void read_from_lpa(comm_dev *dev, uint32_t lpa);
     char *get_ptr() noexcept
     {
         return buffer;

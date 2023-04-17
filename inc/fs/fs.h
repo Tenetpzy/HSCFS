@@ -19,13 +19,13 @@ struct hscfs_super_block
 	__le64 block_count;		/* total # of user blocks */
 	__le32 segment_count;		/* total # of segments */
 	__le32 segment_count_sit;	/* # of segments for SIT */
-	__le32 segment_count_nat;	/* # of segments for NAT */
+	__le32 segment_count_nat;	/* # of segments for NAT(used) */
 	__le32 segment_count_srmap;	/* # of segments for SRMAP */
     __le32 segment_count_meta_journal;  /* # of segments for Meta Journal*/
 	__le32 segment_count_main;	/* # of segments for main area */
 	__le32 segment0_blkaddr;	/* start block address of segment 0 */
 	__le32 sit_blkaddr;		/* start block address of SIT */
-	__le32 nat_blkaddr;		/* start block address of NAT */
+	__le32 nat_blkaddr;		/* start block address of NAT(used) */
 	__le32 srmap_blkaddr;		/* start block address of SRMAP */
     __le32 meta_journal_blkaddr;   /* start block address of Meta Journal */
 	__le32 main_blkaddr;		/* start block address of main area */
@@ -48,6 +48,8 @@ struct hscfs_super_block
 
 	__u8 reserved[3964];		/* valid reserved region */
 } __attribute__((packed));
+
+#define BLOCK_PER_SEGMENT 512
 
 #define INVALID_LPA	0
 

@@ -1,7 +1,9 @@
 #include "cache/dentry_cache.hh"
-#include "fs/fs.h"
+#include "cache/node_block_cache.hh"
+#include "cache/super_cache.hh"
+#include "fs/fs_manager.hh"
+#include "fs/node_block_fetcher.hh"
 #include "utils/hscfs_log.h"
-#include "dentry_cache.hh"
 
 namespace hscfs {
 
@@ -25,6 +27,34 @@ dentry::dentry(uint32_t dir_ino, dentry *parent, uint32_t dentry_ino, const std:
 
     /* 构造时默认与SSD同步，如果是新建或删除目录项，应设置state后调用handle的mark_dirty */
     is_dirty = false;
+}
+
+uint8_t dentry::get_type()
+{
+    if (type != HSCFS_FT_UNKNOWN)
+        return type;
+    
+    /* 从inode中获取文件类型，首先从node block cache中查找ino对应block */
+    node_block_cache *node_cache = fs_manager->get_node_cache();
+    node_block_cache_entry_handle node_handle = node_cache->get(ino);
+
+    /* node block cache缓存不命中，从SSD读该node block */
+    if (node_handle.is_empty())
+    {
+        super_cache *super = fs_manager->get_super_cache();
+        node_block_fetcher fetcher(fs_manager->get_device(), fs_manager->get_nat_cache(), 
+            fs_manager->get_node_cache(), super->nat_blkaddr, super->segment_count_nat);
+        
+        // 这里获取inode block，所以parent为INVALID_NID
+        node_handle = fetcher.get_node_entry(ino, INVALID_NID);
+    }
+
+    /* 从inode中获取文件类型 */
+    hscfs_node *node = node_handle->get_node_block_ptr();
+    assert(node->footer.ino == node->footer.nid);
+    type = node->i.i_type;
+    assert(type != HSCFS_FT_UNKNOWN);
+    return type;
 }
 
 void hscfs::dentry_cache::do_replace()
