@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <string>
+#include <cassert>
 #include "cache/cache_manager.hh"
 
 namespace hscfs {
@@ -172,10 +173,15 @@ private:
 class dentry_cache
 {
 public:
-    /* to do */
+    dentry_cache(size_t expect_size, file_system_manager *fs_manager)
+    {
+        this->expect_size = expect_size;
+        this->fs_manager = fs_manager;
+        cur_size = 0;
+    }
 
     dentry_handle add(uint32_t dir_ino, const dentry_handle &dir_handle, uint32_t dentry_ino, 
-        const std::string &dentry_name, file_system_manager *fs_manager)
+        const std::string &dentry_name)
     {
         assert(cache_manager.get(dentry_key(dir_ino, dentry_name)) == nullptr);
 
@@ -208,6 +214,7 @@ public:
 
 private:
     size_t expect_size, cur_size;
+    file_system_manager *fs_manager;
     generic_cache_manager<dentry_key, dentry> cache_manager;
     std::vector<dentry_handle> dirty_list;
 

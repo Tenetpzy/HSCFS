@@ -110,7 +110,7 @@ class file_system_manager;
 
 /* 
  * 路径解析的执行器
- * 使用此类之前，必须获得fs_lock 
+ * 使用此类之前，必须获得fs_meta_lock 
  */
 class path_lookup_processor
 {

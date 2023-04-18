@@ -34,7 +34,7 @@ private:
     /* 
      * 指向file对象
      * opened_file对象析构需要上层主动调用close，
-     * 且close时需要加fs_lock，为避免死锁，此处不使用智能指针自动管理
+     * 且close时需要加fs_meta_lock，为避免死锁，此处不使用智能指针自动管理
      */
     file* file;
     std::mutex pos_lock;  // 保护pos的锁

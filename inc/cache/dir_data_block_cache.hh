@@ -66,7 +66,7 @@ class dir_data_block_cache;
 class dir_data_block_handle
 {
 public:
-    dir_data_block_handle(dir_data_block_entry *entry, dir_data_block_cache *cache)
+    dir_data_block_handle(dir_data_block_entry *entry, dir_data_block_cache *cache) noexcept
     {
         this->entry = entry;
         this->cache = cache;
@@ -79,7 +79,7 @@ public:
         do_addref();
     }
 
-    dir_data_block_handle(dir_data_block_handle &&o)
+    dir_data_block_handle(dir_data_block_handle &&o) noexcept
     {
         entry = o.entry;
         cache = o.cache;

@@ -10,7 +10,7 @@ dir_data_block_cache::~dir_data_block_cache()
         HSCFS_LOG(HSCFS_LOG_WARNING, "dir data block cache still has dirty block while destructed.");
 }
 
-void hscfs::dir_data_block_cache::do_relpace()
+void dir_data_block_cache::do_relpace()
 {
     if (cur_size > expect_size)
     {

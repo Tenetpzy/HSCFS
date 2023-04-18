@@ -81,9 +81,10 @@
         "list": "cpp",
         "future": "cpp",
         "codecvt": "cpp",
-        "filesystem": "cpp"
+        "filesystem": "cpp",
+        "typeindex": "cpp"
     },
-    "C_Cpp.intelliSenseEngineFallback": "disabled",
+    "C_Cpp.intelliSenseEngineFallback": "enabled",
     "VSCodeCounter.languages": {
         "cpp": {
             "aliases": [

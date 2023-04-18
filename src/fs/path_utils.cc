@@ -126,7 +126,7 @@ dentry_handle path_lookup_processor::do_path_lookup()
                     cur_dentry->get_ino(), component_name.c_str(), *p_res_ino);
                 
                 /* 将component加入dentry cache，并置当前缓存项为component */
-                cur_dentry = d_cache->add(cur_dentry->get_ino(), cur_dentry, *p_res_ino, component_name, fs_manager);
+                cur_dentry = d_cache->add(cur_dentry->get_ino(), cur_dentry, *p_res_ino, component_name);
             }
 
             /* 在SSD返回的结果上成功完成了path lookup */
