@@ -1,9 +1,11 @@
 #include <unordered_map>
 #include <iostream>
+#include <ctime>
 
 #include "fmt/ostream.h"
 #include "journal/journal_type.h"
 #include "fs/path_utils.hh"
+#include "fs/fs.h"
 #include "utils/hscfs_log.h"
 
 namespace hscfs {
@@ -212,5 +214,30 @@ void print_path_lookup_task(const path_parser &path_parser, uint32_t start_ino,
 
 /***********************************************************/
 
+
+/* inode 元数据打印 */
+/***********************************************************/
+
+void print_inode_meta(uint32_t ino, hscfs_inode *inode)
+{
+    HSCFS_LOG(HSCFS_LOG_INFO, "print inode metadata: \n");
+
+    char atime_buf[128], mtime_buf[128];
+    time_t atime = inode->i_atime;
+    time_t mtime = inode->i_mtime;
+    strftime(atime_buf, sizeof(atime_buf), "%D %T", gmtime(&atime));
+    strftime(mtime_buf, sizeof(mtime_buf), "%D %T", gmtime(&mtime));
+
+    fmt::println(std::cerr, 
+        "inode: {}\n"
+        "hard link number: {}\n"
+        "size: {} bytes\n"
+        "access time: {}\n"
+        "modify time: {}\n",
+        ino, inode->i_nlink, inode->i_size, atime_buf, mtime_buf
+    );
+}
+
+/***********************************************************/
 
 }  // namespace hscfs

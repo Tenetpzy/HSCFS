@@ -3,7 +3,6 @@
 #include "utils/lock_guards.hh"
 #include <system_error>
 #include <cassert>
-#include "fd_array.hh"
 
 namespace hscfs {
 

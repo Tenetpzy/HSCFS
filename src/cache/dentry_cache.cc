@@ -2,7 +2,6 @@
 #include "cache/node_block_cache.hh"
 #include "cache/super_cache.hh"
 #include "fs/fs_manager.hh"
-#include "fs/node_block_fetcher.hh"
 #include "utils/hscfs_log.h"
 
 namespace hscfs {
@@ -41,12 +40,10 @@ uint8_t dentry::get_type()
     /* node block cache缓存不命中，从SSD读该node block */
     if (node_handle.is_empty())
     {
-        super_cache *super = fs_manager->get_super_cache();
-        node_block_fetcher fetcher(fs_manager->get_device(), fs_manager->get_nat_cache(), 
-            fs_manager->get_node_cache(), super->nat_blkaddr, super->segment_count_nat);
+        node_cache_helper node_helper(fs_manager);
         
         // 这里获取inode block，所以parent为INVALID_NID
-        node_handle = fetcher.get_node_entry(ino, INVALID_NID);
+        node_handle = node_helper.get_node_entry(ino, INVALID_NID);
     }
 
     /* 从inode中获取文件类型 */

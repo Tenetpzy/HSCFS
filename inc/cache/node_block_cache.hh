@@ -7,6 +7,8 @@
 #include <cassert>
 #include <vector>
 
+struct comm_dev;
+
 namespace hscfs {
 
 enum class node_block_cache_entry_state
@@ -254,6 +256,33 @@ private:
     void do_replace();
 
     friend class node_block_cache_entry_handle;
+};
+
+class SIT_NAT_cache;
+class file_system_manager;
+
+/*
+ * node block获取器
+ * 封装node block cache不命中时，从NAT表中查找lpa并读入缓存的过程
+ */
+class node_cache_helper
+{
+public:
+    node_cache_helper(const file_system_manager *fs_manager) noexcept;
+
+    /* 
+     * 调用时持有fs_meta_lock 
+     * parent_nid为目标nid在索引树上的父node block。如果nid为inode block，则parent_nid应置为INVALID_NID
+     */
+    node_block_cache_entry_handle get_node_entry(uint32_t nid, uint32_t parent_nid);
+
+private:
+
+    comm_dev *dev;
+    SIT_NAT_cache *nat_cache;
+    node_block_cache *node_cache;
+    uint32_t nat_start_lpa;
+    uint32_t nat_segment_cnt;
 };
 
 }  // namespace hscfs

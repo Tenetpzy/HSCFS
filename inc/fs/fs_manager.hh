@@ -12,6 +12,8 @@ namespace hscfs {
 class super_cache;
 class node_block_cache;
 class SIT_NAT_cache;
+class file_obj_cache;
+class fd_array;
 
 /*
  * super_manager, SIT cache, NAT cache等对象的组合容器
@@ -37,18 +39,19 @@ public:
     {
         return super.get();
     }
+    dentry_cache* get_dentry_cache() const noexcept;
+    node_block_cache* get_node_cache() const noexcept;
+    SIT_NAT_cache* get_nat_cache() const noexcept;
+    file_obj_cache* get_file_obj_cache() const noexcept;
 
     size_t get_page_cache_size() const noexcept
     {
         return 32;
     }
 
-    dentry_cache* get_dentry_cache() const noexcept;
-    node_block_cache* get_node_cache() const noexcept;
-    SIT_NAT_cache* get_nat_cache() const noexcept;
-
     comm_dev* get_device() const noexcept;
     dentry_handle get_root_dentry() const noexcept;
+    fd_array* get_fd_array() const noexcept;
 
 private:
 

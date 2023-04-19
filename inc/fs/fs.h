@@ -85,16 +85,16 @@ struct hscfs_inode {
 	__le16 i_mode;			/* file mode，暂不使用 */
 	__u8 i_inline;			/* file inline flags */
     __u8 i_rsv0;
-	__le32 i_type;			/* user ID，不使用，用作文件类型字段 */
-	__le32 i_nlink;			/* group ID，不使用，用作硬链接计数字段 */
-    __le32 i_atime_nsec;		/* access time in nano scale */
+	__le32 i_type;			/* user ID，不使用，用作文件类型字段(used) */
+	__le32 i_nlink;			/* group ID，不使用，用作硬链接计数字段(used) */
+    __le32 i_atime_nsec;		/* access time in nano scale(used) */
 	__le32 i_ctime_nsec;		/* change time in nano scale */
-	__le32 i_mtime_nsec;		/* modification time in nano scale */
-	__le64 i_size;			/* file size in bytes */
+	__le32 i_mtime_nsec;		/* modification time in nano scale(used) */
+	__le64 i_size;			/* file size in bytes(used) */
 	__le64 i_blocks;		/* file size in blocks */
-	__le64 i_atime;			/* access time */
+	__le64 i_atime;			/* access time(used) */
 	__le64 i_ctime;			/* change time */
-	__le64 i_mtime;			/* modification time */
+	__le64 i_mtime;			/* modification time(used) */
 	__le32 i_current_depth;	/* only for directory depth */
 	__le32 i_pino;			/* parent inode number */
 	__le32 i_namelen;		/* file name length */

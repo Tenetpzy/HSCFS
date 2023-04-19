@@ -12,12 +12,24 @@ class file;
 class opened_file
 {
 public:
-    opened_file(uint32_t flags, uint32_t mode, file *file)
+
+    /* 构造opened_file，不关联file结构 */
+    opened_file(uint32_t flags)
     {
         this->flags = flags;
-        this->mode = mode;
         pos = 0;
-        this->file = file;
+    }
+
+    opened_file(uint32_t flags, const file_handle &file_)
+        : file(file_) 
+    {
+        this->flags = flags;
+        pos = 0;
+    }
+
+    void relate_file(const file_handle &file_)
+    {
+        file = file_;
     }
 
     /* 读文件 */
@@ -28,7 +40,6 @@ public:
 
 private:
     uint32_t flags;  // 打开文件时的flags
-    uint32_t mode;  // 打开文件的mode
     uint64_t pos;  // 当前文件读写位置
 
     /* 
@@ -36,7 +47,7 @@ private:
      * opened_file对象析构需要上层主动调用close，
      * 且close时需要加fs_meta_lock，为避免死锁，此处不使用智能指针自动管理
      */
-    file* file;
+    file_handle file;
     std::mutex pos_lock;  // 保护pos的锁
 };
 

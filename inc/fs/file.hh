@@ -20,9 +20,15 @@ public:
     /* 构造后，元数据信息(size、atime、mtime、nlink、is_dirty无效，通过read_meta_data读上来) */
     file(uint32_t ino, file_system_manager *fs_manager);
     ~file();
+
+    /*
+     * 截断文件，只剩前remain_block_num个block
+     * 调用者需要持有fs_meta_lock
+     */
+    void truncate(size_t remain_block_num);
     /* to do */
 
-protected:
+private:
     uint32_t ino;  // inode号
 
     uint64_t size;  // 当前文件大小（字节数）
@@ -52,7 +58,17 @@ protected:
 
     std::unique_ptr<page_cache> page_cache_;
 
+private:
+
+    /* 
+     * 读取元数据到对象中，将is_dirty置位false
+     * 调用此方法前，file内元数据和dirty标志都是无效的
+     * 调用者需持有fs_meta_lock
+     */
+    void read_meta();
+
     friend class file_obj_cache;
+    friend class file_cache_helper;
 };
 
 /*
@@ -63,6 +79,12 @@ class file_obj_cache;
 class file_handle
 {
 public:
+    file_handle() noexcept
+    {
+        entry = nullptr;
+        cache = nullptr;
+    }
+
     file_handle(file *entry, file_obj_cache *cache) noexcept
     {
         this->entry = entry;
@@ -151,6 +173,26 @@ private:
     void do_relpace();
 
     friend class file_handle;
+};
+
+class file_cache_helper
+{
+public:
+    file_cache_helper(file_obj_cache *file_cache)
+    {
+        this->file_cache = file_cache;
+    }
+
+    /*
+     * 获得inode对应的file对象
+     * 调用者应确保inode合法
+     * 调用者需持有fs_meta_lock 
+     */
+    file_handle get_file_obj(uint32_t ino);
+
+private:
+    file_obj_cache *file_cache;
+
 };
 
 } // namespace hscfs

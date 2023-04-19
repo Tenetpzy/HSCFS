@@ -5,7 +5,6 @@
 #include "utils/hscfs_exceptions.hh"
 #include "utils/hscfs_log.h"
 #include "ssd/path_lookup.hh"
-#include "path_utils.hh"
 
 namespace hscfs {
 
