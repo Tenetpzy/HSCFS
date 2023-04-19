@@ -74,16 +74,18 @@ int open(const char *pathname, int flags)
         }
 
         /* 此时目标文件一定存在，获得目标文件的file对象 */
-        file_handle file = file_cache_helper(fs_manager->get_file_obj_cache()).get_file_obj(target_dentry->get_ino());
+        file_handle file = file_cache_helper(fs_manager->get_file_obj_cache())
+            .get_file_obj(target_dentry->get_ino(), target_dentry);
 
         /* 如果带有O_TRUNC标志，则清空文件内容 */
         if (flags | O_TRUNC)
             file->truncate(0);
 
-        /* 分配fd和opened_file结构，此时opened_file未与file对象关联 */
+        /* 分配fd和opened_file结构 */
         auto p_opened_file = std::make_shared<opened_file>(flags, file);
         fd_array *fds = fs_manager->get_fd_array();
         int fd = fds->alloc_fd(p_opened_file);
+        
         return fd;
     } 
     catch (const std::exception &e) 

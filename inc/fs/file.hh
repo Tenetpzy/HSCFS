@@ -18,7 +18,7 @@ class file
 public:
 
     /* 构造后，元数据信息(size、atime、mtime、nlink、is_dirty无效，通过read_meta_data读上来) */
-    file(uint32_t ino, file_system_manager *fs_manager);
+    file(uint32_t ino, const dentry_handle &dentry, file_system_manager *fs_manager);
     ~file();
 
     /*
@@ -41,7 +41,11 @@ private:
     
     file_system_manager *fs_manager;
 
-    uint32_t nlink;  // 硬连接数，访问时加fs_meta_lock
+    /*
+     * 硬连接数，访问时加fs_meta_lock
+     * close时，应当检查该字段。如果为0，且ref_count也为0，需要删除文件，修改目录项的状态为已删除且未引用 
+     */
+    uint32_t nlink;
 
     /* 
      * 引用计数，访问时加fs_meta_lock
@@ -50,8 +54,11 @@ private:
      */
     uint32_t ref_count;
 
+    /* 当前文件对应的目录项 */
+    dentry_handle dentry;
+
     /* 
-     * 对文件操作的锁。对generic_file进行任何操作前，必须获取该锁的共享/独占
+     * 对文件操作的锁。对file进行任何操作前，必须获取该锁的共享/独占
      * 此锁的层级在file_mata_lock上。只在需要修改file中元数据时获取file_meta_lock
      */
     rwlock_t file_op_lock;
@@ -160,7 +167,7 @@ public:
         cur_size = 0;
     }
 
-    file_handle add(uint32_t ino);
+    file_handle add(uint32_t ino, const dentry_handle &dentry);
     file_handle get(uint32_t ino);
 
 private:
@@ -185,10 +192,11 @@ public:
 
     /*
      * 获得inode对应的file对象
-     * 调用者应确保inode合法
+     * 参数为file对象的ino，该inode对应的dentry
+     * 调用者应确保ino和dentry合法
      * 调用者需持有fs_meta_lock 
      */
-    file_handle get_file_obj(uint32_t ino);
+    file_handle get_file_obj(uint32_t ino, const dentry_handle &dentry);
 
 private:
     file_obj_cache *file_cache;

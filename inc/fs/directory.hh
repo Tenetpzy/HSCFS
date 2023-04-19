@@ -20,7 +20,7 @@ public:
     /*
      * 创建一个文件，文件名为name，文件类型为type
      * 将为新文件分配inode，创建inode block并加入node block缓存
-     * 返回：<新文件的inode号，新文件的目录项在目录文件的块号，目录项在块内的slot号>
+     * 返回新文件的目录项
      * 调用者需持有fs_meta_lock 
      */
     dentry_handle create(const std::string &name, uint8_t type);

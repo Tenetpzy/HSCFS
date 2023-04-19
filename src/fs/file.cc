@@ -7,11 +7,10 @@
 #include "utils/hscfs_exceptions.hh"
 #include "utils/hscfs_log.h"
 #include "utils/lock_guards.hh"
-#include "file.hh"
 
 namespace hscfs {
 
-file::file(uint32_t ino, file_system_manager *fs_manager)
+file::file(uint32_t ino, const dentry_handle &dentry, file_system_manager *fs_manager)
 {
     this->ino = ino;
     this->fs_manager = fs_manager;
@@ -28,6 +27,7 @@ file::file(uint32_t ino, file_system_manager *fs_manager)
     }
     page_cache_.reset(new page_cache(fs_manager->get_page_cache_size()));
     ref_count = 0;
+    this->dentry = dentry;
 }
 
 file::~file()
@@ -73,9 +73,9 @@ void file::read_meta()
     }
 }
 
-file_handle file_obj_cache::add(uint32_t ino)
+file_handle file_obj_cache::add(uint32_t ino, const dentry_handle &dentry)
 {
-    auto p_entry = std::make_unique<file>(ino, fs_manager);
+    auto p_entry = std::make_unique<file>(ino, dentry, fs_manager);
     assert(cache_manager.get(ino) == nullptr);
     file *raw_p = p_entry.get();
     cache_manager.add(ino, p_entry);
@@ -155,7 +155,7 @@ void file_handle::do_subref()
         cache->sub_refcount(entry);
 }
 
-file_handle file_cache_helper::get_file_obj(uint32_t ino)
+file_handle file_cache_helper::get_file_obj(uint32_t ino, const dentry_handle &dentry)
 {
     file_handle target_file = file_cache->get(ino);
 
@@ -166,7 +166,7 @@ file_handle file_cache_helper::get_file_obj(uint32_t ino)
      */
     if (target_file.is_empty())
     {
-        target_file = file_cache->add(ino);
+        target_file = file_cache->add(ino, dentry);
         target_file->read_meta();
     }
 

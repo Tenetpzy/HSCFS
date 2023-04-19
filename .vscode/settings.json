@@ -82,7 +82,16 @@
         "future": "cpp",
         "codecvt": "cpp",
         "filesystem": "cpp",
-        "typeindex": "cpp"
+        "typeindex": "cpp",
+        "cassert": "cpp",
+        "cerrno": "cpp",
+        "cfloat": "cpp",
+        "climits": "cpp",
+        "ios": "cpp",
+        "locale": "cpp",
+        "queue": "cpp",
+        "cstdbool": "cpp",
+        "random": "cpp"
     },
     "C_Cpp.intelliSenseEngineFallback": "enabled",
     "VSCodeCounter.languages": {

@@ -70,6 +70,16 @@ public:
     /* 得到文件类型。若为UNKNOWN，则通过读inode page获取 */
     uint8_t get_type();
 
+    dentry_state get_state() const noexcept
+    {
+        return state;
+    }
+
+    void set_state(dentry_state sta)
+    {
+        state = sta;
+    }
+
 private:
     dentry_key key;
     uint32_t ino;  // 目录项的inode
