@@ -27,7 +27,7 @@ public:
     /* 构造SSD路径解析命令 */
     void construct_task(const path_parser &path_parser, uint32_t start_ino, path_dentry_iterator start_itr);
 
-    /* 进行路径解析，将结果保存到内部buf中 */
+    /* 进行路径解析，将结果保存到内部buf中。同步，等待命令执行完成后返回 */
     void do_pathlookup();
 
     /* 返回结果中ino表的首元素地址 */
@@ -37,8 +37,8 @@ public:
 
 private:
     comm_dev *dev;
-    std::unique_ptr<path_lookup_task, dma_buf_deletor<path_lookup_task>> p_task_buf;
-    std::unique_ptr<path_lookup_result, dma_buf_deletor<path_lookup_result>> p_task_res_buf;
+    std::unique_ptr<path_lookup_task, dma_buf_deletor> p_task_buf;
+    std::unique_ptr<path_lookup_result, dma_buf_deletor> p_task_res_buf;
 };
 
 #ifdef CONFIG_PRINT_DEBUG_INFO
@@ -235,6 +235,8 @@ dentry_handle path_lookup_processor::do_path_lookup()
          */
         if (component_dentry.is_empty())
         {
+            HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: dentry [%u:%s] miss, prepare searching in SSD.", 
+                cur_dentry->get_ino(), component_name.c_str());
             ssd_path_lookup_controller ctrlr(fs_manager->get_device());
             ctrlr.construct_task(p_parser, cur_dentry->get_ino(), itr);
             ctrlr.do_pathlookup();

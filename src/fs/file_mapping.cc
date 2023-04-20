@@ -5,6 +5,10 @@
 #include "communication/memory.h"
 #include "communication/comm_api.h"
 #include "utils/hscfs_log.h"
+#include "utils/hscfs_exceptions.hh"
+#include "utils/dma_buffer_deletor.hh"
+
+#include <memory>
 
 struct comm_dev;
 
@@ -19,11 +23,69 @@ public:
 		dev = device;
 	}
 
+	/* 构造命令和返回值的buffer */
+	void construct_task(uint32_t ino, uint32_t nid_to_start, uint32_t blkno, uint32_t level_num);
+
+	/* 发送filemapping查询命令，将结果保存到内部buf中。同步，等待命令执行完成后返回 */
+	void do_filemapping_search();
+
+	hscfs_node* get_start_addr_of_result() const noexcept
+	{
+		return p_task_res_buf.get();
+	}
 
 private:
 	comm_dev *dev;
+	std::unique_ptr<filemapping_search_task, dma_buf_deletor> p_task_buf;
+	std::unique_ptr<hscfs_node, dma_buf_deletor> p_task_res_buf;
+	uint32_t level_num;
 };
 
+#ifdef CONFIG_PRINT_DEBUG_INFO
+void print_filemapping_search_task(filemapping_search_task *task);
+void print_filemapping_search_result(hscfs_node *node, uint32_t level_num);
+#endif
+
+void ssd_file_mapping_search_controller::construct_task(uint32_t ino, uint32_t nid_to_start, uint32_t blkno, 
+	uint32_t level_num)
+{
+	void *buf = comm_alloc_dma_mem(sizeof(filemapping_search_task));
+	if (buf == nullptr)
+		throw alloc_error("ssd_file_mapping_search_controller: alloc task memory failed.");
+	p_task_buf.reset(static_cast<filemapping_search_task*>(buf));
+
+	/* 默认返回每一级 */
+	buf = comm_alloc_dma_mem(level_num * sizeof(hscfs_node));
+	if (buf == nullptr)
+		throw alloc_error("ssd_file_mapping_search_controller: alloc task result memory failed.");
+	p_task_res_buf.reset(static_cast<hscfs_node*>(buf));
+
+	p_task_buf->ino = ino;
+	p_task_buf->nid_to_start = nid_to_start;
+	p_task_buf->file_blk_offset = blkno;
+	p_task_buf->return_all_Level = 1;
+
+	this->level_num = level_num;
+
+	#ifdef CONFIG_PRINT_DEBUG_INFO
+	print_filemapping_search_task(p_task_buf.get());
+	#endif
+}
+
+void ssd_file_mapping_search_controller::do_filemapping_search()
+{
+	assert(p_task_buf != nullptr && p_task_res_buf != nullptr);
+	int ret = comm_submit_sync_filemapping_search_request(dev, p_task_buf.get(), p_task_res_buf.get(), 
+		level_num * sizeof(hscfs_node));
+	if (ret != 0)
+		throw io_error("ssd_file_mapping_search_controller: send file mapping search task failed.");
+
+	#ifdef CONFIG_PRINT_DEBUG_INFO
+	print_filemapping_search_result(p_task_res_buf.get(), level_num);
+	#endif
+}
+
+/*********************************************************************/
 
 /* 
  * file mapping查询的辅助函数
@@ -112,17 +174,27 @@ uint32_t file_mapping_searcher::get_lpa_of_block(uint32_t ino, uint32_t blkno)
     int level = get_node_path(blkno, offset, noffset);
     assert(level != -1);
     node_block_cache *node_cache = fs_manager->get_node_cache();
-    uint32_t cur_nid = ino;
 
     /* 依次读取搜索树路径上的每个node block，直到找到目标lpa */
+	uint32_t cur_nid = ino;
+	node_block_cache_entry_handle parent_handle;
     for (int i = 0; i <= level; ++i)
     {
-        node_block_cache_entry_handle node_handle = node_cache->get(cur_nid);
+        node_block_cache_entry_handle cur_handle = node_cache->get(cur_nid);
 
         /* 当前node block缓存不命中，交给SSD进行查询 */
-        if (node_handle.is_empty())
+        if (cur_handle.is_empty())
         {
+			HSCFS_LOG(HSCFS_LOG_INFO, "file_mapping_searcher:"
+				"node block[file(inode: %u), level %d, nid %u] miss. Prepare searching in SSD", 
+				ino, i, cur_nid);
+			ssd_file_mapping_search_controller ctrlr(fs_manager->get_device());
+			ctrlr.construct_task(ino, cur_nid, blkno, level - i);
+			ctrlr.do_filemapping_search();
 
+			/* 将结果插入node cache */
+			hscfs_node *p_node = ctrlr.get_start_addr_of_result();
+			
         }
     }
 }

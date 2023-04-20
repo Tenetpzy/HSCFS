@@ -214,8 +214,34 @@ void print_path_lookup_task(path_lookup_task *task)
 
 /***********************************************************/
 
+/* filemapping search 打印 */
+/***********************************************************/
 
-/* inode 元数据打印 */
+void print_filemapping_search_task(filemapping_search_task *task)
+{
+    HSCFS_LOG(HSCFS_LOG_INFO, "send filemapping search task:\n");
+    fmt::println(std::cerr,
+        "inode: {}\n"
+        "start nid: {}\n"
+        "file block offset: {}\n"
+        "is return all level: {}\n",
+        task->ino, task->nid_to_start, task->file_blk_offset, static_cast<bool>(task->return_all_Level)
+    );
+}
+
+void print_node_footer(hscfs_node *node);
+
+void print_filemapping_search_result(hscfs_node *node, uint32_t level_num)
+{
+    HSCFS_LOG(HSCFS_LOG_INFO, "result of SSD filemapping search: level_num = %u", level_num);
+    for (uint32_t i = 0; i < level_num; ++i, ++node)
+        print_node_footer(node);
+    fmt::print(std::cerr, "\n");
+}
+
+/************************************************************/
+
+/* node数据打印 */
 /***********************************************************/
 
 void print_inode_meta(uint32_t ino, hscfs_inode *inode)
@@ -236,6 +262,13 @@ void print_inode_meta(uint32_t ino, hscfs_inode *inode)
         "modify time: {}\n",
         ino, inode->i_nlink, inode->i_size, atime_buf, mtime_buf
     );
+}
+
+void print_node_footer(hscfs_node *node)
+{
+    node_footer *footer = &node->footer;
+    fmt::println(std::cerr, "nid = {}, ino = {}, offset = {}", 
+        footer->nid, footer->ino, footer->offset);
 }
 
 /***********************************************************/
