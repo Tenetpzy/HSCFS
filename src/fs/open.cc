@@ -37,15 +37,8 @@ int do_open(const char *pathname, int flags)
         proc.set_rel_path(dir_dentry, file_name);
         dentry_handle target_dentry = proc.do_path_lookup();
 
-        /* 目标文件存在但不是普通文件，不能使用open打开 */
-        if (!target_dentry.is_empty() && target_dentry->get_type() != HSCFS_FT_REG_FILE)
-        {
-            errno = EISDIR;
-            return -1;
-        }
-
         /* 如果目标文件不存在，查看是否有O_CREATE标志 */
-        if (target_dentry.is_empty())
+        if (target_dentry.is_empty() || target_dentry->get_state() == dentry_state::deleted)
         {
             /* 如果有O_CREAT，则创建该文件 */
             if (flags | O_CREAT)
@@ -56,6 +49,24 @@ int do_open(const char *pathname, int flags)
             else
             {
                 errno = ENOENT;
+                return -1;
+            }
+        }
+
+        /* 如果目标文件存在，判断其它错误情况 */
+        else
+        {
+            /* 如果目标文件不是普通文件，返回错误 */
+            if (target_dentry->get_type() != HSCFS_FT_REG_FILE)
+            {
+                errno = EISDIR;
+                return -1;
+            }
+
+            /* 如果目标文件已被删除，但仍然被fd引用，则不允许打开或创建该文件 */
+            if (target_dentry->get_state() == dentry_state::deleted_inode_valid)
+            {
+                errno = EACCES;
                 return -1;
             }
         }
@@ -90,7 +101,8 @@ int do_open(const char *pathname, int flags)
  * EINVAL：pathname或flags不合法
  * ENOENT：路径中某个目录项不存在
  * EISDIR：试图打开目录文件
- * ENOTRECOVERABLE：文件系统出现内部错误，无法恢复状态，接下来应用程序对其它API的调用属于未定义行为
+ * EACCES：目标文件已经被删除，但此时系统中仍有引用，不允许再次打开或创建同名文件
+ * ENOTRECOVERABLE：文件系统出现内部错误，无法恢复正常状态
  */
 int open(const char *pathname, int flags)
 {

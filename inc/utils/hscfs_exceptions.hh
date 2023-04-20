@@ -41,7 +41,7 @@ class not_recoverable: public std::runtime_error
 {
 public:
     not_recoverable(): std::runtime_error("not recoverable.") {}
-}
+};
 
 /* 以上均为不可恢复异常 */
 /**************************************************************/

@@ -130,8 +130,10 @@ public:
 
     /*
      * 对set_abs_path中传入的path进行路径解析
-     * 返回最后一级目录下的dentry handle
+     * 返回最后一级目录项的dentry handle
      * 若某一级目录项不存在，则返回的handle的is_empty方法返回true
+     * 
+     * 调用者应判断最后一级目录项的状态，它有可能是被删除的
      */
     dentry_handle do_path_lookup();
 

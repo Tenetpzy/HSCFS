@@ -219,7 +219,21 @@ dentry_handle path_lookup_processor::do_path_lookup()
     {
         /* 如果当前目录项不是目录，则不再查找，返回不存在 */
         if (cur_dentry->get_type() != HSCFS_FT_DIR)
+        {
+            HSCFS_LOG(HSCFS_LOG_INFO,
+                "path lookup processor: half-way dentry [%u:%s] is not directory, path lookup terminated.",
+                cur_dentry->get_key().dir_ino, cur_dentry->get_key().name.c_str()
+            );
             return dentry_handle();
+        }
+        if (cur_dentry->get_state() != dentry_state::valid)
+        {
+            HSCFS_LOG(HSCFS_LOG_INFO,
+                "path lookup processor: half-way dentry [%u:%s] is deleted, path lookup terminated.",
+                cur_dentry->get_key().dir_ino, cur_dentry->get_key().name.c_str()
+            );
+            return dentry_handle();
+        }
 
         std::string component_name = itr.get();  // component_name为下一项的名称
         dentry_handle component_dentry = d_cache->get(cur_dentry->get_ino(), component_name);
@@ -246,7 +260,7 @@ dentry_handle path_lookup_processor::do_path_lookup()
                 /* 路径还没有搜索完，遇到了invalid_nid，则代表目录不存在，返回空handle */
                 if (*p_res_ino == INVALID_NID)
                 {
-                    HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: dentry [%u:%s] does not exist.", 
+                    HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: half-way dentry [%u:%s] does not exist.", 
                         cur_dentry->get_ino(), component_name.c_str());
                     return dentry_handle();
                 }

@@ -54,6 +54,7 @@ enum class dentry_state
 class dentry
 {
 public:
+    /* 构造后，状态置为valid，is_dirty置为false */
     dentry(uint32_t dir_ino, dentry *parent, uint32_t dentry_ino, const std::string &dentry_name, 
         file_system_manager *fs_manager);
 

@@ -161,6 +161,7 @@ public:
      * 
      * 调用add后，buffer的资源被移动到缓存项中，调用者若要使用buffer，应通过返回的handle获取buffer
      * parent_nid为索引树上的父node block，若此node为inode，则parent_nid应置为INVALID_NID
+     * 调用者应确保parent_nid在缓存中
      */
     node_block_cache_entry_handle add(block_buffer &&buffer, uint32_t nid, uint32_t parent_nid, uint32_t old_lpa)
     {
@@ -273,6 +274,7 @@ public:
     /* 
      * 调用时持有fs_meta_lock 
      * parent_nid为目标nid在索引树上的父node block。如果nid为inode block，则parent_nid应置为INVALID_NID
+     * 调用者应确保parent_nid在缓存中
      */
     node_block_cache_entry_handle get_node_entry(uint32_t nid, uint32_t parent_nid);
 
