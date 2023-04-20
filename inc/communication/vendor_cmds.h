@@ -23,7 +23,7 @@ typedef struct migrate_task migrate_task;
 struct path_lookup_task
 {
     u32 start_ino;   /*起始目录的ino*/
-    u32 pathlen;    /*路径字符串的长度*/
+    u32 pathlen;    /*路径字符串的长度，不含0结束符*/
     u32 depth;      /*路径的级数*/
     char path[0];   /*路径字符串，不含0结束符*/
 }__attribute__((packed));

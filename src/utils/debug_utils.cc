@@ -1,8 +1,10 @@
 #include <unordered_map>
 #include <iostream>
 #include <ctime>
+#include <string>
 
 #include "fmt/ostream.h"
+#include "communication/vendor_cmds.h"
 #include "journal/journal_type.h"
 #include "fs/path_utils.hh"
 #include "fs/fs.h"
@@ -196,20 +198,18 @@ void print_journal_block(const char *start)
 /* path lookup打印 */
 /***********************************************************/
 
-void print_path_lookup_task(const path_parser &path_parser, uint32_t start_ino, 
-    path_dentry_iterator start_itr, uint32_t depth)
+void print_path_lookup_task(path_lookup_task *task)
 {
+    char *p = reinterpret_cast<char*>(task) + sizeof(path_lookup_task);
+    std::string path(p, task->pathlen);
     HSCFS_LOG(HSCFS_LOG_INFO, "send path lookup task:\n");
-    fmt::println(std::cerr, "start inode: {}, depth: {}", start_ino, depth);
-    fmt::print(std::cerr, "target path: ");
-    for (uint32_t i = 0; i < depth; ++i, start_itr.next())
-    {
-        assert(start_itr != path_parser.end());
-        if (i)
-            fmt::print(std::cerr, "/");
-        fmt::print(std::cerr, "{}", start_itr.get());
-    }
-    fmt::print(std::cerr, "\n\n");
+    fmt::println(std::cerr, 
+        "start inode: {}\n"
+        "depth: {}\n"
+        "pathlen: {}\n"
+        "path: {}\n",
+        task->start_ino, task->depth, task->pathlen, path
+    );
 }
 
 /***********************************************************/

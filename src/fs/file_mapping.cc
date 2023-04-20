@@ -14,8 +14,11 @@ namespace hscfs {
 class ssd_file_mapping_search_controller
 {
 public:
-	ssd_file_mapping_search_controller(comm_dev *dev);
-	
+	ssd_file_mapping_search_controller(comm_dev *device)
+	{
+		dev = device;
+	}
+
 
 private:
 	comm_dev *dev;
