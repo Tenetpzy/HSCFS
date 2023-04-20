@@ -12,24 +12,11 @@
 
 namespace hscfs {
 
-/*
- * 打开一个文件，返回其fd
- * 
- * 若出错，返回-1，置errno为：
- * EINVAL：pathname或flags不合法
- * ENOENT：路径中某个目录项不存在
- * EISDIR：试图打开目录文件
- * ENOTRECOVERABLE：文件系统出现内部错误，无法恢复状态，接下来应用程序对其它API的调用属于未定义行为
- */
-int open(const char *pathname, int flags)
+int do_open(const char *pathname, int flags)
 {
-    try 
+    try
     {
         file_system_manager *fs_manager = file_system_manager::get_instance();
-
-        rwlock_guard lg1(fs_manager->get_fs_freeze_lock(), rwlock_guard::lock_type::rdlock);
-        std::lock_guard<std::mutex> lg2(fs_manager->get_fs_meta_lock());
-
         std::string abs_path = path_helper::extract_abs_path(pathname);
         std::string dir_path = path_helper::extract_dir_path(abs_path);
         std::string file_name = path_helper::extract_file_name(abs_path);
@@ -63,7 +50,7 @@ int open(const char *pathname, int flags)
             /* 如果有O_CREAT，则创建该文件 */
             if (flags | O_CREAT)
             {
-                directory dir_helper(dir_dentry->get_ino(), fs_manager);
+                directory dir_helper(dir_dentry, fs_manager);
                 target_dentry = dir_helper.create(file_name, HSCFS_FT_REG_FILE);
             }
             else
@@ -87,10 +74,38 @@ int open(const char *pathname, int flags)
         int fd = fds->alloc_fd(p_opened_file);
         
         return fd;
+    }
+    catch (std::exception &e)
+    {
+        int err = exception_handler(e).convert_to_errno(true);
+        errno = err;
+        return -1;
+    }
+}
+
+/*
+ * 打开一个文件，返回其fd
+ * 
+ * 若出错，返回-1，置errno为：
+ * EINVAL：pathname或flags不合法
+ * ENOENT：路径中某个目录项不存在
+ * EISDIR：试图打开目录文件
+ * ENOTRECOVERABLE：文件系统出现内部错误，无法恢复状态，接下来应用程序对其它API的调用属于未定义行为
+ */
+int open(const char *pathname, int flags)
+{
+    try 
+    {
+        file_system_manager *fs_manager = file_system_manager::get_instance();
+        rwlock_guard lg1(fs_manager->get_fs_freeze_lock(), rwlock_guard::lock_type::rdlock);
+        std::lock_guard<std::mutex> lg2(fs_manager->get_fs_meta_lock());
+        fs_manager->check_state();
+
+        return do_open(pathname, flags);
     } 
     catch (const std::exception &e) 
     {
-        errno = handle_exception(e);
+        errno = exception_handler(e).convert_to_errno();
         return -1;
     }
 }

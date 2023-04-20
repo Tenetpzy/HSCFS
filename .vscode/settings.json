@@ -91,7 +91,8 @@
         "locale": "cpp",
         "queue": "cpp",
         "cstdbool": "cpp",
-        "random": "cpp"
+        "random": "cpp",
+        "unordered_set": "cpp"
     },
     "C_Cpp.intelliSenseEngineFallback": "enabled",
     "VSCodeCounter.languages": {

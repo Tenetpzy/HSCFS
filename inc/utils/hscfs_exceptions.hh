@@ -37,11 +37,20 @@ public:
 
 class thread_interrupted {};
 
+class not_recoverable: public std::runtime_error
+{
+public:
+    not_recoverable(): std::runtime_error("not recoverable.") {}
+}
 
 /* 以上均为不可恢复异常 */
 /**************************************************************/
 
 /* 用户调用API时输入的路径字符串不合法 */
-class user_path_invalid: public std::exception {};
+class user_path_invalid: public std::logic_error 
+{
+public:
+    user_path_invalid(const char *s): std::logic_error(s) {}
+};
 
 }  // namespace hscfs

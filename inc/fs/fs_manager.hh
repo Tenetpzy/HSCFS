@@ -53,6 +53,12 @@ public:
     dentry_handle get_root_dentry() const noexcept;
     fd_array* get_fd_array() const noexcept;
 
+    /* 置为不可恢复状态 */
+    void set_unrecoverable() noexcept;
+
+    /* 若处于不可恢复状态，则抛出not_recoverable异常 */
+    void check_state() const noexcept;
+
 private:
 
     std::mutex fs_meta_lock;

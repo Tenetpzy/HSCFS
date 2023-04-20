@@ -46,15 +46,15 @@ std::string path_helper::extract_abs_path(const char *user_path)
     
     static const std::string prefix(CONFIG_PATH_PREFIX);
     if (!is_prefix_valid(path, prefix))  // 检查是否有合法前缀
-        throw user_path_invalid();
+        throw user_path_invalid("invalid abs path.");
     if (path.length() <= prefix.length() || path[prefix.length()] != '/')  // 检查前缀后是否跟有'/'
-        throw user_path_invalid();
+        throw user_path_invalid("invalid abs path.");
     return path.substr(prefix.length());    
 
     #else
 
     if (path.length() == 0 || path[0] != '/')
-        throw user_path_invalid();
+        throw user_path_invalid("invalid abs path.");
     return path;
 
     #endif
@@ -91,6 +91,12 @@ dentry_handle path_lookup_processor::do_path_lookup()
     dentry_cache *d_cache = fs_manager->get_dentry_cache();
     dentry_handle cur_dentry = start_dentry;  // cur_dentry为当前搜索到的目录项
 
+    HSCFS_LOG(HSCFS_LOG_INFO, 
+        "path lookup processor: lookup args:\n"
+        "start inode: %u, path: %s",
+        start_dentry->get_ino(), path.c_str()
+    );
+
     for (auto itr = p_parser.begin(), end_itr = p_parser.end(); itr != end_itr; itr.next())
     {
         /* 如果当前目录项不是目录，则不再查找，返回不存在 */
@@ -100,7 +106,13 @@ dentry_handle path_lookup_processor::do_path_lookup()
         std::string component_name = itr.get();  // component_name为下一项的名称
         dentry_handle component_dentry = d_cache->get(cur_dentry->get_ino(), component_name);
 
-        /* 如果下一个目录项在缓存中不命中 */
+        /* 
+         * 如果下一个目录项在缓存中不命中，交给SSD查找
+         * 
+         * 即使当前目录文件是脏的，也能交给SSD
+         * 因为没写回SSD的目录项，由于淘汰保护，不会发生不命中
+         * 发生不命中的都是目录中原有的目录项，而这部分在SSD侧仍然能正确访问
+         */
         if (component_dentry.is_empty())
         {
             ssd_path_lookup_controller ctrlr(fs_manager->get_device());
