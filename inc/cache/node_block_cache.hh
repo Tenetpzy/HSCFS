@@ -269,7 +269,7 @@ class file_system_manager;
 class node_cache_helper
 {
 public:
-    node_cache_helper(const file_system_manager *fs_manager) noexcept;
+    node_cache_helper(file_system_manager *fs_manager) noexcept;
 
     /* 
      * 调用时持有fs_meta_lock 
@@ -283,8 +283,7 @@ private:
     comm_dev *dev;
     SIT_NAT_cache *nat_cache;
     node_block_cache *node_cache;
-    uint32_t nat_start_lpa;
-    uint32_t nat_segment_cnt;
+    file_system_manager *fs_manager;
 };
 
 }  // namespace hscfs

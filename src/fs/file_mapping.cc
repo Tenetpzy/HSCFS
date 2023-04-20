@@ -1,6 +1,7 @@
 #include "fs/file_mapping.hh"
 #include "fs/fs_manager.hh"
 #include "fs/fs.h"
+#include "fs/NAT_utils.hh"
 #include "cache/node_block_cache.hh"
 #include "communication/memory.h"
 #include "communication/comm_api.h"
@@ -177,7 +178,7 @@ uint32_t file_mapping_searcher::get_lpa_of_block(uint32_t ino, uint32_t blkno)
 
     /* 依次读取搜索树路径上的每个node block，直到找到目标lpa */
 	uint32_t cur_nid = ino;
-	node_block_cache_entry_handle parent_handle;
+	uint32_t parent_nid = INVALID_NID;
     for (int i = 0; i <= level; ++i)
     {
         node_block_cache_entry_handle cur_handle = node_cache->get(cur_nid);
@@ -188,13 +189,22 @@ uint32_t file_mapping_searcher::get_lpa_of_block(uint32_t ino, uint32_t blkno)
 			HSCFS_LOG(HSCFS_LOG_INFO, "file_mapping_searcher:"
 				"node block[file(inode: %u), level %d, nid %u] miss. Prepare searching in SSD", 
 				ino, i, cur_nid);
+			int ssd_level = level - i + 1;
 			ssd_file_mapping_search_controller ctrlr(fs_manager->get_device());
-			ctrlr.construct_task(ino, cur_nid, blkno, level - i);
+			ctrlr.construct_task(ino, cur_nid, blkno, ssd_level);
 			ctrlr.do_filemapping_search();
 
 			/* 将结果插入node cache */
 			hscfs_node *p_node = ctrlr.get_start_addr_of_result();
-			
+			uint32_t parent = parent_nid;
+			for (int i = 0; i < ssd_level; ++i)
+			{
+				uint32_t nid = p_node->footer.nid;
+
+				block_buffer buffer;
+				buffer.copy_content_from_buf(reinterpret_cast<char*>(p_node));
+				/* to do */
+			}
         }
     }
 }

@@ -101,8 +101,7 @@ node_cache_helper::node_cache_helper(const file_system_manager *fs_manager) noex
     dev = fs_manager->get_device();
     nat_cache = fs_manager->get_nat_cache();
     node_cache = fs_manager->get_node_cache();
-    nat_start_lpa = fs_manager->get_super_cache()->nat_blkaddr;
-    nat_segment_cnt = fs_manager->get_super_cache()->segment_count_nat;
+    this->fs_manager = fs_manager;
 }
 
 node_block_cache_entry_handle node_cache_helper::get_node_entry(uint32_t nid, uint32_t parent_nid)
@@ -111,15 +110,7 @@ node_block_cache_entry_handle node_cache_helper::get_node_entry(uint32_t nid, ui
     if (node_handle.is_empty())
     {
         /* 从NAT表中得到nid block的lpa */
-        auto pos = nat_lpa_mapping(nat_start_lpa, nat_segment_cnt).get_nid_lpa_in_nat(nid);
-        uint32_t nat_block_lpa = pos.first;
-        uint32_t nat_entry_idx = pos.second;
-        HSCFS_LOG(HSCFS_LOG_INFO, "nat entry pos of nid = %u: lpa = %u, idx in lpa = %u", 
-            nid, nat_block_lpa, nat_entry_idx);
-        SIT_NAT_cache_entry_handle nat_handle = nat_cache->get(nat_block_lpa);
-        hscfs_nat_entry nat_entry = nat_handle.get_nat_block_ptr()->entries[nat_entry_idx];
-        uint32_t nid_lpa = nat_entry.block_addr;
-        HSCFS_LOG(HSCFS_LOG_INFO, "lpa of nid: %u.", nid_lpa);
+        uint32_t pos = nat_lpa_mapping(fs_manager).get_lpa_of_nid(nid);
 
         block_buffer buf;
         try {
