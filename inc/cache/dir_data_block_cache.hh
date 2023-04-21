@@ -66,6 +66,12 @@ class dir_data_block_cache;
 class dir_data_block_handle
 {
 public:
+    dir_data_block_handle() noexcept
+    {
+        entry = nullptr;
+        cache = nullptr;
+    }
+
     dir_data_block_handle(dir_data_block_entry *entry, dir_data_block_cache *cache) noexcept
     {
         this->entry = entry;
@@ -227,4 +233,25 @@ private:
     friend class dir_data_block_handle;
 };
 
-}
+class file_system_manager;
+
+class dir_data_cache_helper
+{
+public:
+    dir_data_cache_helper(file_system_manager *fs_manager)
+    {
+        this->fs_manager = fs_manager;
+    }
+
+    /*
+     * 获取目录文件dir_ino的第blkno个块
+     * 如果该块是文件空洞，返回的handle的is_empty返回true
+     * 调用者需保证dir_ino和blkno合法 
+     */
+    dir_data_block_handle get_dir_data_block(uint32_t dir_ino, uint32_t blkno);
+
+private:
+    file_system_manager *fs_manager;
+};
+
+}  // namespace hscfs

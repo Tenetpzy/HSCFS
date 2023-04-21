@@ -117,7 +117,7 @@ node_block_cache_entry_handle node_cache_helper::get_node_entry(uint32_t nid, ui
             buf.read_from_lpa(dev, nid_lpa);
         }
         catch (const io_error &e) {
-            HSCFS_LOG(HSCFS_LOG_ERROR, "node block fetcher: read lpa %u failed.", nid_lpa);
+            HSCFS_LOG(HSCFS_LOG_ERROR, "node cache helper: read lpa %u failed.", nid_lpa);
             throw;
         }
         node_handle = node_cache->add(std::move(buf), nid, parent_nid, nid_lpa);

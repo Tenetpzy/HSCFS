@@ -1,6 +1,9 @@
 #include "cache/dir_data_block_cache.hh"
 #include "utils/hscfs_log.h"
-#include "dir_data_block_cache.hh"
+#include "utils/hscfs_exceptions.hh"
+#include "fs/fs_manager.hh"
+#include "fs/file_mapping.hh"
+#include "fs/fs.h"
 
 namespace hscfs {
 
@@ -69,6 +72,37 @@ dir_data_block_entry::~dir_data_block_entry()
         HSCFS_LOG(HSCFS_LOG_WARNING, "dir data block has non-zero refcount while destructed.");
     if (state == dir_data_block_entry_state::dirty)
         HSCFS_LOG(HSCFS_LOG_WARNING, "dir data block is still dirty while destructed.");
+}
+
+dir_data_block_handle dir_data_cache_helper::get_dir_data_block(uint32_t dir_ino, uint32_t blkno)
+{
+    dir_data_block_cache *dir_data_cache = fs_manager->get_dir_data_cache();
+    dir_data_block_handle handle = dir_data_cache->get(dir_ino, blkno);
+    
+    /* dir data block缓存不命中，通过file mapping查找地址并读取 */
+    if (handle.is_empty())
+    {
+        file_mapping_searcher searcher(fs_manager);
+        block_addr_info addr = searcher.get_addr_of_block(dir_ino, blkno);
+
+        /* 如果是文件空洞，直接返回 */
+        if (addr.lpa == INVALID_LPA)
+            return dir_data_block_handle();
+
+        block_buffer buffer;
+        try
+        {
+            buffer.read_from_lpa(fs_manager->get_device(), addr.lpa);
+        }
+        catch (const io_error &e)
+        {
+            HSCFS_LOG(HSCFS_LOG_ERROR, "dir data block helper: read lpa %u failed.", addr.lpa);
+            throw;
+        }
+        handle = dir_data_cache->add(dir_ino, blkno, addr.lpa, addr.nid, addr.nid_off, std::move(buffer));
+    }
+
+    return handle;
 }
 
 } // namespace hscfs

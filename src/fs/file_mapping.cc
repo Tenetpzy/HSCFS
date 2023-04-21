@@ -10,7 +10,6 @@
 #include "utils/dma_buffer_deletor.hh"
 
 #include <memory>
-#include "file_mapping.hh"
 
 struct comm_dev;
 
@@ -91,10 +90,12 @@ void ssd_file_mapping_search_controller::do_filemapping_search()
 
 /* 
  * file mapping查询的辅助函数
+
  * block：带查找的块号
+ * 
  * offset: block在索引树路径的每一级索引块中的偏移：
- * 对于inode，offset是相对于i_attr起始地址的数组下标
- * 对于indirect和direct node，offset是相对于块首地址的nid/addr数组下标
+ * 对于inode，offset是i_attr数组下标
+ * 对于indirect和direct node，offset是nid/addr数组下标
  * 
  * noffset：索引树路径的每一个块的树上逻辑编号
  * 
@@ -195,7 +196,7 @@ uint32_t file_mapping_searcher::get_lpa(hscfs_node *node, uint32_t offset, int l
 	}
 }
 
-uint32_t file_mapping_searcher::get_lpa_of_block(uint32_t ino, uint32_t blkno)
+block_addr_info file_mapping_searcher::get_addr_of_block(uint32_t ino, uint32_t blkno)
 {
     uint32_t offset[4], noffset[4];
     int level = get_node_path(blkno, offset, noffset);
@@ -275,7 +276,11 @@ uint32_t file_mapping_searcher::get_lpa_of_block(uint32_t ino, uint32_t blkno)
 	HSCFS_LOG(HSCFS_LOG_INFO, "file mapping searcher: reach search path end. nid: %u, level: %u, " 
 		"direct pinter offset: %u, target lpa: %u.", cur_nid, level, offset[level], target_lpa);
 	
-	return target_lpa;
+	block_addr_info ret;
+	ret.lpa = target_lpa;
+	ret.nid = cur_nid;
+	ret.nid_off = offset[level];
+	return ret;
 }
 
 } // namespace hscfs

@@ -14,6 +14,7 @@ class node_block_cache;
 class SIT_NAT_cache;
 class file_obj_cache;
 class fd_array;
+class dir_data_block_cache;
 
 /*
  * super_manager, SIT cache, NAT cache等对象的组合容器
@@ -41,6 +42,7 @@ public:
     }
     dentry_cache* get_dentry_cache() const noexcept;
     node_block_cache* get_node_cache() const noexcept;
+    dir_data_block_cache* get_dir_data_cache() const noexcept;
     SIT_NAT_cache* get_nat_cache() const noexcept;
     file_obj_cache* get_file_obj_cache() const noexcept;
 
