@@ -96,7 +96,7 @@ hscfs::node_block_cache_entry::~node_block_cache_entry()
     }
 }
 
-node_cache_helper::node_cache_helper(const file_system_manager *fs_manager) noexcept
+node_cache_helper::node_cache_helper(file_system_manager *fs_manager) noexcept
 {
     dev = fs_manager->get_device();
     nat_cache = fs_manager->get_nat_cache();
@@ -110,7 +110,7 @@ node_block_cache_entry_handle node_cache_helper::get_node_entry(uint32_t nid, ui
     if (node_handle.is_empty())
     {
         /* 从NAT表中得到nid block的lpa */
-        uint32_t pos = nat_lpa_mapping(fs_manager).get_lpa_of_nid(nid);
+        uint32_t nid_lpa = nat_lpa_mapping(fs_manager).get_lpa_of_nid(nid);
 
         block_buffer buf;
         try {

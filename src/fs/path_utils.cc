@@ -24,7 +24,7 @@ public:
         dev = device;
     }
 
-    /* 构造SSD路径解析命令 */
+    /* 构造SSD路径解析命令，调用者必须保证start_ino对应文件存在 */
     void construct_task(const path_parser &path_parser, uint32_t start_ino, path_dentry_iterator start_itr);
 
     /* 进行路径解析，将结果保存到内部buf中。同步，等待命令执行完成后返回 */
@@ -33,12 +33,22 @@ public:
     /* 返回结果中ino表的首元素地址 */
     uint32_t* get_first_addr_of_result_inos() const noexcept;
     
-    /* to do */
+    uint32_t get_result_depth() const noexcept
+    {
+        return depth_;
+    }
+
+    /*
+     * 返回结果中目录项位置信息
+     * 如果返回的信息有效(is_valid字段为true)，则调用方可根据目标是否存在，判断该位置信息是存储位置还是插入位置
+     */
+    dentry_store_pos get_result_pos() const noexcept;
 
 private:
     comm_dev *dev;
     std::unique_ptr<path_lookup_task, dma_buf_deletor> p_task_buf;
     std::unique_ptr<path_lookup_result, dma_buf_deletor> p_task_res_buf;
+    uint32_t depth_;
 };
 
 #ifdef CONFIG_PRINT_DEBUG_INFO
@@ -60,6 +70,7 @@ void ssd_path_lookup_controller::construct_task(const path_parser &path_parser, 
     }
     assert(depth != 0);
     assert(total_dentry_len != 0);
+    this->depth_ = depth;
 
     /* 分配task空间，大小：path_lookup_task头部长度 + 路径字符串长度(所有目录项长度 + (depth-1)个'/'字符) */
     size_t path_len = total_dentry_len + depth - 1;
@@ -107,7 +118,39 @@ void ssd_path_lookup_controller::do_pathlookup()
 
 uint32_t *ssd_path_lookup_controller::get_first_addr_of_result_inos() const noexcept
 {
-    return &(reinterpret_cast<path_lookup_result*>(p_task_res_buf.get())->path_inos[0]);
+    return &(p_task_res_buf.get()->path_inos[0]);
+}
+
+dentry_store_pos ssd_path_lookup_controller::get_result_pos() const noexcept
+{
+    dentry_store_pos pos;
+    path_lookup_result *result = p_task_res_buf.get();
+    assert(result != nullptr);
+    uint32_t *p_inos = get_first_addr_of_result_inos();
+    size_t last_component = depth_ - 1;
+
+    /* 如果目标文件存在，则结果中dentry位置有效 */
+    if (p_inos[last_component] != INVALID_NID)
+    {
+        pos.blkno = result->dentry_blkidx;
+        pos.slotno = result->dentry_bitpos;
+        assert(pos.slotno != INVALID_DENTRY_BITPOS);
+        pos.is_valid = true;
+    }
+
+    /* 如果目标文件不存在，但目标的目录存在 */
+    else if (last_component == 0 || p_inos[last_component - 1] != INVALID_NID)
+    {
+        /* 如果目录中能找到目标的插入位置，则返回插入位置 */
+        if (result->dentry_bitpos != INVALID_DENTRY_BITPOS)
+        {
+            pos.blkno = result->dentry_blkidx;
+            pos.slotno = result->dentry_bitpos;
+            pos.is_valid = true;
+        }
+    }
+
+    return pos;
 }
 
 /* SSD path lookup控制器 */
@@ -135,6 +178,13 @@ std::string path_dentry_iterator::get()
     if (nxt_start_pos == std::string::npos)
         nxt_start_pos = end_pos;
     return path_.substr(start_pos, end_pos - start_pos);
+}
+
+bool path_dentry_iterator::is_last_component(const path_dentry_iterator &end)
+{
+    path_dentry_iterator tmp = *this;
+    tmp.next();
+    return tmp == end;
 }
 
 bool path_dentry_iterator::is_pos_equal(size_t pos1, size_t pos2) const
@@ -191,8 +241,10 @@ void path_lookup_processor::set_abs_path(const std::string &abs_path)
     path = abs_path;
 }
 
-dentry_handle path_lookup_processor::do_path_lookup()
+dentry_handle path_lookup_processor::do_path_lookup(dentry_store_pos *pos_info)
 {
+    if (pos_info)
+        pos_info->is_valid = false;
     path_parser p_parser(path);
     dentry_cache *d_cache = fs_manager->get_dentry_cache();
     dentry_handle cur_dentry = start_dentry;  // cur_dentry为当前搜索到的目录项
@@ -214,6 +266,8 @@ dentry_handle path_lookup_processor::do_path_lookup()
             );
             return dentry_handle();
         }
+
+        /* 如果当前目录项已经被删除，则不再查找 */
         if (cur_dentry->get_state() != dentry_state::valid)
         {
             HSCFS_LOG(HSCFS_LOG_INFO,
@@ -241,17 +295,40 @@ dentry_handle path_lookup_processor::do_path_lookup()
             ctrlr.construct_task(p_parser, cur_dentry->get_ino(), itr);
             ctrlr.do_pathlookup();
 
-            /* 将ssd查找的结果插入dentry cache，并直接在结果上继续path lookup */
+            /* ssd_depth和cur_depth用作正确性检查 */
+            uint32_t ssd_depth = ctrlr.get_result_depth();
+            uint32_t cur_depth = 0;
             uint32_t *p_res_ino = ctrlr.get_first_addr_of_result_inos();
-            for (; itr != end_itr; itr.next(), ++p_res_ino)
+
+            /* 将ssd查找的结果插入dentry cache，并直接在结果上继续path lookup */
+            for (; itr != end_itr; itr.next(), ++p_res_ino, ++cur_depth)
             {
                 component_name = itr.get();
 
-                /* 路径还没有搜索完，遇到了invalid_nid，则代表目录不存在，返回空handle */
+                /* 路径还没有搜索完，遇到了invalid_nid，则代表目标不存在，返回空handle */
                 if (*p_res_ino == INVALID_NID)
                 {
-                    HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: half-way dentry [%u:%s] does not exist.", 
+                    HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: dentry [%u:%s] does not exist.", 
                         cur_dentry->get_ino(), component_name.c_str());
+                    
+                    /* 如果已经找到了目标的目录，则SSD有可能返回创建目标的位置信息，把它保存到pos_info中 */
+                    if (itr.is_last_component(end_itr))
+                    {
+                        dentry_store_pos ssd_pos_info = ctrlr.get_result_pos();
+                        if (ssd_pos_info.is_valid)
+                        {
+                            HSCFS_LOG(HSCFS_LOG_INFO, "path_lookup_processor: target dentry [%s] does not exist, "
+                                "but its parent dentry [%s] exist, the location for creating target returned by SSD:\n"
+                                "block offset: %u, slot offset: %u.",
+                                component_name.c_str(), cur_dentry->get_key().name.c_str(), 
+                                pos_info->blkno, pos_info->slotno
+                            );
+                        }
+
+                        if (pos_info)
+                            *pos_info = ssd_pos_info;
+                    }
+
                     return dentry_handle();
                 }
 
@@ -262,12 +339,23 @@ dentry_handle path_lookup_processor::do_path_lookup()
                 cur_dentry = d_cache->add(cur_dentry->get_ino(), cur_dentry, *p_res_ino, component_name);
             }
 
-            /* 在SSD返回的结果上成功完成了path lookup */
+            assert(cur_depth == ssd_depth);
+
+            /* 在SSD返回的结果上成功完成了path lookup，把位置信息附加到最终的目录项上 */
+            dentry_store_pos ssd_pos_info = ctrlr.get_result_pos();
+            HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: target dentry [%s]'s pos info returned by SSD:\n"
+                "block offset: %u, slot offset: %u.",
+                cur_dentry->get_key().name.c_str(), ssd_pos_info.blkno, ssd_pos_info.slotno
+            );
+            if (pos_info)
+                *pos_info = ssd_pos_info;
+            cur_dentry->set_pos_info(ssd_pos_info);
+            
             return cur_dentry;
         }
 
         /* 下一个缓存项在缓存中找到了，置当前缓存项为下一个缓存项，继续 */
-        HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: dentry [%u:%s]'s inode is %u.",
+        HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: dentry [%u:%s] is in dentry cache, its inode is %u.",
             cur_dentry->get_ino(), component_name.c_str(), component_dentry->get_ino());
         cur_dentry = component_dentry;
     }

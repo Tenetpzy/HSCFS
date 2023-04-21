@@ -31,9 +31,13 @@ public:
      * 创建一个文件，文件名为name，文件类型为type
      * 将为新文件分配inode，创建inode block并加入node block缓存
      * 创建新文件的目录项，将其加入dentry cache，并将其返回
+     * 调用者可以提供创建目录项的位置信息(create_pos_hint)
+     * 
+     * 不应该在已经存在同名目录项name时调用create，否则结果未定义
+     * 
      * 调用者需持有fs_meta_lock 
      */
-    dentry_handle create(const std::string &name, uint8_t type);
+    dentry_handle create(const std::string &name, uint8_t type, const dentry_store_pos *create_pos_hint = nullptr);
 
     /*
      * 在目录文件中查找目录项name

@@ -35,7 +35,8 @@ int do_open(const char *pathname, int flags)
 
         /* 找到目标文件的dentry */
         proc.set_rel_path(dir_dentry, file_name);
-        dentry_handle target_dentry = proc.do_path_lookup();
+        dentry_store_pos target_pos_hint;
+        dentry_handle target_dentry = proc.do_path_lookup(&target_pos_hint);
 
         /* 如果目标文件不存在，查看是否有O_CREATE标志 */
         if (target_dentry.is_empty() || target_dentry->get_state() == dentry_state::deleted)
@@ -44,7 +45,7 @@ int do_open(const char *pathname, int flags)
             if (flags | O_CREAT)
             {
                 directory dir_helper(dir_dentry, fs_manager);
-                target_dentry = dir_helper.create(file_name, HSCFS_FT_REG_FILE);
+                target_dentry = dir_helper.create(file_name, HSCFS_FT_REG_FILE, &target_pos_hint);
             }
             else
             {

@@ -32,10 +32,10 @@ typedef struct path_lookup_task path_lookup_task;
 #define MAX_PATH_DEPTH  ((4096 - 12) / sizeof(u32))
 struct path_lookup_result
 {
-    u64 dentry_blkidx;               /*若目标文件存在，该项表示对应dentry在父目录文件的哪个block中*/
+    u64 dentry_blkidx;               /*若目标文件存在，该项表示对应dentry在父目录文件的哪个block中(块偏移)*/
                                     /*若目标文件不存在，但其父目录存在，并且dentryBitPos不为INVALID_DENTRY_BITPOS，
                                       该字段表示若要创建此文件，新dentry所在的block*/
-    u32 dentry_bitpos;               /*若目标文件存在，该项表示对应dentry在block中的位置*/
+    u32 dentry_bitpos;               /*若目标文件存在，该项表示对应dentry在block中的位置(slot号)*/
                                     /*若目标文件不存在，但其父目录存在，此字段表示若要创建此文件，新dentry在block中的偏移*/
 
     u32 path_inos[MAX_PATH_DEPTH];   /*路径各级的ino，INVALID_NID表示该级文件不存在*/

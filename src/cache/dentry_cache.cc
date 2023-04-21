@@ -18,9 +18,6 @@ dentry::dentry(uint32_t dir_ino, dentry *parent, uint32_t dentry_ino, const std:
     /* 由ssd path lookup无法获得文件类型，暂时置为unknown，第一次访问时从inode block中读取并缓存 */
     type = HSCFS_FT_UNKNOWN;
 
-    /* 由ssd path lookup无法获取非叶结点dentry的存储位置，暂时置为INVALID，需要时在目录文件中查找并缓存 */
-    is_dentry_pos_valid = false;
-
     /* 构造目录项时，默认状态为valid，有需要时调用set方法更改 */
     state = dentry_state::valid;
 

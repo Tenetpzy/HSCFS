@@ -21,15 +21,14 @@ public:
         cur_pos = start_pos; 
     }
 
-    /* 
-     * 返回当前的目录项名，并让iterator指向下一项
-     */
+    /* 返回当前的目录项名，并让iterator指向下一项 */
     void next();
 
-    /*
-     * 返回当前的目录项名
-     */
+    /* 返回当前的目录项名 */
     std::string get();
+
+    /* 判断当前迭代器是否指向最后一项 */
+    bool is_last_component(const path_dentry_iterator &end);
 
     bool operator==(const path_dentry_iterator &o) const noexcept
     {
@@ -130,12 +129,18 @@ public:
 
     /*
      * 对set_abs_path中传入的path进行路径解析
+     * 
      * 返回最后一级目录项的dentry handle
      * 若某一级目录项不存在，则返回的handle的is_empty方法返回true
      * 
+     * 若pos_info参数不为空，则被设置为目标目录项位置信息
+     * 若pos_info的is_valid为true，则当返回的handle有效时，为该目录项的存储位置，
+     *   返回的handle无效时，为该目录项在父目录中可创建的位置
+     * 若pos_info的is_valid为false，则该信息不可用
+     * 
      * 调用者应判断最后一级目录项的状态，它有可能是被删除的
      */
-    dentry_handle do_path_lookup();
+    dentry_handle do_path_lookup(dentry_store_pos *pos_info = nullptr);
 
 private:
     file_system_manager *fs_manager;

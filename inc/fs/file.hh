@@ -193,6 +193,7 @@ public:
     /*
      * 获得inode对应的file对象
      * 参数为file对象的ino，该inode对应的dentry
+     * 保证返回的file对象内元数据有效
      * 调用者应确保ino和dentry合法
      * 调用者需持有fs_meta_lock 
      */

@@ -51,6 +51,17 @@ enum class dentry_state
     deleted
 };
 
+struct dentry_store_pos
+{
+    uint32_t blkno, slotno;  // dentry在目录文件中的块号和块内slot号
+    bool is_valid;  // 信息是否有效
+
+    dentry_store_pos()
+    {
+        is_valid = false;
+    }
+};
+
 class dentry
 {
 public:
@@ -76,9 +87,19 @@ public:
         return state;
     }
 
-    void set_state(dentry_state sta)
+    void set_state(dentry_state sta) noexcept
     {
         state = sta;
+    }
+
+    void set_pos_info(const dentry_store_pos &p) noexcept
+    {
+        pos = p;
+    }
+
+    const dentry_store_pos& get_pos_info() const noexcept
+    {
+        return pos;
     }
 
 private:
@@ -87,8 +108,7 @@ private:
     uint8_t type;  // 目录项的文件类型
     dentry *parent;  // 目录树中的父目录，根目录为nullptr
 
-    uint32_t blkno, slotno;  // 目录项在目录文件中的位置(块号，块内slot号)
-    bool is_dentry_pos_valid;  // blkno和slotno字段是否有效(由SSD path lookup返回的中间节点则不一定有效)
+    dentry_store_pos pos;
     
     file_system_manager *fs_manager;
     uint32_t ref_count;
