@@ -10,6 +10,7 @@
 #include "utils/dma_buffer_deletor.hh"
 
 #include <memory>
+#include "file_mapping.hh"
 
 struct comm_dev;
 
@@ -91,7 +92,10 @@ void ssd_file_mapping_search_controller::do_filemapping_search()
 /* 
  * file mapping查询的辅助函数
  * block：带查找的块号
- * offset: block在索引树路径的每一级索引块中的偏移
+ * offset: block在索引树路径的每一级索引块中的偏移：
+ * 对于inode，offset是相对于i_attr起始地址的数组下标
+ * 对于indirect和direct node，offset是相对于块首地址的nid/addr数组下标
+ * 
  * noffset：索引树路径的每一个块的树上逻辑编号
  * 
  * 返回值：block的索引树路径深度。inode深度为0。
@@ -169,17 +173,46 @@ got:
 	return level;
 }
 
+uint32_t file_mapping_searcher::get_next_nid(hscfs_node *node, uint32_t offset, int cur_level)
+{
+    if (cur_level == 0)  // 如果是inode
+		return node->i.i_nid[offset - NODE_DIR1_BLOCK];
+	return node->in.nid[offset];
+}
+
+uint32_t file_mapping_searcher::get_lpa(hscfs_node *node, uint32_t offset, int level)
+{
+	/* 如果是inode */
+    if (level == 0)
+	{
+		assert(offset < DEF_ADDRS_PER_INODE);  // offset应在i_addr数组范围内
+		return node->i.i_addr[offset];
+	}
+	else  // 否则是direct node
+	{
+		assert(offset < DEF_ADDRS_PER_BLOCK);  // offset应在addr数组范围内
+		return node->dn.addr[offset];
+	}
+}
+
 uint32_t file_mapping_searcher::get_lpa_of_block(uint32_t ino, uint32_t blkno)
 {
     uint32_t offset[4], noffset[4];
     int level = get_node_path(blkno, offset, noffset);
     assert(level != -1);
+	HSCFS_LOG(HSCFS_LOG_INFO, "file mapping searcher: start file mapping search: "
+		"target inode: %u, target block offset: %u, target path level in node tree: %d",
+		ino, blkno, level
+	);
+
     node_block_cache *node_cache = fs_manager->get_node_cache();
 
-    /* 依次读取搜索树路径上的每个node block，直到找到目标lpa */
-	uint32_t cur_nid = ino;
-	uint32_t parent_nid = INVALID_NID;
-    for (int i = 0; i <= level; ++i)
+	hscfs_node *last_node = nullptr;  // 拥有指向blkno的direct point的node
+	uint32_t cur_nid = ino;  // 当前查找的nid
+	uint32_t parent_nid = INVALID_NID;  // cur_nid的父nid
+	int cur_level = 0;  // 当前查找的路径层级(inode为0，子结点递增)
+
+    while (true)
     {
         node_block_cache_entry_handle cur_handle = node_cache->get(cur_nid);
 
@@ -187,9 +220,9 @@ uint32_t file_mapping_searcher::get_lpa_of_block(uint32_t ino, uint32_t blkno)
         if (cur_handle.is_empty())
         {
 			HSCFS_LOG(HSCFS_LOG_INFO, "file_mapping_searcher:"
-				"node block[file(inode: %u), level %d, nid %u] miss. Prepare searching in SSD", 
-				ino, i, cur_nid);
-			int ssd_level = level - i + 1;
+				"node block[file(inode: %u), level %d, nid %u] miss. Prepare fetching from SSD", 
+				ino, cur_level, cur_nid);
+			int ssd_level = level - cur_level + 1;
 			ssd_file_mapping_search_controller ctrlr(fs_manager->get_device());
 			ctrlr.construct_task(ino, cur_nid, blkno, ssd_level);
 			ctrlr.do_filemapping_search();
@@ -199,14 +232,50 @@ uint32_t file_mapping_searcher::get_lpa_of_block(uint32_t ino, uint32_t blkno)
 			uint32_t parent = parent_nid;
 			for (int i = 0; i < ssd_level; ++i)
 			{
+				/* 得到当前node page的nid和lpa */
 				uint32_t nid = p_node->footer.nid;
-
+				uint32_t lpa = nat_lpa_mapping(fs_manager).get_lpa_of_nid(nid);
+				
 				block_buffer buffer;
 				buffer.copy_content_from_buf(reinterpret_cast<char*>(p_node));
-				/* to do */
+				
+				/* 此时parent一定在缓存中，直接插入不会出错 */
+				node_cache->add(std::move(buffer), nid, parent, lpa);
+
+				parent = nid;
+				++p_node;
 			}
+
+			/* 此时不命中的node已全部插入node cache，继续外层查找 */
+			continue;
         }
+
+		/* 到此处，node cache命中，cur_handle有效 */
+		last_node = cur_handle->get_node_block_ptr();
+		assert(last_node->footer.ino == ino);
+		assert(last_node->footer.nid == cur_nid);
+		assert(last_node->footer.offset == noffset[cur_level]);
+
+		/* 已经找到索引路径最后一级node page，退出 */
+		if (cur_level == level)
+			break;
+
+		/* 否则，继续查找路径上的下一个node page */
+		uint32_t nxt_nid = get_next_nid(last_node, offset[cur_level], cur_level);
+		HSCFS_LOG(HSCFS_LOG_INFO, "file mapping searcher: searching in level %d, nid %u, offset %u. "
+			"next nid is %u.", cur_level, cur_nid, offset[cur_level], nxt_nid);
+		++cur_level;
+		parent_nid = cur_nid;
+		cur_nid = nxt_nid;
     }
+
+	/* 到此处，已查找到索引树最后一级node page */
+	assert(last_node != nullptr);
+	uint32_t target_lpa = get_lpa(last_node, offset[level], level);
+	HSCFS_LOG(HSCFS_LOG_INFO, "file mapping searcher: reach search path end. nid: %u, level: %u, " 
+		"direct pinter offset: %u, target lpa: %u.", cur_nid, level, offset[level], target_lpa);
+	
+	return target_lpa;
 }
 
 } // namespace hscfs

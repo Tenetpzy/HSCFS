@@ -233,7 +233,7 @@ void print_node_footer(hscfs_node *node);
 
 void print_filemapping_search_result(hscfs_node *node, uint32_t level_num)
 {
-    HSCFS_LOG(HSCFS_LOG_INFO, "result of SSD filemapping search: level_num = %u", level_num);
+    HSCFS_LOG(HSCFS_LOG_INFO, "result of SSD filemapping search: level_num = %u. Each level info:", level_num);
     for (uint32_t i = 0; i < level_num; ++i, ++node)
         print_node_footer(node);
     fmt::print(std::cerr, "\n");

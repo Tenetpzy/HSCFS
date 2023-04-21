@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+struct hscfs_node;
+
 namespace hscfs {
 
 class file_system_manager;
@@ -25,6 +27,8 @@ private:
     file_system_manager *fs_manager;
 
     static int get_node_path(uint64_t block, uint32_t offset[4], uint32_t noffset[4]);
+    static uint32_t get_next_nid(hscfs_node *node, uint32_t offset, int cur_level);
+    static uint32_t get_lpa(hscfs_node *node, uint32_t offset, int level);
 };
 
 }  // namespace hscfs
