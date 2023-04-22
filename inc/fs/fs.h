@@ -107,6 +107,8 @@ struct hscfs_inode {
 						double_indirect(1) node id */
 } __attribute__((packed));
 
+#define SIZE_TO_BLOCK(size) (((size) + 4095) >> 12)
+
 struct direct_node {
 	__le32 addr[DEF_ADDRS_PER_BLOCK];	/* array of data block address */
 } __attribute__((packed));

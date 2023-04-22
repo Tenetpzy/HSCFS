@@ -277,7 +277,18 @@ dentry_handle path_lookup_processor::do_path_lookup(dentry_store_pos *pos_info)
             return dentry_handle();
         }
 
-        std::string component_name = itr.get();  // component_name为下一项的名称
+        /* component_name为下一项的名称 */
+        std::string component_name = itr.get();
+        if (component_name == ".")
+            continue;
+        if (component_name == "..")
+        {
+            auto& parent_key = cur_dentry->get_parent_key();
+            cur_dentry = d_cache->get(parent_key.dir_ino, parent_key.name);
+            assert(cur_dentry.is_empty() == false);
+            continue;
+        }
+
         dentry_handle component_dentry = d_cache->get(cur_dentry->get_ino(), component_name);
 
         /* 
@@ -304,6 +315,20 @@ dentry_handle path_lookup_processor::do_path_lookup(dentry_store_pos *pos_info)
             for (; itr != end_itr; itr.next(), ++p_res_ino, ++cur_depth)
             {
                 component_name = itr.get();
+
+                if (component_name == ".")
+                {
+                    assert(*p_res_ino == cur_dentry->get_ino());
+                    continue;
+                }
+                if (component_name == "..")
+                {
+                    assert(*p_res_ino == cur_dentry->get_key().dir_ino);
+                    auto &parent_key = cur_dentry->get_parent_key();
+                    cur_dentry = d_cache->get(parent_key.dir_ino, parent_key.name);
+                    assert(cur_dentry.is_empty() == false);
+                    continue;
+                }
 
                 /* 路径还没有搜索完，遇到了invalid_nid，则代表目标不存在，返回空handle */
                 if (*p_res_ino == INVALID_NID)
@@ -354,7 +379,7 @@ dentry_handle path_lookup_processor::do_path_lookup(dentry_store_pos *pos_info)
             return cur_dentry;
         }
 
-        /* 下一个缓存项在缓存中找到了，置当前缓存项为下一个缓存项，继续 */
+        /* 下一个目录项在缓存中找到了，置当前目录项为下一个目录项，继续 */
         HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: dentry [%u:%s] is in dentry cache, its inode is %u.",
             cur_dentry->get_ino(), component_name.c_str(), component_dentry->get_ino());
         cur_dentry = component_dentry;

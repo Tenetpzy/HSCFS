@@ -45,6 +45,8 @@ int do_open(const char *pathname, int flags)
             if (flags | O_CREAT)
             {
                 directory dir_helper(dir_dentry, fs_manager);
+
+                /* 如果dir_dentry已经创建过文件但没写回，则target_pos_hint有可能不正确 */
                 target_dentry = dir_helper.create(file_name, HSCFS_FT_REG_FILE, &target_pos_hint);
             }
             else

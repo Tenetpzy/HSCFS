@@ -65,7 +65,7 @@ struct dentry_store_pos
 class dentry
 {
 public:
-    /* 构造后，状态置为valid，is_dirty置为false */
+    /* 构造后，状态置为valid，is_dirty置为false, pos无效 */
     dentry(uint32_t dir_ino, dentry *parent, uint32_t dentry_ino, const std::string &dentry_name, 
         file_system_manager *fs_manager);
 
@@ -77,6 +77,11 @@ public:
     const dentry_key& get_key() const noexcept
     {
         return key;
+    }
+
+    const dentry_key& get_parent_key() const noexcept
+    {
+        return parent->get_key();
     }
 
     /* 得到文件类型。若为UNKNOWN，则通过读inode page获取 */
@@ -106,7 +111,7 @@ private:
     dentry_key key;
     uint32_t ino;  // 目录项的inode
     uint8_t type;  // 目录项的文件类型
-    dentry *parent;  // 目录树中的父目录，根目录为nullptr
+    dentry *parent;  // 目录树中的父目录，根目录需指向自己
 
     dentry_store_pos pos;
     
@@ -211,6 +216,7 @@ public:
         cur_size = 0;
     }
 
+    /* 新增一个目录项，目录项状态为dentry构造后的默认状态 */
     dentry_handle add(uint32_t dir_ino, const dentry_handle &dir_handle, uint32_t dentry_ino, 
         const std::string &dentry_name)
     {
@@ -234,6 +240,8 @@ public:
 
         return dentry_handle(raw_p, this);
     }
+
+    /* to do: add root */
 
     dentry_handle get(uint32_t dir_ino, const std::string &name)
     {
