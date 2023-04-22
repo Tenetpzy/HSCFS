@@ -60,6 +60,14 @@ struct dentry_store_pos
     {
         is_valid = false;
     }
+
+    /* 设置位置信息，置is_valid为true */
+    void set_pos(uint32_t blkno, uint32_t slotno)
+    {
+        this->blkno = blkno;
+        this->slotno = slotno;
+        is_valid = true;
+    }
 };
 
 class dentry

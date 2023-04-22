@@ -95,11 +95,16 @@ struct hscfs_inode {
 	__le64 i_atime;			/* access time(used) */
 	__le64 i_ctime;			/* change time */
 	__le64 i_mtime;			/* modification time(used) */
-	__le32 i_current_depth;	/* only for directory depth */
+
+	/* 
+	 * only for directory depth，值为当前目录文件的哈希表最大下标（即哈希表个数-1）
+	 * 哈希表下标从0开始（只要目录文件存在，至少有1个哈希表）(used) 
+	 */
+	__le32 i_current_depth;
 	__le32 i_pino;			/* parent inode number */
 	__le32 i_namelen;		/* file name length */
 	__u8 i_name[HSCFS_NAME_LEN];	/* file name for SPOR */
-	__u8 i_dir_level;		/* dentry_level for large dir */
+	__u8 i_dir_level;		/* dentry_level for large dir(used，始终置为0) */
 
 
 	__le32 i_addr[DEF_ADDRS_PER_INODE];	/* Pointers to data blocks */

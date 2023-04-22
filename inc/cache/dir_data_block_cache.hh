@@ -2,8 +2,11 @@
 
 #include "cache/block_buffer.hh"
 #include "cache/cache_manager.hh"
+#include <utility>
 #include <cassert>
 #include <vector>
+
+struct hscfs_dentry_block;
 
 namespace hscfs {
 
@@ -47,6 +50,11 @@ public:
     const dir_data_block_entry_key& get_key() const noexcept
     {
         return key;
+    }
+
+    hscfs_dentry_block* get_block_ptr() noexcept
+    {
+        return reinterpret_cast<hscfs_dentry_block*>(block.get_ptr());
     }
 
 private:
@@ -234,6 +242,7 @@ private:
 };
 
 class file_system_manager;
+struct block_addr_info;
 
 class dir_data_cache_helper
 {
@@ -245,10 +254,14 @@ public:
 
     /*
      * 获取目录文件dir_ino的第blkno个块
-     * 如果该块是文件空洞，返回的handle的is_empty返回true
+     * 返回<handle, addr>
+     * 
+     * 如果该块是文件空洞，返回的handle的is_empty返回true，addr保存该块的地址信息
+     * 否则，handle有效，为目标块缓存的handle，addr无效
+     * 
      * 调用者需保证dir_ino和blkno合法 
      */
-    dir_data_block_handle get_dir_data_block(uint32_t dir_ino, uint32_t blkno);
+    std::pair<dir_data_block_handle, block_addr_info> get_dir_data_block(uint32_t dir_ino, uint32_t blkno);
 
 private:
     file_system_manager *fs_manager;

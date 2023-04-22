@@ -74,20 +74,22 @@ dir_data_block_entry::~dir_data_block_entry()
         HSCFS_LOG(HSCFS_LOG_WARNING, "dir data block is still dirty while destructed.");
 }
 
-dir_data_block_handle dir_data_cache_helper::get_dir_data_block(uint32_t dir_ino, uint32_t blkno)
+std::pair<dir_data_block_handle, block_addr_info> dir_data_cache_helper::get_dir_data_block(uint32_t dir_ino, 
+    uint32_t blkno)
 {
     dir_data_block_cache *dir_data_cache = fs_manager->get_dir_data_cache();
     dir_data_block_handle handle = dir_data_cache->get(dir_ino, blkno);
-    
+    block_addr_info addr;
+
     /* dir data block缓存不命中，通过file mapping查找地址并读取 */
     if (handle.is_empty())
     {
         file_mapping_searcher searcher(fs_manager);
-        block_addr_info addr = searcher.get_addr_of_block(dir_ino, blkno);
+        addr = searcher.get_addr_of_block(dir_ino, blkno);
 
         /* 如果是文件空洞，直接返回 */
         if (addr.lpa == INVALID_LPA)
-            return dir_data_block_handle();
+            return std::make_pair(dir_data_block_handle(), addr);
 
         block_buffer buffer;
         try
@@ -102,7 +104,7 @@ dir_data_block_handle dir_data_cache_helper::get_dir_data_block(uint32_t dir_ino
         handle = dir_data_cache->add(dir_ino, blkno, addr.lpa, addr.nid, addr.nid_off, std::move(buffer));
     }
 
-    return handle;
+    return std::make_pair(handle, addr);
 }
 
 } // namespace hscfs
