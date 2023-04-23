@@ -122,6 +122,12 @@ node_block_cache_entry_handle node_cache_helper::get_node_entry(uint32_t nid, ui
         }
         node_handle = node_cache->add(std::move(buf), nid, parent_nid, nid_lpa);
     }
+    
+    hscfs_node *node = node_handle->get_node_block_ptr();
+    assert(node->footer.nid == nid);
+    if (parent_nid == INVALID_NID)
+        assert(node->footer.ino == nid);
+
     return node_handle;
 }
 

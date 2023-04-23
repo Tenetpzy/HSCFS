@@ -3,7 +3,7 @@
 #include "fs/directory.hh"
 #include "fs/fs_manager.hh"
 #include "fs/fs.h"
-#include "fs/file_mapping.hh"
+#include "fs/file_utils.hh"
 #include "utils/hscfs_log.h"
 
 #include <tuple>
@@ -41,7 +41,8 @@ dentry_info directory::lookup(const std::string &name)
         uint32_t num_bucket_block = bucket_block_num(level);
         uint32_t start_blkno = bucket_start_block_index(level, inode->i_dir_level, bucket_idx_of_name);
         uint32_t end_blkno = start_blkno + num_bucket_block;
-        
+        assert(end_blkno <= SIZE_TO_BLOCK(inode->i_size));
+
         for (uint32_t blkno = start_blkno; blkno < end_blkno; ++blkno)
         {
             dentry_info target_in_cur_blk = find_dentry_in_block(blkno, name, name_hash);

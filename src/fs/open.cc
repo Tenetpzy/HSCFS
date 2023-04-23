@@ -67,7 +67,7 @@ int do_open(const char *pathname, int flags)
             }
 
             /* 如果目标文件已被删除，但仍然被fd引用，则不允许打开或创建该文件 */
-            if (target_dentry->get_state() == dentry_state::deleted_inode_valid)
+            if (target_dentry->get_state() == dentry_state::deleted_still_refed)
             {
                 errno = EACCES;
                 return -1;

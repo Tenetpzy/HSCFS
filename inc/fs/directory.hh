@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include "cache/dentry_cache.hh"
+#include  "cache/block_buffer.hh"
 
 namespace hscfs {
 

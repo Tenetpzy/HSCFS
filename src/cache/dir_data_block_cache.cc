@@ -2,7 +2,7 @@
 #include "utils/hscfs_log.h"
 #include "utils/hscfs_exceptions.hh"
 #include "fs/fs_manager.hh"
-#include "fs/file_mapping.hh"
+#include "fs/file_utils.hh"
 #include "fs/fs.h"
 
 namespace hscfs {

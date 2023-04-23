@@ -47,7 +47,7 @@ class file_system_manager;
 enum class dentry_state
 {
     valid,
-    deleted_inode_valid,
+    deleted_still_refed,
     deleted
 };
 
