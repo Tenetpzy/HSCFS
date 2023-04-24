@@ -15,6 +15,7 @@ class SIT_NAT_cache;
 class file_obj_cache;
 class fd_array;
 class dir_data_block_cache;
+class journal_container;
 
 /*
  * super_manager, SIT cache, NAT cache等对象的组合容器
@@ -44,6 +45,7 @@ public:
     node_block_cache* get_node_cache() const noexcept;
     dir_data_block_cache* get_dir_data_cache() const noexcept;
     SIT_NAT_cache* get_nat_cache() const noexcept;
+    SIT_NAT_cache* get_sit_cache() const noexcept;
     file_obj_cache* get_file_obj_cache() const noexcept;
 
     size_t get_page_cache_size() const noexcept
@@ -54,6 +56,8 @@ public:
     comm_dev* get_device() const noexcept;
     dentry_handle get_root_dentry() const noexcept;
     fd_array* get_fd_array() const noexcept;
+
+    journal_container* get_cur_journal() const noexcept;
 
     /* 置为不可恢复状态 */
     void set_unrecoverable() noexcept;

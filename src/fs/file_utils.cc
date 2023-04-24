@@ -2,6 +2,7 @@
 #include "fs/fs_manager.hh"
 #include "fs/fs.h"
 #include "fs/NAT_utils.hh"
+#include "fs/SIT_utils.hh"
 #include "cache/node_block_cache.hh"
 #include "communication/memory.h"
 #include "communication/comm_api.h"
@@ -340,8 +341,18 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 		std::tie(is_intersect, start, end) = intersect(inode_start, inode_end, start_blk, end_blk);
 		if (is_intersect)  // 相交，块交集是[start, end]
 		{
+			HSCFS_LOG(HSCFS_LOG_INFO, "invalid blocks [%u, %u] in inode.", start, end);
+			SIT_operator sit_operator(fs_manager);
 			for (uint32_t i = start; i <= end; ++i)
-				inode->i.i_addr[i] = INVALID_LPA;
+			{
+				uint32_t &lpa = inode->i.i_addr[i];
+				if (lpa != INVALID_LPA)
+				{
+					HSCFS_LOG(HSCFS_LOG_INFO, "block [%u] is valid(lpa = %u), will marked garbage.", i, lpa);
+					sit_operator.invalidate_lpa(lpa);
+					lpa = INVALID_LPA;
+				}
+			}
 		}
 	};
 
@@ -371,8 +382,18 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 		direct_node *s_node = &handle->get_node_block_ptr()->dn;
 
 		/* 此时，[start_off, end_off]为node内addr数组中，待处理的下标范围 */
+		SIT_operator sit_operator(fs_manager);
 		for (uint32_t i = start_off; i <= end_off; ++i)
-			s_node->addr[i] = INVALID_LPA;
+		{
+			uint32_t &lpa = s_node->addr[i];
+			if (lpa != INVALID_LPA)
+			{
+				HSCFS_LOG(HSCFS_LOG_INFO, "block [%u] is valid(lpa = %u), will marked garbage.", 
+					i + manage_start, lpa);
+				sit_operator.invalidate_lpa(lpa);
+				lpa = INVALID_LPA;
+			}
+		}
 
 		uint32_t invalid_cnt = end_off - start_off + 1;
 		if (invalid_cnt == single_node_blks)

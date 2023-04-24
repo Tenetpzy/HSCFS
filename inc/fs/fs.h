@@ -17,14 +17,14 @@ struct hscfs_super_block
 	__le32 log_blocksize;		/* log2 block size in bytes */
 	__le32 log_blocks_per_seg;	/* log2 # of blocks per segment */
 	__le64 block_count;		/* total # of user blocks */
-	__le32 segment_count;		/* total # of segments */
+	__le32 segment_count;		/* total # of segments(used) */
 	__le32 segment_count_sit;	/* # of segments for SIT */
 	__le32 segment_count_nat;	/* # of segments for NAT(used) */
 	__le32 segment_count_srmap;	/* # of segments for SRMAP */
     __le32 segment_count_meta_journal;  /* # of segments for Meta Journal*/
 	__le32 segment_count_main;	/* # of segments for main area */
-	__le32 segment0_blkaddr;	/* start block address of segment 0 */
-	__le32 sit_blkaddr;		/* start block address of SIT */
+	__le32 segment0_blkaddr;	/* start block address of segment 0(used) */
+	__le32 sit_blkaddr;		/* start block address of SIT(used) */
 	__le32 nat_blkaddr;		/* start block address of NAT(used) */
 	__le32 srmap_blkaddr;		/* start block address of SRMAP */
     __le32 meta_journal_blkaddr;   /* start block address of Meta Journal */
