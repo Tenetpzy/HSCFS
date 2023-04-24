@@ -424,12 +424,13 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 			node_block_cache_entry_handle single_handle = node_cache_helper(this->fs_manager)
 				.get_node_entry(d_node->nid[i], nid);
 
-			/* 如果该single block已经无效 */
 			uint32_t single_node_invalid_num = proc_single_node(single_handle, manage_start);
 			assert(single_node_invalid_num != 0);
+
+			/* 如果该single block已经无效 */
 			if (single_node_invalid_num == single_node_blks)
 			{
-				/* to do: 删除该single node */
+				single_handle.delete_node();
 				++invalid_single_cnt;
 				d_node->nid[i] = INVALID_NID;
 			}
@@ -465,7 +466,7 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 				.get_node_entry(t_node->nid[i], nid);
 			if (proc_double_node(double_handle, manage_start))
 			{
-				/* to do: 删除该double node */
+				double_handle.delete_node();
 				++invalid_double_cnt;
 				t_node->nid[i] = INVALID_NID;
 			}
@@ -496,10 +497,10 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 		node_block_cache_entry_handle handle = node_cache_helper(this->fs_manager)
 			.get_node_entry(inode->i.i_nid[nid_idx], inode->footer.ino);
 		/* 如果该single node维护的block全部被删除，则删除该single node */
-		if (proc_single_node(handle, cur_start))
+		if (proc_single_node(handle, cur_start) == single_node_blks)
 		{
 			inode->i.i_nid[nid_idx] = INVALID_NID;
-			/* to do: 从缓存中删除该single node，释放nid */
+			handle.delete_node();
 		}
 		else  /* 否则，该single node还存在，但是被修改了，标记为dirty */
 			handle.mark_dirty();
@@ -517,7 +518,7 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 		if (proc_double_node(handle, cur_start))
 		{
 			inode->i.i_nid[nid_idx] = INVALID_NID;
-			/* to do: 从缓存中删除该double node，释放nid */
+			handle.delete_node();
 		}
 		else
 			handle.mark_dirty();
@@ -531,7 +532,7 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 	if (proc_triple_node(handle, cur_start))
 	{
 		inode->i.i_nid[nid_idx] = INVALID_NID;
-		/* to do: 从缓存中删除该triple node，释放nid */
+		handle.delete_node();
 	}
 	else
 		handle.mark_dirty();

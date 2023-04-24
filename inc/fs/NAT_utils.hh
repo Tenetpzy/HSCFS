@@ -7,12 +7,6 @@ namespace hscfs {
 
 class file_system_manager;
 
-class NAT_operator
-{
-public:
-    /* to do */
-};
-
 class nat_lpa_mapping
 {
 public:

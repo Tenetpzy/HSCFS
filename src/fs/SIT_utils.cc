@@ -45,6 +45,8 @@ void SIT_operator::change_lpa_state(uint32_t lpa, bool valid)
 
         sit_entry.valid_map[bitmap_idx] |= 1U << bitmap_off;
         sit_entry.vblocks++;
+
+        HSCFS_LOG(HSCFS_LOG_INFO, "validate lpa [%u] in SIT.", lpa);
     }
 
     else
@@ -54,6 +56,8 @@ void SIT_operator::change_lpa_state(uint32_t lpa, bool valid)
 
         sit_entry.valid_map[bitmap_idx] &= ~(1U << bitmap_off);
         sit_entry.vblocks--;
+
+        HSCFS_LOG(HSCFS_LOG_INFO, "invalidate lpa [%u] in SIT.", lpa);
     }
 
     /* 写下SIT日志条目，增加sit缓存块主机侧版本 */

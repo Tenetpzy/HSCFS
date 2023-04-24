@@ -13,7 +13,7 @@ namespace hscfs {
 
 enum class node_block_cache_entry_state
 {
-    uptodate, dirty
+    uptodate, dirty, deleted
 };
 
 class node_block_cache_entry
@@ -42,6 +42,14 @@ public:
 
     void set_new_lpa(uint32_t new_lpa) noexcept {
         this->new_lpa = new_lpa;
+    }
+
+    void set_state(node_block_cache_entry_state sta) noexcept {
+        state = sta;
+    }
+
+    node_block_cache_entry_state get_state() const noexcept {
+        return state;
     }
 
     hscfs_node *get_node_block_ptr() noexcept {
@@ -126,6 +134,7 @@ public:
     void add_host_version();
     void add_SSD_version();
     void mark_dirty() const noexcept;
+    void delete_node();
 
     node_block_cache_entry* operator->()
     {
@@ -142,14 +151,17 @@ private:
     friend class node_block_cache;
 };
 
+class file_system_manager;
+
 class node_block_cache
 {
 public:
     /* expect_cache_size参数含义同SIT_NAT_cache */
-    node_block_cache(size_t expect_cache_size)
+    node_block_cache(file_system_manager *fs_manager, size_t expect_cache_size)
     {
         expect_size = expect_cache_size;
         cur_size = 0;
+        this->fs_manager = fs_manager;
     }
 
     ~node_block_cache();
@@ -227,6 +239,7 @@ private:
     size_t expect_size, cur_size;
     generic_cache_manager<uint32_t, node_block_cache_entry> cache_manager;
     std::vector<node_block_cache_entry_handle> dirty_list;
+    file_system_manager *fs_manager;
 
 private:
     void add_refcount(node_block_cache_entry *entry)
@@ -237,12 +250,7 @@ private:
             cache_manager.pin(entry->nid);
     }
 
-    void sub_refcount(node_block_cache_entry *entry)
-    {
-        --entry->ref_count;
-        if (entry->ref_count == 0)
-            cache_manager.unpin(entry->nid);
-    }
+    void sub_refcount(node_block_cache_entry *entry);
 
     void mark_dirty(const node_block_cache_entry_handle &handle)
     {
@@ -252,6 +260,23 @@ private:
             handle.entry->state = node_block_cache_entry_state::dirty;
             dirty_list.emplace_back(handle);
         }
+    }
+
+    /* 如果该缓存项是dirty的，则从dirty list中移除，等待引用计数为0后删除缓存项，释放nid和lpa */
+    void remove_entry(node_block_cache_entry *entry)
+    {
+        if (entry->state == node_block_cache_entry_state::dirty)
+        {
+            auto it = dirty_list.begin();
+            for (; it != dirty_list.end(); ++it)
+            {
+                if (it->entry == entry)
+                    break;
+            }
+            assert(it != dirty_list.end());
+            dirty_list.erase(it);
+        }
+        entry->state = node_block_cache_entry_state::deleted;
     }
 
     void do_replace();

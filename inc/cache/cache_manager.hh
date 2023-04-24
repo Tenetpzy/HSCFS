@@ -3,11 +3,12 @@
 #include <unordered_map>
 #include <list>
 #include <utility>
+#include <tuple>
 #include <memory>
 #include <system_error>
 #include <cassert>
 
-#include "utils/hscfs_multithread.h"
+// #include "utils/hscfs_multithread.h"
 // #include "utils/lock_guards.hh"
 
 namespace hscfs {
@@ -133,6 +134,22 @@ public:
         add_to_list_tail(lru_list, key);
     }
 
+    /* 手动移除key，无论是否被pin住 */
+    void remove(const key_t &key)
+    {
+        assert(key_states.count(key) == 1);
+        bool pinned;
+        list_iterator_t itr;
+        std::tie(pinned, itr) = key_states.at(key);
+
+        if (pinned)
+            pinned_list.erase(itr);
+        else
+            lru_list.erase(itr);
+        
+        key_states.erase(key);
+    }
+
 private:
     /* 
      * lru链表lru_list，不能置换的链表pinned_list
@@ -173,7 +190,7 @@ private:
  * void pin(const key_t &key);
  * void unpin(const key_t &key);
  * void access(const key_t &key);
- * 
+ * void remove(const key_t &key);
  */
 template <typename key_t, typename entry_t, 
     template <typename, typename> class index_t = cache_hash_index, 
@@ -229,6 +246,13 @@ public:
             return nullptr;
         key_t key = replacer.pop_replaced();
         return index.remove(key);
+    }
+
+    /* 手动移除缓存项，无论是否被pin住 */
+    void remove(const key_t &key)
+    {
+        index.remove(key);
+        replacer.remove(key);
     }
 
 private:

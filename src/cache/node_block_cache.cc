@@ -2,8 +2,10 @@
 #include "cache/SIT_NAT_cache.hh"
 #include "cache/super_cache.hh"
 #include "fs/NAT_utils.hh"
+#include "fs/SIT_utils.hh"
 #include "fs/fs_manager.hh"
 #include "fs/fs.h"
+#include "fs/super_manager.hh"
 #include "utils/hscfs_log.h"
 #include "utils/hscfs_exceptions.hh"
 
@@ -13,6 +15,46 @@ node_block_cache::~node_block_cache()
 {
     if (!dirty_list.empty())
         HSCFS_LOG(HSCFS_LOG_WARNING, "node block cache still has dirty block while destructed.");
+}
+
+void node_block_cache::sub_refcount(node_block_cache_entry *entry)
+{
+    --entry->ref_count;
+    if (entry->ref_count == 0)
+    {
+        cache_manager.unpin(entry->nid);
+
+        /* 如果该node block需要删除，则减少其父结点的引用计数，释放它的FS资源，把它移除缓存 */
+        if (entry->state == node_block_cache_entry_state::deleted)
+        {
+            /* 释放它的nid */
+            super_manager(fs_manager).free_nid(entry->nid);
+
+            /* 将它占有的lpa标记为垃圾块 */
+            uint32_t cur_lpa = INVALID_LPA;
+            if (entry->new_lpa != INVALID_LPA)  // 有新地址，则标记新地址，旧地址(如果有)应当在写入时标记过了
+                cur_lpa = entry->new_lpa;
+            else if (entry->old_lpa != INVALID_LPA)  // 否则，如果有旧地址（说明不是新创建且未写入的），则标记旧地址
+                cur_lpa = entry->old_lpa;
+            if (cur_lpa != INVALID_LPA)
+            {
+                HSCFS_LOG(HSCFS_LOG_INFO, "the lpa of nid [%u] is [%u], which will be invalidated.", 
+                    entry->nid, cur_lpa);
+                SIT_operator(fs_manager).invalidate_lpa(cur_lpa);
+            }
+
+            /* 减少父结点的引用计数 */
+            uint32_t parent_nid = entry->parent_nid;
+            if (parent_nid != INVALID_NID)
+            {
+                auto parent = cache_manager.get(parent_nid, false);
+                assert(parent != nullptr);
+                sub_refcount(parent);
+            }
+
+            cache_manager.remove(entry->nid);
+        }
+    }
 }
 
 void node_block_cache::do_replace()
@@ -72,6 +114,11 @@ void node_block_cache_entry_handle::add_SSD_version()
 void node_block_cache_entry_handle::mark_dirty() const noexcept
 {
     cache->mark_dirty(*this);
+}
+
+void node_block_cache_entry_handle::delete_node()
+{
+    cache->remove_entry(entry);
 }
 
 void node_block_cache_entry_handle::do_addref()
