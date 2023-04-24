@@ -53,4 +53,10 @@ public:
     user_path_invalid(const char *s): std::logic_error(s) {}
 };
 
+class expand_file_size_exceed_limit: public std::logic_error
+{
+public:
+    expand_file_size_exceed_limit(const char *s): std::logic_error(s) {}
+}
+
 }  // namespace hscfs

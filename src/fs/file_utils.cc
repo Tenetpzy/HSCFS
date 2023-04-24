@@ -287,9 +287,12 @@ block_addr_info file_mapping_searcher::get_addr_of_block(uint32_t ino, uint32_t 
 
 /******************************************************************************/
 
-const uint32_t single_node_blks = DEF_ADDRS_PER_BLOCK;
-const uint32_t double_node_blks = NIDS_PER_BLOCK * DEF_ADDRS_PER_BLOCK;
-const uint32_t triple_node_blks = NIDS_PER_BLOCK * NIDS_PER_BLOCK * DEF_ADDRS_PER_BLOCK;
+const uint32_t file_resizer::single_node_blks = DEF_ADDRS_PER_BLOCK;
+const uint32_t file_resizer::double_node_blks = NIDS_PER_BLOCK * DEF_ADDRS_PER_BLOCK;
+const uint32_t file_resizer::triple_node_blks = NIDS_PER_BLOCK * NIDS_PER_BLOCK * DEF_ADDRS_PER_BLOCK;
+const uint64_t file_resizer::max_blkno_limit = DEF_ADDRS_PER_INODE + 2 * DEF_ADDRS_PER_BLOCK + 
+	2 * NIDS_PER_BLOCK * DEF_ADDRS_PER_BLOCK +
+	NIDS_PER_BLOCK * NIDS_PER_BLOCK * DEF_ADDRS_PER_BLOCK;
 
 void file_resizer::reduce(uint32_t ino, uint64_t tar_size)
 {
@@ -303,8 +306,7 @@ void file_resizer::reduce(uint32_t ino, uint64_t tar_size)
 
 	/* 更新inode中的size */
 	uint64_t cur_size = inode->i_size;
-	if (tar_size >= cur_size)
-		return;
+	assert (tar_size < cur_size);
 	inode->i_size = tar_size;
 	inode_handle.mark_dirty();
 
@@ -320,6 +322,51 @@ void file_resizer::reduce(uint32_t ino, uint64_t tar_size)
 	HSCFS_LOG(HSCFS_LOG_INFO, "reduce file [%u] size from %u bytes to %u bytes, will free blocks ranging [%u, %u].",
 		ino, cur_size, tar_size, start_blk, end_blk);
 	free_blocks_in_range(node, start_blk, end_blk);
+}
+
+void file_resizer::expand(uint32_t ino, uint64_t tar_size)
+{
+	/* 获取该文件的inode */
+	node_cache_helper node_helper(fs_manager);
+	node_block_cache_entry_handle inode_handle = node_helper.get_node_entry(ino, INVALID_NID);
+	hscfs_node *node = inode_handle->get_node_block_ptr();
+	assert(node->footer.ino == node->footer.nid);
+	assert(node->footer.offset == 0);
+	hscfs_inode *inode = &node->i;
+
+	/* 更新inode中的size */
+	uint64_t cur_size = inode->i_size;
+	assert(tar_size > cur_size);
+	if (SIZE_TO_BLOCK(tar_size) > max_blkno_limit)
+		throw expand_file_size_exceed_limit("expand file size exceeding limit.");
+	inode->i_size = tar_size;
+	inode_handle.mark_dirty();
+
+	/* 计算需要增加的起止块偏移闭区间[start_blk, end_blk] */
+	uint32_t start_blk = SIZE_TO_BLOCK(cur_size) + 1;
+	uint32_t end_blk = SIZE_TO_BLOCK(tar_size);
+	if (start_blk > end_blk)
+	{
+		assert(start_blk == end_blk + 1);
+		return;
+	}
+
+	HSCFS_LOG(HSCFS_LOG_INFO, "expand file [%u] size from %u bytes to %u bytes, will add blocks(map) ranging [%u, %u].", 
+		ino, cur_size, tar_size, start_blk, end_blk);
+	file_mapping_searcher fm_searcher(fs_manager);
+	for (uint32_t blk = start_blk; blk <= end_blk; ++blk)
+	{
+		block_node_path blk_path;
+		blk_path.level = fm_searcher.get_node_path(blk, blk_path.offset, blk_path.noffset);
+		assert(blk_path.level != -1);
+
+		/* 沿着路径向下，如果遇到INVALID_NID，则创建该node block */
+		uint32_t cur_nid = ino, parent_nid = INVALID_NID;
+		for (int level = 0; level <= blk_path.level; ++level)
+		{
+			/* to do，新建node block */
+		}
+	}
 }
 
 void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, uint32_t end_blk)
@@ -374,7 +421,7 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 
 		uint32_t nid = handle->get_node_block_ptr()->footer.nid;
 		HSCFS_LOG(HSCFS_LOG_INFO, "single node [%u], noffset [%u], manage block range: [%u, %u], "
-			"Invalid block pointers to block [%u, %u].", 
+			"Invalid block range [%u, %u].", 
 			nid, handle->get_node_block_ptr()->footer.offset, manage_start, manage_end, start_off, end_off);
 
 		start_off -= manage_start;

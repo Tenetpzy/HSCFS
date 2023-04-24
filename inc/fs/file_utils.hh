@@ -71,8 +71,11 @@ public:
         this->fs_manager = fs_manager;
     }
 
-    /* 将ino减小至size字节。删除不再索引任何block的node。 */
+    /* 将ino减小至size字节。删除不再索引任何block的node。调用者应保证tar_size小于当前文件大小。*/
     void reduce(uint32_t ino, uint64_t tar_size);
+
+    /* 将ino扩大至size字节。扩大的部分不会分配物理块，置为INVALID_LPA。*/
+    void expand(uint32_t ino, uint64_t tar_size);
 
 private:
     file_system_manager *fs_manager;
@@ -84,7 +87,8 @@ private:
      * 
      * 分别表示上述三种索引块，一个索引块索引了多少个block
      */
-    static const uint32_t single_node_blks, double_node_blks, triple_node_blks; 
+    static const uint32_t single_node_blks, double_node_blks, triple_node_blks;
+    static const uint64_t max_blkno_limit;  // 文件支持的最大块号 
 
 private:
     /* 释放[start_blk, end_blk]与它们的索引node block */
