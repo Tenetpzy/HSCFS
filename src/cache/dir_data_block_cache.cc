@@ -101,7 +101,7 @@ std::pair<dir_data_block_handle, block_addr_info> dir_data_cache_helper::get_dir
             HSCFS_LOG(HSCFS_LOG_ERROR, "dir data block helper: read lpa %u failed.", addr.lpa);
             throw;
         }
-        handle = dir_data_cache->add(dir_ino, blkno, addr.lpa, addr.nid, addr.nid_off, std::move(buffer));
+        handle = dir_data_cache->add(dir_ino, blkno, addr.lpa, std::move(buffer));
     }
 
     return std::make_pair(handle, addr);

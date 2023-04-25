@@ -47,8 +47,7 @@ page_entry_handle page_cache::get(uint32_t blkoff)
             if (victim != nullptr)
             {
                 assert(victim->ref_count == 0 && victim->is_dirty.load() == false);
-                HSCFS_LOG(HSCFS_LOG_INFO, "replace page cache entry, nid = %u, blkoff = %u",
-                    victim->nid, victim->blkoff);
+                HSCFS_LOG(HSCFS_LOG_INFO, "replace page cache entry, blkoff = %u", victim->blkoff);
                 victim->blkoff = blkoff;
                 victim->content_state = page_state::invalid;
 
@@ -139,8 +138,7 @@ void page_cache::do_replace()
             {
                 assert(p->ref_count == 0 && p->is_dirty.load() == false);
                 --cur_size;
-                HSCFS_LOG(HSCFS_LOG_INFO, "replace page cache entry, nid = %u, blkoff = %u",
-                    p->nid, p->blkoff);
+                HSCFS_LOG(HSCFS_LOG_INFO, "replace page cache entry, blkoff = %u", p->blkoff);
             }
             if (p == nullptr || cur_size <= expect_size)
                 break;
@@ -238,14 +236,14 @@ page_entry::~page_entry()
 {
     int ret = rwlock_destroy(&page_rw_lock);
     if (ret != 0)
-        HSCFS_LOG(HSCFS_LOG_WARNING, "page cache entry(nid = %u, blkoff = %u): "
-            "destroy page rwlock failed while destructed.", nid, blkoff);
+        HSCFS_LOG(HSCFS_LOG_WARNING, "page cache entry(blkoff = %u): "
+            "destroy page rwlock failed while destructed.", blkoff);
     if (ref_count != 0)
-        HSCFS_LOG(HSCFS_LOG_WARNING, "page cache entry(nid = %u, blkoff = %u): "
-            "refcount = %u while destructed.", nid, blkoff, ref_count.load());
+        HSCFS_LOG(HSCFS_LOG_WARNING, "page cache entry(blkoff = %u): "
+            "refcount = %u while destructed.", blkoff, ref_count.load());
     if (is_dirty != 0)
-        HSCFS_LOG(HSCFS_LOG_WARNING, "page cache entry(nid = %u, blkoff = %u): "
-            "still dirty while destructed.", nid, blkoff);
+        HSCFS_LOG(HSCFS_LOG_WARNING, "page cache entry(blkoff = %u): "
+            "still dirty while destructed.", blkoff);
 }
 
 } // namespace hscfs

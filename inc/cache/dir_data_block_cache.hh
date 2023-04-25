@@ -35,13 +35,10 @@ struct dir_data_block_entry_key
 class dir_data_block_entry
 {
 public:
-    dir_data_block_entry(uint32_t ino, uint32_t blkoff, uint32_t lpa, uint32_t nid, 
-        uint32_t nidoff, block_buffer &&block) noexcept
+    dir_data_block_entry(uint32_t ino, uint32_t blkoff, uint32_t lpa, block_buffer &&block) noexcept
         : key(ino, blkoff), block(std::move(block))
     {
         origin_lpa = lpa;
-        this->nid = nid;
-        this->nidoff = nidoff;
         state = dir_data_block_entry_state::uptodate;
         ref_count = 0;
     }
@@ -60,7 +57,6 @@ public:
 private:
     dir_data_block_entry_key key;  // hash key
     uint32_t origin_lpa, commit_lpa;  // block的旧lpa，和写入时应写的新lpa
-    uint32_t nid, nidoff;  // block的反向索引映射
     block_buffer block;
 
     dir_data_block_entry_state state;
@@ -181,10 +177,9 @@ public:
      * 加入缓存时，该缓存项引用计数为0，且data block语义上应为uptodate状态
      * 调用add后，block参数资源被移动，不再有效，调用者应使用返回的handle
      */
-    dir_data_block_handle add(uint32_t ino, uint32_t blkoff, uint32_t lpa, uint32_t nid, 
-        uint32_t nidoff, block_buffer &&block)
+    dir_data_block_handle add(uint32_t ino, uint32_t blkoff, uint32_t lpa, block_buffer &&block)
     {
-        auto p_entry = std::make_unique<dir_data_block_entry>(ino, blkoff, lpa, nid, nidoff, std::move(block));
+        auto p_entry = std::make_unique<dir_data_block_entry>(ino, blkoff, lpa, std::move(block));
         const dir_data_block_entry_key &key = p_entry->get_key();
         assert(cache_manager.get(key) == nullptr);
 

@@ -239,6 +239,7 @@ private:
     size_t expect_size, cur_size;
     generic_cache_manager<uint32_t, node_block_cache_entry> cache_manager;
     std::vector<node_block_cache_entry_handle> dirty_list;
+    std::unordered_map<node_block_cache_entry*, std::vector<node_block_cache_entry_handle>::iterator> dirty_pos;
     file_system_manager *fs_manager;
 
 private:
@@ -259,6 +260,7 @@ private:
         {
             handle.entry->state = node_block_cache_entry_state::dirty;
             dirty_list.emplace_back(handle);
+            dirty_pos.emplace(handle.entry, --dirty_list.end());
         }
     }
 
@@ -267,14 +269,8 @@ private:
     {
         if (entry->state == node_block_cache_entry_state::dirty)
         {
-            auto it = dirty_list.begin();
-            for (; it != dirty_list.end(); ++it)
-            {
-                if (it->entry == entry)
-                    break;
-            }
-            assert(it != dirty_list.end());
-            dirty_list.erase(it);
+            dirty_list.erase(dirty_pos.at(entry));
+            dirty_pos.erase(entry);
         }
         entry->state = node_block_cache_entry_state::deleted;
     }

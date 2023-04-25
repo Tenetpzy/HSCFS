@@ -41,7 +41,6 @@ public:
 
 private:
     uint32_t blkoff;   // 文件内块偏移
-    uint32_t nid, nidoff;  // 反向映射
 
     page_state content_state;
     std::mutex content_state_mtx;  // 保护content_state的锁

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include "cache/node_block_cache.hh"
 
 struct hscfs_node;
 struct hscfs_inode;
@@ -22,6 +23,7 @@ struct block_addr_info
     uint32_t lpa;
     uint32_t nid;
     uint32_t nid_off;
+    node_block_cache_entry_handle nid_handle;
 };
 
 /* 保存一个block在索引树上的路径信息 */

@@ -212,12 +212,13 @@ block_addr_info file_mapping_searcher::get_addr_of_block(uint32_t ino, uint32_t 
 
 	hscfs_node *last_node = nullptr;  // 拥有指向blkno的direct point的node
 	uint32_t cur_nid = ino;  // 当前查找的nid
+	node_block_cache_entry_handle cur_handle;  // 当前nid的缓存项handle
 	uint32_t parent_nid = INVALID_NID;  // cur_nid的父nid
 	int cur_level = 0;  // 当前查找的路径层级(inode为0，子结点递增)
 
     while (true)
     {
-        node_block_cache_entry_handle cur_handle = node_cache->get(cur_nid);
+        cur_handle = node_cache->get(cur_nid);
 
         /* 当前node block缓存不命中，交给SSD进行查询 */
         if (cur_handle.is_empty())
@@ -282,6 +283,7 @@ block_addr_info file_mapping_searcher::get_addr_of_block(uint32_t ino, uint32_t 
 	ret.lpa = target_lpa;
 	ret.nid = cur_nid;
 	ret.nid_off = offset[level];
+	ret.nid_handle = std::move(cur_handle);
 	return ret;
 }
 
