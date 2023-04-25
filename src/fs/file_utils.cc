@@ -312,9 +312,12 @@ void file_resizer::reduce(uint32_t ino, uint64_t tar_size)
 	inode->i_size = tar_size;
 	inode_handle.mark_dirty();
 
-	/* 计算需要释放的起止块偏移闭区间[start_blk, end_blk] */
-	uint32_t start_blk = SIZE_TO_BLOCK(tar_size) + 1;
-	uint32_t end_blk = SIZE_TO_BLOCK(cur_size);
+	/* 
+	 * 计算需要释放的起止块偏移闭区间[start_blk, end_blk]
+	 * SIZE_TO_BLOCK返回的是大小对应的块数量，-1才是块偏移 
+	 */
+	uint32_t start_blk = SIZE_TO_BLOCK(tar_size);  // start_blk = start block index + 1
+	uint32_t end_blk = SIZE_TO_BLOCK(cur_size) - 1;  // end_blk = end block index - 1
 	if (start_blk > end_blk)  // reduce后，仍然在同一个块内
 	{
 		assert(start_blk == end_blk + 1);
@@ -345,15 +348,15 @@ void file_resizer::expand(uint32_t ino, uint64_t tar_size)
 	inode_handle.mark_dirty();
 
 	/* 计算需要增加的起止块偏移闭区间[start_blk, end_blk] */
-	uint32_t start_blk = SIZE_TO_BLOCK(cur_size) + 1;
-	uint32_t end_blk = SIZE_TO_BLOCK(tar_size);
-	if (start_blk > end_blk)
+	uint32_t start_blk = SIZE_TO_BLOCK(cur_size);
+	uint32_t end_blk = SIZE_TO_BLOCK(tar_size) - 1;
+	if (start_blk > end_blk)  // expand后，仍然在同一块内
 	{
 		assert(start_blk == end_blk + 1);
 		return;
 	}
 
-	HSCFS_LOG(HSCFS_LOG_INFO, "expand file [%u] size from %u bytes to %u bytes, will add blocks(map) ranging [%u, %u].", 
+	HSCFS_LOG(HSCFS_LOG_INFO, "expand file [%u] size from %u bytes to %u bytes, will add blocks ranging [%u, %u].", 
 		ino, cur_size, tar_size, start_blk, end_blk);
 	file_mapping_searcher fm_searcher(fs_manager);
 	for (uint32_t blk = start_blk; blk <= end_blk; ++blk)
@@ -371,7 +374,7 @@ void file_resizer::expand(uint32_t ino, uint64_t tar_size)
 	}
 }
 
-void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, uint32_t end_blk)
+void file_resizer::free_blocks_in_range(hscfs_node *inode, const uint32_t start_blk, const uint32_t end_blk)
 {
 	auto intersect = [](uint32_t start1, uint32_t end1, uint32_t start2, uint32_t end2) 
 		-> std::tuple<bool, uint32_t, uint32_t>
@@ -398,7 +401,7 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 				if (lpa != INVALID_LPA)
 				{
 					HSCFS_LOG(HSCFS_LOG_INFO, "block [%u] is valid(lpa = %u), will marked garbage.", i, lpa);
-					sit_operator.invalidate_lpa(lpa);  // to do: 是否在这里invalidate，还是在数据缓存删除时invalidate?
+					sit_operator.invalidate_lpa(lpa);
 					lpa = INVALID_LPA;
 				}
 			}
@@ -409,10 +412,10 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 	 * 处理single node中的direct pointers，将范围内的置为INVALID_LPA
 	 * nid为该single node的id，parent_nid为该single node的parent 
 	 * manage_start为该single node所管理的起始块偏移
-	 * 返回该single node无效化的direct pointers个数
+	 * 返回该single node是否已经无效（管理的首个块范围超过start_blk，则无效。无效返回true）
 	 */
 	auto proc_single_node = [this, intersect, start_blk, end_blk](node_block_cache_entry_handle &handle, 
-		uint32_t manage_start) -> uint32_t
+		uint32_t manage_start) -> bool
 	{
 		uint32_t manage_end = manage_start + single_node_blks - 1;
 		uint32_t start_off, end_off;
@@ -444,14 +447,10 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 			}
 		}
 
-		/* 
-		 * to do: bug: 就算不等于single_node_blks，也可能是无效的。(位于所有删除范围的最末尾那个single node) 
-		 * double、triple也有同样问题
-		 */
-		uint32_t invalid_cnt = end_off - start_off + 1;
-		if (invalid_cnt == single_node_blks)
-			HSCFS_LOG(HSCFS_LOG_INFO, "single node [%u] is empty now, will be deleted later.", nid);
-		return invalid_cnt;
+		bool invalid = manage_start >= start_blk;
+		if (invalid)
+			HSCFS_LOG(HSCFS_LOG_INFO, "single node [%u] is invalid now, will be deleted later.", nid);
+		return invalid;
 	};
 
 	/* 
@@ -459,81 +458,83 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 	 * 如果一个single node不再有效，将其删除，释放nid 
 	 * nid为该double node的nid，parent_nid为其parent
 	 * manage_start为该double node所管理的起始块偏移
-	 * 返回double node是否还有效
+	 * 返回double node是否无效。无效返回true
 	 */
 	auto proc_double_node = [this, intersect, proc_single_node, start_blk, end_blk](
-		node_block_cache_entry_handle &handle, uint32_t manage_start) -> bool
+		node_block_cache_entry_handle &handle, const uint32_t manage_start) -> bool
 	{
 		indirect_node *d_node = &handle->get_node_block_ptr()->in;
 		uint32_t nid = handle->get_node_block_ptr()->footer.nid;
-		uint32_t invalid_single_cnt = 0;
+
+		uint32_t single_manage_start = manage_start;  // 当前处理的single node索引的起始块偏移
 		for (uint32_t i = 0; i < NIDS_PER_BLOCK; ++i)
 		{
-			uint32_t single_manage_end = manage_start + single_node_blks - 1;
-			if (single_manage_end < start_blk)  continue;
-			if (manage_start > end_blk)  break;
+			uint32_t single_manage_end = single_manage_start + single_node_blks - 1;
+			if (single_manage_end < start_blk)  
+				continue;
+			if (single_manage_start > end_blk)
+			{
+				/* 当前single node已经超过了文件范围，则该single node不应该存在 */
+				assert(d_node->nid[i] == INVALID_NID);
+				break;
+			}
 
 			assert(d_node->nid[i] != INVALID_NID);
 			node_block_cache_entry_handle single_handle = node_cache_helper(this->fs_manager)
 				.get_node_entry(d_node->nid[i], nid);
 
-			uint32_t single_node_invalid_num = proc_single_node(single_handle, manage_start);
-			assert(single_node_invalid_num != 0);
-
 			/* 如果该single block已经无效 */
-			if (single_node_invalid_num == single_node_blks)
+			if (proc_single_node(single_handle, single_manage_start))
 			{
 				single_handle.delete_node();
-				++invalid_single_cnt;
 				d_node->nid[i] = INVALID_NID;
 			}
 			else  // 否则，single block修改了一些索引项，标记为dirty
 				single_handle.mark_dirty();
-			manage_start += single_node_blks;
+			single_manage_start += single_node_blks;
 		}
-		bool empty = false;
-		if (invalid_single_cnt == NIDS_PER_BLOCK)
-		{
-			empty = true;
-			HSCFS_LOG(HSCFS_LOG_INFO, "double node [%u] is empty now, will be deleted later.", nid);
-		}
-		return empty;
+
+		bool invalid = manage_start >= start_blk;
+		if (invalid)
+			HSCFS_LOG(HSCFS_LOG_INFO, "double node [%u] is invalid now, will be deleted later.", nid);
+		return invalid;
 	};
 
 	/* 参数和返回值含义与proc_double_node相同。如果下属double node不再有效，则将其删除 */
 	auto proc_triple_node = [this, intersect, proc_double_node, start_blk, end_blk](
-		node_block_cache_entry_handle &handle, uint32_t manage_start) -> bool
+		node_block_cache_entry_handle &handle, const uint32_t manage_start) -> bool
 	{
-		assert(manage_start + triple_node_blks > end_blk);
 		indirect_node *t_node = &handle->get_node_block_ptr()->in;
 		uint32_t nid = handle->get_node_block_ptr()->footer.nid;
-		uint32_t invalid_double_cnt = 0;
+
+		uint32_t double_manage_start = manage_start;
 		for (uint32_t i = 0; i < NIDS_PER_BLOCK; ++i)
 		{
-			uint32_t double_manage_end = manage_start + double_node_blks - 1;
-			if (double_manage_end < start_blk)  continue;
-			if (manage_start > end_blk)  break;
+			uint32_t double_manage_end = double_manage_start + double_node_blks - 1;
+			if (double_manage_end < start_blk)  
+				continue;
+			if (double_manage_start > end_blk)
+			{
+				assert(t_node->nid[i] == INVALID_NID);
+				break;
+			}
 
 			assert(t_node->nid[i] != INVALID_NID);
 			node_block_cache_entry_handle double_handle = node_cache_helper(this->fs_manager)
 				.get_node_entry(t_node->nid[i], nid);
-			if (proc_double_node(double_handle, manage_start))
+			if (proc_double_node(double_handle, double_manage_start))
 			{
 				double_handle.delete_node();
-				++invalid_double_cnt;
 				t_node->nid[i] = INVALID_NID;
 			}
 			else
 				double_handle.mark_dirty();
-			manage_start += double_node_blks;
+			double_manage_start += double_node_blks;
 		}
-		bool empty = false;
-		if (invalid_double_cnt == NIDS_PER_BLOCK)
-		{
-			empty = true;
-			HSCFS_LOG(HSCFS_LOG_INFO, "triple node [%u] is empty now, will be deleted later.", nid);
-		}
-		return empty;
+		bool invalid = manage_start >= start_blk;
+		if (invalid)
+			HSCFS_LOG(HSCFS_LOG_INFO, "triple node [%u] is invalid now, will be deleted later.", nid);
+		return invalid;
 	};
 
 	/* 处理inode中的direct pointers */
@@ -550,7 +551,7 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 		node_block_cache_entry_handle handle = node_cache_helper(this->fs_manager)
 			.get_node_entry(inode->i.i_nid[nid_idx], inode->footer.ino);
 		/* 如果该single node维护的block全部被删除，则删除该single node */
-		if (proc_single_node(handle, cur_start) == single_node_blks)
+		if (proc_single_node(handle, cur_start))
 		{
 			inode->i.i_nid[nid_idx] = INVALID_NID;
 			handle.delete_node();

@@ -63,21 +63,21 @@ void SIT_operator::change_lpa_state(uint32_t lpa, bool valid)
     if (valid)
     {
         assert(!(sit_entry.valid_map[bitmap_idx] & (1U << bitmap_off)));
-        assert(GET_SIT_VBLOCKS(&sit_entry) <= BLOCK_PER_SEGMENT - 1);
-
         sit_entry.valid_map[bitmap_idx] |= 1U << bitmap_off;
-        sit_entry.vblocks++;
 
+        /* 有效块计数字段最多只能是511（9位），但实际可能有512。因此不记录从511->512的增加 */
+        if (GET_SIT_VBLOCKS(&sit_entry) < 511)
+            sit_entry.vblocks++;
         HSCFS_LOG(HSCFS_LOG_INFO, "validate lpa [%u] in SIT.", lpa);
     }
 
     else
     {
         assert(sit_entry.valid_map[bitmap_idx] & (1U << bitmap_off));
-        assert(GET_SIT_VBLOCKS(&sit_entry) > 0);
-
         sit_entry.valid_map[bitmap_idx] &= ~(1U << bitmap_off);
-        sit_entry.vblocks--;
+
+        if (GET_SIT_VBLOCKS(&sit_entry) > 0)
+            sit_entry.vblocks--;
 
         HSCFS_LOG(HSCFS_LOG_INFO, "invalidate lpa [%u] in SIT.", lpa);
     }

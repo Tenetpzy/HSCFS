@@ -59,7 +59,7 @@ class no_free_segment: public std::runtime_error
 {
 public:
     no_free_segment(): std::runtime_error("no free segment to alloc.") {}
-}
+};
 
 /* 以上均为不可恢复异常 */
 /**************************************************************/

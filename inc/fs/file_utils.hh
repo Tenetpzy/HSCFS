@@ -73,7 +73,20 @@ public:
         this->fs_manager = fs_manager;
     }
 
-    /* 将ino减小至size字节。删除不再索引任何block的node。调用者应保证tar_size小于当前文件大小。*/
+    /* 
+     * 将ino减小至size字节。
+     * 
+     * 将指向受影响块范围的direct pointer全部置为INVALID_LPA，并删除不再索引任何block的node。
+     * 
+     * 对于受影响的文件块范围，将invalidate该块的lpa。即，若块缓存中有受到影响的块，
+     * 调用者只需要把它们从数据块缓存中移除，不应再无效化该块的lpa。
+     * 这么做的原因是：
+     * 1、无法保证所有块都在缓存中，如果不由reduce方法invalidate，则一些lpa无法标记为垃圾块
+     *  （reduce后无法再做file mapping，找不到该块的lpa了）
+     * 2、目前由SIT_operator完成invalidate操作，目前为了方便定位潜在的BUG，SIT_operator不允许同一位置的二次validate/invalidate
+     * 
+     * 调用者应保证tar_size小于当前文件大小。
+     */
     void reduce(uint32_t ino, uint64_t tar_size);
 
     /* 将ino扩大至size字节。扩大的部分不会分配物理块，置为INVALID_LPA。*/
@@ -93,7 +106,10 @@ private:
     static const uint64_t max_blkno_limit;  // 文件支持的最大块号 
 
 private:
-    /* 释放[start_blk, end_blk]与它们的索引node block */
+    /* 
+     * 释放[start_blk, end_blk]与它们的索引node block 
+     * 当前的实现中，end_blk应该设置为文件当前的最后一个块号，否则assert失败
+     */
     void free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, uint32_t end_blk);
 };
 
