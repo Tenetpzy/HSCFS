@@ -38,13 +38,13 @@ struct hscfs_super_block
     __le32 first_data_segment_id;
     __le32 first_node_segment_id;
     __le32 current_data_segment_id;
-    __le32 current_data_segment_blkoff;
+    __le32 current_data_segment_blkoff;  // 下一个可用块的segment内块偏移
     __le32 current_node_segment_id;
     __le32 current_node_segment_blkoff;
     __le16 meta_journal_start_blkoff;
     __le16 meta_journal_end_blkoff;
     __le32 free_segment_count;
-    __le32 next_free_nid;
+    __le32 next_free_nid;  // 空闲nid链表，链表尾为INVALID_NID
 
 	__u8 reserved[3964];		/* valid reserved region */
 } __attribute__((packed));

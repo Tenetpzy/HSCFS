@@ -11,8 +11,8 @@ namespace hscfs {
 
 nat_lpa_mapping::nat_lpa_mapping(file_system_manager *fs_manager)
 {
-    nat_start_lpa = fs_manager->get_super_cache()->nat_blkaddr;
-    nat_segment_cnt = fs_manager->get_super_cache()->segment_count_nat;
+    nat_start_lpa = (*fs_manager->get_super_cache())->nat_blkaddr;
+    nat_segment_cnt = (*fs_manager->get_super_cache())->segment_count_nat;
     this->fs_manager = fs_manager;
 }
 

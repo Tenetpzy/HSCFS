@@ -114,7 +114,6 @@ void comm_session_cmd_ctx_destructor(comm_session_cmd_ctx *self);
 int comm_session_env_init(comm_dev *dev);
 
 // 会话层环境销毁
-// to do 
 void comm_session_env_fini();
 
 // 将命令上下文提交给会话层，此后由轮询线程完成轮询该命令CQE等后续流程

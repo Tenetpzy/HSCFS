@@ -12,15 +12,37 @@ namespace hscfs {
 SIT_operator::SIT_operator(file_system_manager *fs_manager)
 {
     this->fs_manager = fs_manager;
-    super_cache *super = fs_manager->get_super_cache();
+    super_cache &super = (*fs_manager->get_super_cache());
     seg0_start_lpa = super->segment0_blkaddr;
     seg_count = super->segment_count;
     sit_start_lpa = super->sit_blkaddr;
     sit_segment_cnt = super->segment_count_sit;
 }
 
+std::pair<uint32_t, uint32_t> SIT_operator::get_seg_pos_of_lpa(uint32_t lpa)
+{
+    lpa -= seg0_start_lpa;
+    return std::make_pair(lpa / BLOCK_PER_SEGMENT, lpa % BLOCK_PER_SEGMENT);
+}
+
+std::pair<uint32_t, uint32_t> SIT_operator::get_segid_pos_in_sit(uint32_t segid)
+{
+    uint32_t sit_lpa_idx = segid / SIT_ENTRY_PER_BLOCK;
+    uint32_t sit_lpa_off = segid % SIT_ENTRY_PER_BLOCK;
+    assert(sit_lpa_idx < sit_segment_cnt * BLOCK_PER_SEGMENT);
+    return std::make_pair(sit_start_lpa + sit_lpa_idx, sit_lpa_off);
+}
+
+uint32_t SIT_operator::get_first_lpa_of_segid(uint32_t segid)
+{
+    return seg0_start_lpa + segid * BLOCK_PER_SEGMENT;
+}
+
 void SIT_operator::change_lpa_state(uint32_t lpa, bool valid)
 {
+    if (lpa == INVALID_LPA)
+        return;
+        
     /* 计算lpa的segment id，segment内块偏移，所处SIT表的lpa */
     lpa -= seg0_start_lpa;
     uint32_t segid = lpa / BLOCK_PER_SEGMENT;

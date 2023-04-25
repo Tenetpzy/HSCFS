@@ -398,7 +398,7 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 				if (lpa != INVALID_LPA)
 				{
 					HSCFS_LOG(HSCFS_LOG_INFO, "block [%u] is valid(lpa = %u), will marked garbage.", i, lpa);
-					sit_operator.invalidate_lpa(lpa);
+					sit_operator.invalidate_lpa(lpa);  // to do: 是否在这里invalidate，还是在数据缓存删除时invalidate?
 					lpa = INVALID_LPA;
 				}
 			}
@@ -444,6 +444,10 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, u
 			}
 		}
 
+		/* 
+		 * to do: bug: 就算不等于single_node_blks，也可能是无效的。(位于所有删除范围的最末尾那个single node) 
+		 * double、triple也有同样问题
+		 */
 		uint32_t invalid_cnt = end_off - start_off + 1;
 		if (invalid_cnt == single_node_blks)
 			HSCFS_LOG(HSCFS_LOG_INFO, "single node [%u] is empty now, will be deleted later.", nid);

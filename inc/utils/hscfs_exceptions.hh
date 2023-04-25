@@ -49,6 +49,18 @@ public:
     expand_file_size_exceed_limit(const char *s): std::logic_error(s) {}
 };
 
+class no_free_nid: public std::runtime_error
+{
+public:
+    no_free_nid(): std::runtime_error("no free nid to alloc.") {}
+};
+
+class no_free_segment: public std::runtime_error
+{
+public:
+    no_free_segment(): std::runtime_error("no free segment to alloc.") {}
+}
+
 /* 以上均为不可恢复异常 */
 /**************************************************************/
 
