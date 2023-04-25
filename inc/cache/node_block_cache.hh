@@ -5,7 +5,7 @@
 #include "fs/fs.h"
 
 #include <cassert>
-#include <vector>
+#include <list>
 
 struct comm_dev;
 
@@ -213,7 +213,7 @@ public:
         return node_block_cache_entry_handle(p_entry, this);
     }
 
-    std::vector<node_block_cache_entry_handle> get_dirty_list() const noexcept
+    std::list<node_block_cache_entry_handle> get_dirty_list() const noexcept
     {
         return dirty_list;
     }
@@ -238,8 +238,8 @@ public:
 private:
     size_t expect_size, cur_size;
     generic_cache_manager<uint32_t, node_block_cache_entry> cache_manager;
-    std::vector<node_block_cache_entry_handle> dirty_list;
-    std::unordered_map<node_block_cache_entry*, std::vector<node_block_cache_entry_handle>::iterator> dirty_pos;
+    std::list<node_block_cache_entry_handle> dirty_list;
+    std::unordered_map<node_block_cache_entry*, std::list<node_block_cache_entry_handle>::iterator> dirty_pos;
     file_system_manager *fs_manager;
 
 private:
@@ -258,6 +258,7 @@ private:
         /* 保证node block缓存项如果是dirty状态，一定至少有一个引用计数 */
         if (handle.entry->state != node_block_cache_entry_state::dirty)
         {
+            assert(handle.entry->state == node_block_cache_entry_state::uptodate);
             handle.entry->state = node_block_cache_entry_state::dirty;
             dirty_list.emplace_back(handle);
             dirty_pos.emplace(handle.entry, --dirty_list.end());
@@ -269,6 +270,7 @@ private:
     {
         if (entry->state == node_block_cache_entry_state::dirty)
         {
+            assert(dirty_pos.at(entry)->entry == entry);
             dirty_list.erase(dirty_pos.at(entry));
             dirty_pos.erase(entry);
         }
