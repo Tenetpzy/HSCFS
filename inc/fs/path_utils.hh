@@ -21,7 +21,7 @@ public:
         cur_pos = start_pos; 
     }
 
-    /* 返回当前的目录项名，并让iterator指向下一项 */
+    /* 让iterator指向下一项 */
     void next();
 
     /* 返回当前的目录项名 */
@@ -128,7 +128,8 @@ public:
     }
 
     /*
-     * 对set_abs_path中传入的path进行路径解析
+     * 进行路径解析
+     * 调用前应该先调用set_abs_path或set_rel_path设置目标
      * 
      * 返回最后一级目录项的dentry handle
      * 若某一级目录项不存在，则返回的handle的is_empty方法返回true
