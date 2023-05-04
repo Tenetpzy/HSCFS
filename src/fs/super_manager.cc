@@ -11,7 +11,6 @@
 
 #include <tuple>
 #include <cstddef>
-#include "super_manager.hh"
 
 namespace hscfs {
 
@@ -73,6 +72,18 @@ void super_manager::free_nid(uint32_t nid)
     cur_journal->append_NAT_journal_entry(nat_journal);
     cur_journal->append_super_block_journal_entry(super_journal);
     nat_handle.add_host_version();
+}
+
+uint32_t super_manager::alloc_node_lpa()
+{
+    lpa_alloc_context ctx = create_lpa_alloc_context(lpa_alloc_type::node);
+    return alloc_lpa_inner(ctx);
+}
+
+uint32_t super_manager::alloc_data_lpa()
+{
+    lpa_alloc_context ctx = create_lpa_alloc_context(lpa_alloc_type::data);
+    return alloc_lpa_inner(ctx);
 }
 
 lpa_alloc_context super_manager::create_lpa_alloc_context(lpa_alloc_type type)

@@ -9,7 +9,7 @@ namespace hscfs {
 
 class file_system_manager;
 
-/* 保存一个目录项的信息，内部使用 */
+/* 保存一个目录项的ino、type和位置信息，内部使用 */
 struct dentry_info
 {
     uint32_t ino;  // inode号，无效则为INVALID_NID

@@ -57,7 +57,7 @@ public:
     dentry_handle get_root_dentry() const noexcept;
     fd_array* get_fd_array() const noexcept;
 
-    journal_container* get_cur_journal() const noexcept;
+    journal_container* get_cur_journal() const noexcept;  // 获取运行时的修改日志容器，未提交时所有修改日志写入此容器
 
     /* 置为不可恢复状态 */
     void set_unrecoverable() noexcept;

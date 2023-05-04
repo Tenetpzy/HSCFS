@@ -37,6 +37,11 @@ public:
     /* 释放nid，把它加入空闲nid链表，并将修改记录到super和NAT日志 */
     void free_nid(uint32_t nid);
 
+    /* 
+     * 为node/data block分配一个lpa，在对应的活跃segment上进行分配，
+     * 如果活跃segment已满，将其加入对应uncommit_segs，从free segs上分配一个作为新的活跃segment，
+     * 返回分配的lpa 
+     */
     uint32_t alloc_node_lpa();
     uint32_t alloc_data_lpa();
 
