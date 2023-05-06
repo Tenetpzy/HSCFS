@@ -133,7 +133,7 @@ void node_block_cache_entry_handle::do_subref()
         cache->sub_refcount(entry);
 }
 
-hscfs::node_block_cache_entry::~node_block_cache_entry()
+node_block_cache_entry::~node_block_cache_entry()
 {
     if (ref_count != 0 || state != node_block_cache_entry_state::uptodate)
     {
@@ -176,6 +176,25 @@ node_block_cache_entry_handle node_cache_helper::get_node_entry(uint32_t nid, ui
         assert(node->footer.ino == nid);
 
     return node_handle;
+}
+
+node_block_cache_entry_handle node_cache_helper::create_node_entry(uint32_t ino, uint32_t noffset, uint32_t parent_nid)
+{
+    /* 分配nid，创建node block缓存项并加入缓存 */
+    uint32_t new_nid = super_manager(fs_manager).alloc_nid(ino);
+    auto handle = node_cache->add(block_buffer(), new_nid, parent_nid, INVALID_LPA);
+    hscfs_node *node = handle->get_node_block_ptr();
+
+    /* 初始化node footer */
+    node_footer *footer = &node->footer;
+    footer->ino = ino;
+    footer->nid = new_nid;
+    footer->offset = noffset;
+
+    /* 标记缓存项为dirty */
+    handle.mark_dirty();
+
+    return handle;
 }
 
 } // namespace hscfs

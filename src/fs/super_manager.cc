@@ -157,7 +157,8 @@ uint32_t super_manager::alloc_lpa_inner(lpa_alloc_context &ctx)
     }
 
     /* 计算分配出去的lpa */
-    uint32_t lpa = SIT_operator(fs_manager).get_first_lpa_of_segid(ctx.cur_seg_id) + ctx.cur_seg_off;
+    SIT_operator sit_operator(fs_manager);
+    uint32_t lpa = sit_operator.get_first_lpa_of_segid(ctx.cur_seg_id) + ctx.cur_seg_off;
     HSCFS_LOG(HSCFS_LOG_INFO, "alloc lpa [%u] in segment [%u], segment block offset [%u].", lpa, ctx.cur_seg_id, 
         ctx.cur_seg_off);
     ++ctx.cur_seg_off;
@@ -165,6 +166,9 @@ uint32_t super_manager::alloc_lpa_inner(lpa_alloc_context &ctx)
     /* 记录活跃segment分配位置的修改日志 */
     super_block_journal_entry super_journal = {.Off = ctx.seg_off_addr_offset, .newVal = ctx.cur_seg_off};
     cur_journal->append_super_block_journal_entry(super_journal);
+
+    /* 在SIT表中标记该块有效 */
+    sit_operator.validate_lpa(lpa);
 
     return lpa;
 }

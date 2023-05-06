@@ -56,6 +56,10 @@ public:
         return reinterpret_cast<hscfs_node*>(node.get_ptr());
     }
 
+    uint32_t get_nid() const noexcept {
+        return nid;
+    }
+
 private:
     uint32_t nid;
     uint32_t parent_nid;
@@ -285,21 +289,32 @@ private:
 class SIT_NAT_cache;
 class file_system_manager;
 
-/*
- * node block获取器
- * 封装node block cache不命中时，从NAT表中查找lpa并读入缓存的过程
- */
+/* node block缓存操作工具 */
 class node_cache_helper
 {
 public:
     node_cache_helper(file_system_manager *fs_manager) noexcept;
 
     /* 
-     * 调用时持有fs_meta_lock 
+     * 获取nid对应的node block缓存项，封装node block cache不命中时，从NAT表中查找lpa并读入缓存的过程
      * parent_nid为目标nid在索引树上的父node block。如果nid为inode block，则parent_nid应置为INVALID_NID
-     * 调用者应确保parent_nid在缓存中
+     * 调用者应确保parent_nid在缓存中，且nid有效
      */
     node_block_cache_entry_handle get_node_entry(uint32_t nid, uint32_t parent_nid);
+
+    /*
+     * 分配一个nid，然后分配一个node block缓存项，把该node block缓存项和nid绑定
+     * 新缓存项的old_lpa和new_lpa均为invalid，状态为dirty
+     * 新node block中，node footer按参数内容初始化，其余内容初始化为0
+     * 
+     * 参数：
+     * ino: 该node所属文件（此接口用于创建索引树的node，不用于创建inode）
+     * noffset：该node在索引树中的逻辑编号
+     * parent_nid：该node在索引树上的父结点
+     * 
+     * 返回新node缓存项句柄
+     */
+    node_block_cache_entry_handle create_node_entry(uint32_t ino, uint32_t noffset, uint32_t parent_nid);
 
 private:
 

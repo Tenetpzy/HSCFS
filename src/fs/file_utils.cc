@@ -90,20 +90,7 @@ void ssd_file_mapping_search_controller::do_filemapping_search()
 
 /*********************************************************************/
 
-/* 
- * file mapping查询的辅助函数
-
- * block：带查找的块号
- * 
- * offset: block在索引树路径的每一级索引块中的偏移：
- * 对于inode，若block在直接索引范围内，offset是i_attr数组下标；否则offset - NODE_DIR1_BLOCK是i_nid数组下标
- * 对于indirect和direct node，offset是nid/addr数组下标
- * 
- * noffset：索引树路径的每一个块的树上逻辑编号
- * 
- * 返回值：block的索引树路径深度。inode深度为0。
- */
-int file_mapping_searcher::get_node_path(uint64_t block, uint32_t offset[4], uint32_t noffset[4])
+int file_mapping_util::get_node_path(uint64_t block, uint32_t offset[4], uint32_t noffset[4])
 {
 	const long direct_index = DEF_ADDRS_PER_INODE;
 	const long direct_blks = DEF_ADDRS_PER_BLOCK;
@@ -176,14 +163,22 @@ got:
 	return level;
 }
 
-uint32_t file_mapping_searcher::get_next_nid(hscfs_node *node, uint32_t offset, int cur_level)
+uint32_t file_mapping_util::get_next_nid(hscfs_node *node, uint32_t offset, int cur_level)
 {
     if (cur_level == 0)  // 如果是inode
 		return node->i.i_nid[offset - NODE_DIR1_BLOCK];
 	return node->in.nid[offset];
 }
 
-uint32_t file_mapping_searcher::get_lpa(hscfs_node *node, uint32_t offset, int level)
+void file_mapping_util::set_next_nid(hscfs_node *node, uint32_t offset, int cur_level, uint32_t nxt_nid)
+{
+    if (cur_level == 0)
+		node->i.i_nid[offset - NODE_DIR1_BLOCK] = nxt_nid;
+	else
+		node->in.nid[offset] = nxt_nid;
+}
+
+uint32_t file_mapping_util::get_lpa(hscfs_node *node, uint32_t offset, int level)
 {
 	/* 如果是inode */
     if (level == 0)
@@ -198,12 +193,27 @@ uint32_t file_mapping_searcher::get_lpa(hscfs_node *node, uint32_t offset, int l
 	}
 }
 
-block_addr_info file_mapping_searcher::get_addr_of_block(uint32_t ino, uint32_t blkno)
+void file_mapping_util::set_lpa(hscfs_node *node, uint32_t offset, int level, uint32_t lpa)
+{
+	/* 如果是inode */
+    if (level == 0)
+	{
+		assert(offset < DEF_ADDRS_PER_INODE);  // offset应在i_addr数组范围内
+		node->i.i_addr[offset] = lpa;
+	}
+	else  // 否则是direct node
+	{
+		assert(offset < DEF_ADDRS_PER_BLOCK);  // offset应在addr数组范围内
+		node->dn.addr[offset] = lpa;
+	}
+}
+
+block_addr_info file_mapping_util::get_addr_of_block(uint32_t ino, uint32_t blkno)
 {
     uint32_t offset[4], noffset[4];
     int level = get_node_path(blkno, offset, noffset);
     assert(level != -1);
-	HSCFS_LOG(HSCFS_LOG_INFO, "file mapping searcher: start file mapping search: "
+	HSCFS_LOG(HSCFS_LOG_INFO, "file_mapping_util: start file mapping search: "
 		"target inode: %u, target block offset: %u, target path level in node tree: %d",
 		ino, blkno, level
 	);
@@ -223,7 +233,7 @@ block_addr_info file_mapping_searcher::get_addr_of_block(uint32_t ino, uint32_t 
         /* 当前node block缓存不命中，交给SSD进行查询 */
         if (cur_handle.is_empty())
         {
-			HSCFS_LOG(HSCFS_LOG_INFO, "file_mapping_searcher:"
+			HSCFS_LOG(HSCFS_LOG_INFO, "file_mapping_util:"
 				"node block[file(inode: %u), level %d, nid %u] miss. Prepare fetching from SSD", 
 				ino, cur_level, cur_nid);
 			int ssd_level = level - cur_level + 1;
@@ -308,7 +318,7 @@ void file_resizer::reduce(uint32_t ino, uint64_t tar_size)
 
 	/* 更新inode中的size */
 	uint64_t cur_size = inode->i_size;
-	assert (tar_size < cur_size);
+	if (cur_size <= tar_size)  return;
 	inode->i_size = tar_size;
 	inode_handle.mark_dirty();
 
@@ -341,7 +351,7 @@ void file_resizer::expand(uint32_t ino, uint64_t tar_size)
 
 	/* 更新inode中的size */
 	uint64_t cur_size = inode->i_size;
-	assert(tar_size > cur_size);
+	if (tar_size <= cur_size)  return;
 	if (SIZE_TO_BLOCK(tar_size) > max_blkno_limit)
 		throw expand_file_size_exceed_limit("expand file size exceeding limit.");
 	inode->i_size = tar_size;
@@ -358,18 +368,51 @@ void file_resizer::expand(uint32_t ino, uint64_t tar_size)
 
 	HSCFS_LOG(HSCFS_LOG_INFO, "expand file [%u] size from %u bytes to %u bytes, will add blocks ranging [%u, %u].", 
 		ino, cur_size, tar_size, start_blk, end_blk);
-	file_mapping_searcher fm_searcher(fs_manager);
+
+	/* 对每一个新增的block，确保索引它的node存在 */
 	for (uint32_t blk = start_blk; blk <= end_blk; ++blk)
 	{
 		block_node_path blk_path;
-		blk_path.level = fm_searcher.get_node_path(blk, blk_path.offset, blk_path.noffset);
+		blk_path.level = file_mapping_util::get_node_path(blk, blk_path.offset, blk_path.noffset);
 		assert(blk_path.level != -1);
 
-		/* 沿着路径向下，如果遇到INVALID_NID，则创建该node block */
-		uint32_t cur_nid = ino, parent_nid = INVALID_NID;
-		for (int level = 0; level <= blk_path.level; ++level)
+		/* 沿着当前block的索引路径向下，如果遇到INVALID_NID，则创建该node block */
+		/* cur_nid, cur_handle：当前处理的node。*/
+		uint32_t cur_nid = ino;
+		node_block_cache_entry_handle cur_handle = inode_handle;
+		for (int level = 0; level < blk_path.level; ++level)
 		{
-			/* to do，新建node block */
+			hscfs_node *cur_node = cur_handle->get_node_block_ptr();
+			uint32_t nxt_nid = file_mapping_util::get_next_nid(cur_node, blk_path.offset[level], level);
+
+			/* 下一级索引不存在，创建它 */
+			if (nxt_nid == INVALID_NID)
+			{
+				node_block_cache_entry_handle nxt_handle = node_helper.create_node_entry(ino, 
+					blk_path.noffset[level + 1], cur_nid);
+				nxt_nid = nxt_handle->get_nid();
+
+				/* 修改当前node中指向下一级的索引，并标记为dirty */
+				file_mapping_util::set_next_nid(cur_node, blk_path.offset[level], level, nxt_nid);
+				cur_handle.mark_dirty();
+
+				HSCFS_LOG(HSCFS_LOG_DEBUG, "next node level of [node: %u, offset: %u] didn't exist, "
+					"created with new nid %u.", cur_nid, blk_path.offset[level], nxt_nid);
+				
+				cur_handle = nxt_handle;
+			}
+
+			/* 下一级索引项存在，从缓存中或SSD中读取 */
+			else
+			{
+				cur_handle = node_helper.get_node_entry(nxt_nid, cur_nid);
+			}
+
+			cur_nid = nxt_nid;
+			assert(cur_handle->get_nid() == cur_nid);
+			assert(cur_handle->get_node_block_ptr()->footer.ino == ino);
+			assert(cur_handle->get_node_block_ptr()->footer.nid == cur_nid);
+			assert(cur_handle->get_node_block_ptr()->footer.offset == blk_path.noffset[level + 1]);
 		}
 	}
 }

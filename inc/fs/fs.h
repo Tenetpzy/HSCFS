@@ -126,7 +126,7 @@ struct node_footer {
 	__le32 nid;		/* node id */
 	__le32 ino;		/* inode number */
 	__le32 offset;		/*  offset */
-	__le32 next_blkaddr;	/* next node page block address */
+	__le32 next_blkaddr;	/* next node page block address(不使用) */
 } __attribute__((packed));
 
 struct hscfs_node {

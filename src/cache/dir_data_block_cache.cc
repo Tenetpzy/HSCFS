@@ -84,7 +84,7 @@ std::pair<dir_data_block_handle, block_addr_info> dir_data_cache_helper::get_dir
     /* dir data block缓存不命中，通过file mapping查找地址并读取 */
     if (handle.is_empty())
     {
-        file_mapping_searcher searcher(fs_manager);
+        file_mapping_util searcher(fs_manager);
         addr = searcher.get_addr_of_block(dir_ino, blkno);
 
         /* 如果是文件空洞，直接返回 */

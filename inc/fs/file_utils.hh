@@ -35,13 +35,13 @@ struct block_node_path
 };
 
 /*
- * file mapping解析的执行器
+ * file mapping工具
  * 使用此类前需要持有fs_meta_lock
  */
-class file_mapping_searcher
+class file_mapping_util
 {
 public:
-    file_mapping_searcher(file_system_manager *fs_manager)
+    file_mapping_util(file_system_manager *fs_manager)
     {
         this->fs_manager = fs_manager;
     }
@@ -52,9 +52,48 @@ public:
      */
     block_addr_info get_addr_of_block(uint32_t ino, uint32_t blkno);
 
+    /* 
+     * file mapping查询的辅助函数
+
+     * block：带查找的块号
+     * 
+     * offset: block在索引树路径的每一级索引块中的偏移：
+     * 对于inode，若block在直接索引范围内，offset是i_attr数组下标；否则offset - NODE_DIR1_BLOCK是i_nid数组下标
+     * 对于indirect和direct node，offset是nid/addr数组下标
+     * 
+     * noffset：索引树路径的每一个块的树上逻辑编号
+     * 
+     * 返回值：block的索引树路径深度。inode深度为0。
+     */
     static int get_node_path(uint64_t block, uint32_t offset[4], uint32_t noffset[4]);
+
+    /*
+     * 封装从node和offset获取下一级nid的过程
+     * 若node是inode，则cur_level应为0，否则应为非0
+     * node不能是direct node
+     */
     static uint32_t get_next_nid(hscfs_node *node, uint32_t offset, int cur_level);
+
+    /*
+     * 封装：设置node中offset对应下一级nid为nxt_nid的过程
+     * 若node是inode，则cur_level应为0，否则应为非0。node不能是direct node
+     * 调用者应把node对应缓存项标记为dirty
+     */
+    static void set_next_nid(hscfs_node *node, uint32_t offset, int cur_level, uint32_t nxt_nid);
+
+    /*
+     * 封装：从inode或direct node和offset中获取lpa的过程
+     * 若node是inode，则level应为0，否则应为非0
+     * node不能是indirect node
+     */
     static uint32_t get_lpa(hscfs_node *node, uint32_t offset, int level);
+
+    /*
+     * 封装：设置inode或direct node和offset对应的索引项为lpa的过程
+     * 若node是inode，则level应为0，否则应为非0。node不能是indirect node
+     * 调用者应把node对应缓存项标记为dirty
+     */
+    static void set_lpa(hscfs_node *node, uint32_t offset, int level, uint32_t lpa);
     
 private:
     file_system_manager *fs_manager;
@@ -74,7 +113,7 @@ public:
     }
 
     /* 
-     * 将ino减小至size字节。
+     * 将ino减小至tar_size字节，如果当前文件大小<=tar_size，什么都不做
      * 
      * 将指向受影响块范围的direct pointer全部置为INVALID_LPA，并删除不再索引任何block的node。
      * 
@@ -84,12 +123,14 @@ public:
      * 1、无法保证所有块都在缓存中，如果不由reduce方法invalidate，则一些lpa无法标记为垃圾块
      *  （reduce后无法再做file mapping，找不到该块的lpa了）
      * 2、目前由SIT_operator完成invalidate操作，目前为了方便定位潜在的BUG，SIT_operator不允许同一位置的二次validate/invalidate
-     * 
-     * 调用者应保证tar_size小于当前文件大小。
      */
     void reduce(uint32_t ino, uint64_t tar_size);
 
-    /* 将ino扩大至size字节。扩大的部分不会分配物理块，置为INVALID_LPA。*/
+    /* 
+     * 将ino扩大至tar_size字节。
+     * 如果当前文件大小>=tar_size，什么都不做。
+     * 扩大的部分不会分配物理块，置为INVALID_LPA。
+     */
     void expand(uint32_t ino, uint64_t tar_size);
 
 private:
