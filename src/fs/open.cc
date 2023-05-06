@@ -21,6 +21,12 @@ int do_open(const char *pathname, int flags)
         std::string dir_path = path_helper::extract_dir_path(abs_path);
         std::string file_name = path_helper::extract_file_name(abs_path);
 
+        if (dir_path.length() == 0 || file_name.length() == 0)
+        {
+            errno = EINVAL;
+            return -1;
+        }
+
         /* 找到目标文件的目录的dentry */
         path_lookup_processor proc(fs_manager);
         proc.set_abs_path(dir_path);

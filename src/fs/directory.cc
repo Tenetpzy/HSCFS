@@ -1,5 +1,6 @@
 #include "cache/node_block_cache.hh"
 #include "cache/dir_data_block_cache.hh"
+#include "cache/node_block_cache.hh"
 #include "fs/directory.hh"
 #include "fs/fs_manager.hh"
 #include "fs/fs.h"
@@ -7,6 +8,7 @@
 #include "utils/hscfs_log.h"
 
 #include <tuple>
+#include "directory.hh"
 
 namespace hscfs {
 
@@ -17,8 +19,104 @@ dentry_info::dentry_info()
 
 dentry_handle directory::create(const std::string &name, uint8_t type, const dentry_store_pos *create_pos_hint)
 {
-    /* 注意，可能有同名的老dentry，但它处于deleted状态，此时不应该出错 */
+    /* 
+     * 注意：可能有同名的老dentry，但它处于deleted状态，此时不应该出错
+     * 调用者提供的create_pos_hint可能是不正确的（如果此目录添加过文件，且这个位置是SSD返回）
+     */
     
+    dentry_store_pos create_pos;  // 最终决定的目录项创建位置
+
+    /* 首先检查create_pos_hint是否能用 */
+    /* 计算当前目录文件的最大块号 */
+    node_cache_helper node_helper(fs_manager);
+    auto inode_handle = node_helper.get_node_entry(ino, INVALID_NID);
+    hscfs_inode *inode = &inode_handle->get_node_block_ptr()->i;
+    uint32_t max_blk_off = SIZE_TO_BLOCK(inode->i_size) - 1;
+    assert(inode->i_size % 4096 == 0);
+
+    bool create_pos_valid = true;
+    dir_data_cache_helper dir_data_helper(fs_manager);
+
+    if (!create_pos_hint->is_valid)
+        create_pos_valid = false;
+
+    /* 
+     * 如果create_pos_hint在文件范围内，则检查该位置是否确实可用
+     * 处在文件范围外，是可用的（文件空洞，后续会处理）
+     */
+    else if (create_pos_hint->blkno <= max_blk_off)
+    {
+        dir_data_block_handle create_blk_handle;
+        block_addr_info create_blk_addr;
+        std::tie(create_blk_handle, create_blk_addr) = dir_data_helper.get_dir_data_block(ino, create_pos_hint->blkno);
+
+        /* 如果create_pos_hint不是文件空洞，则确实需要检查 */
+        if (!create_blk_handle.is_empty())
+        {
+            hscfs_dentry_block *create_blk = create_blk_handle->get_block_ptr();
+            uint8_t *bitmap_addr = create_blk->dentry_bitmap;
+            size_t name_occupy_slots = GET_DENTRY_SLOTS(name.length());
+            for (uint32_t i = 0; i < name_occupy_slots; ++i)
+            {
+                if (test_bitmap_pos(i + create_pos_hint->slotno, bitmap_addr))
+                {
+                    create_pos_valid = false;
+                    break;
+                }
+            }
+        }
+    }
+
+    /* 如果调用者传入的创建位置无效，则搜索可创建位置 */
+    if (!create_pos_valid)
+    {
+        dentry_info info = lookup(name);
+        assert(info.ino == INVALID_NID);
+        
+        /* 如果当前目录文件找不到可创建位置了，则新增一个哈希表 */
+        if (!info.store_pos.is_valid)
+        {
+            ++inode->i_current_depth;
+            uint32_t blknum_need_expand = bucket_num(inode->i_current_depth, inode->i_dir_level) *
+                bucket_block_num(inode->i_current_depth);
+            uint64_t size_after_expand = (SIZE_TO_BLOCK(inode->i_size) + blknum_need_expand) * 4096;
+            HSCFS_LOG(HSCFS_LOG_DEBUG, "directory(ino = %u) has no place to create dentry %s, "
+                "appending hash level to %u, need append another %u blocks.", 
+                ino, name.c_str(), inode->i_current_depth, blknum_need_expand);
+            file_resizer(fs_manager).expand(ino, size_after_expand);
+
+            /* 新增哈希表之后，再次进行lookup */
+            info = lookup(name);
+            assert(info.ino == INVALID_NID);
+            assert(info.store_pos.is_valid == true);
+        }
+
+        create_pos = info.store_pos;
+    }
+
+    /* 如果调用者提供的位置有效，则直接使用该位置 */
+    else
+        create_pos = *create_pos_hint;
+    
+    /* 此时，create_pos是有效的，但需要判断是否为文件空洞 */
+    assert(create_pos.is_valid == true);
+    HSCFS_LOG(HSCFS_LOG_INFO, "create dentry %s in directory(ino = %u), pos: blkno = %u, slotno = %u",
+        name.c_str(), ino, create_pos.blkno, create_pos.slotno);
+
+    dir_data_block_handle create_blk_handle;
+    std::tie(create_blk_handle, std::ignore) = dir_data_helper.get_dir_data_block(ino, create_pos.blkno);
+
+    /* 如果是文件空洞，则创建一个数据块缓存（此时不分配地址，提交时再分配） */
+    if (create_blk_handle.is_empty())
+    {
+        create_blk_handle = fs_manager->get_dir_data_cache()->add(ino, create_pos.blkno, INVALID_LPA, 
+            create_formatted_data_block_buffer());
+        create_blk_handle.mark_dirty();
+        HSCFS_LOG(HSCFS_LOG_INFO, "creation pos is in file hole, allocated a dir data block buffer for it.");
+    }
+
+    /* to do: 此时，create_blk_handle指向待创建目录项的数据块，在其中创建目标目录项 */
+
 }
 
 dentry_info directory::lookup(const std::string &name)
@@ -258,14 +356,14 @@ void directory::make_dentry_ptr_block(hscfs_dentry_ptr *d, hscfs_dentry_block *t
 	d->filename = t->filename;
 }
 
-hscfs_dir_entry *directory::hscfs_find_target_dentry(const unsigned char *name, u32 nameLen, uint32_t namehash, 
-    int *max_slots, u32 *empty_bit_pos, hscfs_dentry_ptr *d)
+bool directory::test_bitmap_pos(unsigned long slot_pos, const void *bitmap_start_addr)
 {
-    auto test_bit_le = [](unsigned long nr, const void *addr)
-    {
-        return (u64)1 & (((const u64 *)addr)[BIT_WORD(nr)] >> (nr & (BITS_PER_LONG - 1)));
-    };
+    return (u64)1 & (((const u64 *)bitmap_start_addr)[BIT_WORD(slot_pos)] >> (slot_pos & (BITS_PER_LONG - 1)));
+}
 
+hscfs_dir_entry *directory::hscfs_find_target_dentry(const unsigned char *name, u32 nameLen, uint32_t namehash,
+                                                     int *max_slots, u32 *empty_bit_pos, hscfs_dentry_ptr *d)
+{
 	hscfs_dir_entry *de;
 	unsigned long bit_pos = 0;
 	int max_len = 0;
@@ -273,7 +371,7 @@ hscfs_dir_entry *directory::hscfs_find_target_dentry(const unsigned char *name, 
 	if (max_slots)
 		*max_slots = 0;
 	while (bit_pos < (u32)d->max) {
-		if (!test_bit_le(bit_pos, d->bitmap)) {
+		if (!test_bitmap_pos(bit_pos, d->bitmap)) {
 			bit_pos++;
 			max_len++;
 			continue;

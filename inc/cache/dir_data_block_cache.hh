@@ -35,13 +35,7 @@ struct dir_data_block_entry_key
 class dir_data_block_entry
 {
 public:
-    dir_data_block_entry(uint32_t ino, uint32_t blkoff, uint32_t lpa, block_buffer &&block) noexcept
-        : key(ino, blkoff), block(std::move(block))
-    {
-        origin_lpa = lpa;
-        state = dir_data_block_entry_state::uptodate;
-        ref_count = 0;
-    }
+    dir_data_block_entry(uint32_t ino, uint32_t blkoff, uint32_t lpa, block_buffer &&block) noexcept;
     ~dir_data_block_entry();
 
     const dir_data_block_entry_key& get_key() const noexcept

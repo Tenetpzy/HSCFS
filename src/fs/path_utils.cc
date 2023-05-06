@@ -255,6 +255,7 @@ dentry_handle path_lookup_processor::do_path_lookup(dentry_store_pos *pos_info)
         start_dentry->get_ino(), path.c_str()
     );
 
+    /* itr指向下一个目录项 */
     for (auto itr = p_parser.begin(), end_itr = p_parser.end(); itr != end_itr; itr.next())
     {
         /* 如果当前目录项不是目录，则不再查找，返回不存在 */
