@@ -312,9 +312,14 @@ public:
      * noffset：该node在索引树中的逻辑编号
      * parent_nid：该node在索引树上的父结点
      * 
+     * is_inode：是否要创建inode。如果为true，上述三个参数被忽略
+     * 
      * 返回新node缓存项句柄
      */
     node_block_cache_entry_handle create_node_entry(uint32_t ino, uint32_t noffset, uint32_t parent_nid);
+
+    /* 作用同create_node_entry，区别在于此函数创建的是inode，因此不需要额外参数 */
+    node_block_cache_entry_handle create_inode_entry();
 
 private:
 

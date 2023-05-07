@@ -3,7 +3,8 @@
 #include <cstdint>
 #include <string>
 #include "cache/dentry_cache.hh"
-#include  "cache/block_buffer.hh"
+#include "cache/block_buffer.hh"
+#include "cache/dir_data_block_cache.hh"
 
 namespace hscfs {
 
@@ -53,6 +54,11 @@ public:
      */
     dentry_info lookup(const std::string &name);
 
+public:
+    static uint32_t bucket_num(u32 level, int dir_level);  // 计算第level级哈希表中桶的个数
+
+    static u32 bucket_block_num(u32 level);  // 计算第level级哈希表的每个桶所包含的block个数
+
 private:
     uint32_t ino;  // 目录文件的ino
     dentry_handle dentry;  // 对应的dentry
@@ -60,15 +66,12 @@ private:
 
 private:
     static block_buffer create_formatted_data_block_buffer();  // 新建一个格式化后的dir data block buffer
-
-    /* lookup 辅助函数 */
     
+    /* 目录项查找辅助函数 */
+    /*****************************************************************/
+
     /* 在块中查找目录项 */
     dentry_info find_dentry_in_block(uint32_t blkno, const std::string &name, u32 name_hash) const;
-
-    static uint32_t bucket_num(u32 level, int dir_level);  // 计算第level级哈希表中桶的个数
-
-    static u32 bucket_block_num(u32 level);  // 计算第level级哈希表的每个桶所包含的block个数
 
     /* 计算第level级哈希表中，下标为idx的桶的第一个block在目录文件中的块偏移 */
     static u32 bucket_start_block_index(u32 level, int dir_level, u32 bucket_idx);
@@ -86,6 +89,28 @@ private:
 
     static u32 hscfs_match_name(struct hscfs_dentry_ptr* d, struct hscfs_dir_entry *de, const unsigned char* name,
         u32 len, unsigned long bit_pos, hscfs_hash_t namehash);
+
+    /*****************************************************************/
+
+    /* create辅助函数 */
+    /*****************************************************************/
+
+    /* 
+     * 检查create_pos_hint指向的位置是否确实能创建目录项name 
+     * 如果create_pos_hint超过当前文件最大块偏移max_blk_off，返回false
+     * 否则，该位置被其它目录项占用时返回false，未占用或是文件空洞则返回true
+     */
+    bool is_create_pos_valid(const std::string &name, const dentry_store_pos *create_pos_hint, uint32_t max_blk_off);
+
+    /* 增加1级哈希表 */
+    void append_hash_level(hscfs_inode *inode);
+
+    /* 将位图中slot_pos置位 */
+    static void set_bitmap_pos(unsigned long slot_pos, void *bitmap_start_addr);
+
+    /* 在块中指定位置写入目录项信息 */
+    void create_dentry_in_blk(const std::string &name, uint8_t type, uint32_t ino, 
+        dir_data_block_handle blk_handle, const dentry_store_pos &pos);
 };
 
 }  // namespace hscfs

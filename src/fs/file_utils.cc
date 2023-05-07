@@ -3,6 +3,7 @@
 #include "fs/fs.h"
 #include "fs/NAT_utils.hh"
 #include "fs/SIT_utils.hh"
+#include "fs/directory.hh"
 #include "cache/node_block_cache.hh"
 #include "communication/memory.h"
 #include "communication/comm_api.h"
@@ -633,6 +634,79 @@ void file_resizer::free_blocks_in_range(hscfs_node *inode, const uint32_t start_
 	}
 	else
 		handle.mark_dirty();
+}
+
+node_block_cache_entry_handle file_creator::create_generic_file()
+{
+	auto handle = create_base_inode();
+	hscfs_inode *inode = &handle->get_node_block_ptr()->i;
+
+	/* 对于普通文件，创建时文件大小为0，只需要再设置文件类型即可 */
+	assert(inode->i_size == 0);
+	inode->i_type = HSCFS_FT_REG_FILE;
+
+	return handle;
+}
+
+node_block_cache_entry_handle file_creator::create_directory()
+{
+	auto handle = create_base_inode();
+	hscfs_inode *inode = &handle->get_node_block_ptr()->i;
+
+	/* 对于目录文件，需要建立第0级哈希表，调整文件大小，留下文件空洞即可 */
+	inode->i_type = HSCFS_FT_DIR;
+	assert(inode->i_current_depth == 0);
+	assert(inode->i_dir_level == 0);
+	uint32_t blk_num = directory::bucket_num(inode->i_current_depth, inode->i_dir_level) * 
+		directory::bucket_block_num(inode->i_current_depth);
+	inode->i_size = blk_num * 4096;
+	assert(inode->i_addr[0] == INVALID_LPA);
+	assert(inode->i_addr[1] == INVALID_LPA);
+
+	return handle;
+}
+
+node_block_cache_entry_handle file_creator::create_base_inode()
+{
+    node_cache_helper node_helper(fs_manager);
+	auto handle = node_helper.create_inode_entry();
+	hscfs_inode *inode = &handle->get_node_block_ptr()->i;
+	
+	/* 将inode置为刚刚创建的状态 */
+	inode->i_nlink = 1;
+	inode_time_util::set_atime(inode);
+	inode_time_util::set_mtime(inode);
+	/* 其余字段在缓存内存分配时自动初始化为0 */
+
+	return handle;
+}
+
+void inode_time_util::set_atime(hscfs_inode *inode, const timespec *time)
+{
+	timespec cur_time;
+	if (time == nullptr)
+	{
+		timespec_get(&cur_time, TIME_UTC);
+		time = &cur_time;
+	}
+	set_time_inner(inode->i_atime, inode->i_atime_nsec, time);
+}
+
+void inode_time_util::set_mtime(hscfs_inode *inode, const timespec *time)
+{
+	timespec cur_time;
+	if (time == nullptr)
+	{
+		timespec_get(&cur_time, TIME_UTC);
+		time = &cur_time;
+	}
+	set_time_inner(inode->i_mtime, inode->i_mtime_nsec, time);
+}
+
+void inode_time_util::set_time_inner(unsigned long long &sec, unsigned int &nsec, const timespec *time)
+{
+	sec = time->tv_sec;
+	nsec = time->tv_nsec;
 }
 
 } // namespace hscfs

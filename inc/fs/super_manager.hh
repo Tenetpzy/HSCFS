@@ -31,8 +31,14 @@ class super_manager
 public:
     super_manager(file_system_manager *fs_manager);
 
-    /* 分配nid，记录修改日志。ino是待分配的nid所属的文件inode。返回分配的nid */
-    uint32_t alloc_nid(uint32_t ino);
+    /* 
+     * 分配nid，记录修改日志。
+     * ino是待分配的nid所属的文件inode。
+     * 如果is_inode为true，则分配一个inode，ino参数被忽略
+     * 
+     * 返回分配的nid 
+     */
+    uint32_t alloc_nid(uint32_t ino, bool is_inode = false);
 
     /* 释放nid，把它加入空闲nid链表，并将修改记录到super和NAT日志 */
     void free_nid(uint32_t nid);

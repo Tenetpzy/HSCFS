@@ -140,7 +140,7 @@ struct hscfs_node {
 } __attribute__((packed));
 
 struct hscfs_nat_entry {
-	__le32 ino;		/* inode number */  // parent node id. 若nid = ino，则该node为inode
+	__le32 ino;		/* inode number */  // 若nid = ino，则该node为inode
 	__le32 block_addr;	/* block address */
 } __attribute__((packed));
 

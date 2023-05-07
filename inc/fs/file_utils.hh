@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <ctime>
 #include "cache/node_block_cache.hh"
 
 struct hscfs_node;
@@ -154,6 +155,46 @@ private:
     void free_blocks_in_range(hscfs_node *inode, uint32_t start_blk, uint32_t end_blk);
 };
 
+/* 文件创建器 */
+class file_creator
+{
+public:
+    file_creator(file_system_manager *fs_manager)
+    {
+        this->fs_manager = fs_manager;
+    }
 
+    /* 
+     * 创建普通文件，返回其inode的handle 
+     * 目前的实现中，不使用内联文件
+     */
+    node_block_cache_entry_handle create_generic_file();
+
+    /*
+     * 创建目录文件，返回其inode的handle
+     * 目前实现中不使用内联目录
+     */
+    node_block_cache_entry_handle create_directory();
+
+private:
+    file_system_manager *fs_manager;
+
+    /* 分配inode，初始化其中的公共元数据。内部会标记inode缓存项为dirty */
+    node_block_cache_entry_handle create_base_inode();
+};
+
+/* inode时间设置工具 */
+class inode_time_util
+{
+public:
+    /* 设置inode中，i_atime和i_atime_nsec为time参数。若time为空则置为当前时间 */
+    static void set_atime(hscfs_inode *inode, const timespec *time = nullptr);
+
+    /* 设置inode中mtime，其余与set_atime相同 */
+    static void set_mtime(hscfs_inode *inode, const timespec *time = nullptr);
+
+private:
+    static void set_time_inner(unsigned long long &sec, unsigned int &nsec, const timespec *time);
+};
 
 }  // namespace hscfs

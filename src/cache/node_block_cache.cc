@@ -8,6 +8,7 @@
 #include "fs/super_manager.hh"
 #include "utils/hscfs_log.h"
 #include "utils/hscfs_exceptions.hh"
+#include "node_block_cache.hh"
 
 namespace hscfs {
 
@@ -190,6 +191,25 @@ node_block_cache_entry_handle node_cache_helper::create_node_entry(uint32_t ino,
     footer->ino = ino;
     footer->nid = new_nid;
     footer->offset = noffset;
+
+    /* 标记缓存项为dirty */
+    handle.mark_dirty();
+
+    return handle;
+}
+
+node_block_cache_entry_handle node_cache_helper::create_inode_entry()
+{
+    /* 分配nid，创建inode block缓存项并加入缓存 */
+    uint32_t new_nid = super_manager(fs_manager).alloc_nid(INVALID_NID, true);
+    auto handle = node_cache->add(block_buffer(), new_nid, INVALID_NID, INVALID_LPA);
+    hscfs_node *node = handle->get_node_block_ptr();
+
+    /* 初始化node footer */
+    node_footer *footer = &node->footer;
+    footer->ino = new_nid;
+    footer->nid = new_nid;
+    footer->offset = 0;
 
     /* 标记缓存项为dirty */
     handle.mark_dirty();

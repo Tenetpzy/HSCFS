@@ -20,7 +20,7 @@ super_manager::super_manager(file_system_manager *fs_manager)
     this->fs_manager = fs_manager;
 }
 
-uint32_t super_manager::alloc_nid(uint32_t ino)
+uint32_t super_manager::alloc_nid(uint32_t ino, bool is_inode)
 {
     uint32_t nid = super->next_free_nid;
     if (nid == INVALID_NID)
@@ -36,7 +36,11 @@ uint32_t super_manager::alloc_nid(uint32_t ino)
     uint32_t nxt_nid = nat_entry.block_addr;
     HSCFS_LOG(HSCFS_LOG_INFO, "alloc nid [%u]. The next free nid is [%u].", nid, nxt_nid);
     super->next_free_nid = nxt_nid;
-    nat_entry.ino = ino;
+    
+    if (is_inode)
+        nat_entry.ino = nid;
+    else
+        nat_entry.ino = ino;
     nat_entry.block_addr = INVALID_LPA;
 
     /* 记录修改的日志 */
