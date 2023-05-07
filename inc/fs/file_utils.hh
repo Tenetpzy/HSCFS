@@ -192,9 +192,6 @@ public:
 
     /* 设置inode中mtime，其余与set_atime相同 */
     static void set_mtime(hscfs_inode *inode, const timespec *time = nullptr);
-
-private:
-    static void set_time_inner(unsigned long long &sec, unsigned int &nsec, const timespec *time);
 };
 
 }  // namespace hscfs

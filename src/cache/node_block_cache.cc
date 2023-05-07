@@ -8,7 +8,6 @@
 #include "fs/super_manager.hh"
 #include "utils/hscfs_log.h"
 #include "utils/hscfs_exceptions.hh"
-#include "node_block_cache.hh"
 
 namespace hscfs {
 

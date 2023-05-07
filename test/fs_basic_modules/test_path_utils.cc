@@ -3,6 +3,11 @@
 
 using namespace hscfs;
 
+/*
+ * 目前依赖过多，无法编译该单元测试，暂时废弃
+ * 之前跑通了！
+ */
+
 TEST(path_utils, 1)
 {
     const char *user_path = "/a/b/c";

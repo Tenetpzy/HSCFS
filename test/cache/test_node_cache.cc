@@ -6,6 +6,12 @@
 #undef private
 #undef protected
 
+/*
+ * 由于node block cache先依赖于文件系统多个模块，mock代价过大
+ * 此测试文件废弃
+ * 前期运行此测试，证明了node block cache中，基本缓存管理的正确性
+ */
+
 TEST(node_cache, 1)
 {
     using namespace hscfs;

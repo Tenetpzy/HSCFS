@@ -689,7 +689,8 @@ void inode_time_util::set_atime(hscfs_inode *inode, const timespec *time)
 		timespec_get(&cur_time, TIME_UTC);
 		time = &cur_time;
 	}
-	set_time_inner(inode->i_atime, inode->i_atime_nsec, time);
+	inode->i_atime = time->tv_sec;
+	inode->i_atime_nsec = time->tv_nsec;
 }
 
 void inode_time_util::set_mtime(hscfs_inode *inode, const timespec *time)
@@ -700,13 +701,8 @@ void inode_time_util::set_mtime(hscfs_inode *inode, const timespec *time)
 		timespec_get(&cur_time, TIME_UTC);
 		time = &cur_time;
 	}
-	set_time_inner(inode->i_mtime, inode->i_mtime_nsec, time);
-}
-
-void inode_time_util::set_time_inner(unsigned long long &sec, unsigned int &nsec, const timespec *time)
-{
-	sec = time->tv_sec;
-	nsec = time->tv_nsec;
+	inode->i_mtime = time->tv_sec;
+	inode->i_mtime_nsec = time->tv_nsec;
 }
 
 } // namespace hscfs

@@ -47,7 +47,7 @@ struct hscfs_super_block
     __le32 next_free_nid;  // 空闲nid链表，链表尾为INVALID_NID
 
 	__u8 reserved[3964];		/* valid reserved region */
-} __attribute__((packed));
+};
 
 #define BLOCK_PER_SEGMENT 512
 
@@ -110,7 +110,7 @@ struct hscfs_inode {
 	__le32 i_addr[DEF_ADDRS_PER_INODE];	/* Pointers to data blocks */
 	__le32 i_nid[DEF_NIDS_PER_INODE];	/* direct(2), indirect(2),
 						double_indirect(1) node id */
-} __attribute__((packed));
+};
 
 #define SIZE_TO_BLOCK(size) (((size) + 4095) >> 12)
 
@@ -127,7 +127,7 @@ struct node_footer {
 	__le32 ino;		/* inode number */
 	__le32 offset;		/*  offset */
 	__le32 next_blkaddr;	/* next node page block address(不使用) */
-} __attribute__((packed));
+};
 
 struct hscfs_node {
 	/* can be one of three types: inode, direct, and indirect types */

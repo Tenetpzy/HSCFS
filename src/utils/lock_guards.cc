@@ -1,7 +1,6 @@
 #include "utils/lock_guards.hh"
 #include "utils/hscfs_log.h"
 #include <system_error>
-#include "lock_guards.hh"
 
 namespace hscfs {
 

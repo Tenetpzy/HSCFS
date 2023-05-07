@@ -7,7 +7,7 @@ extern "C" {
 #include "utils/hscfs_log.h"
 
 // 用户态
-#include <spdk/env.h>
+#include "spdk/env.h"
 
 // spdk内存分配接口
 void *spdk_zmalloc(size_t size, size_t align, uint64_t *phys_addr, int socket_id, uint32_t flags);

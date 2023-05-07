@@ -26,7 +26,7 @@ struct path_lookup_task
     u32 pathlen;    /*路径字符串的长度，不含0结束符*/
     u32 depth;      /*路径的级数*/
     char path[0];   /*路径字符串，不含0结束符*/
-}__attribute__((packed));
+};
 typedef struct path_lookup_task path_lookup_task;
 
 #define MAX_PATH_DEPTH  ((4096 - 12) / sizeof(u32))
@@ -43,7 +43,7 @@ struct path_lookup_result
 
     char parent_dir_node_page[4096];   /*若目标文件存在，该项是索引对应dentry所在的block的node page的内容*/
     char parent_dir_data_page[4096];   /*若目标文件存在，该项是存放对应dentry的data block的内容*/
-}__attribute__((packed));
+};
 typedef struct path_lookup_result path_lookup_result;
 
 struct filemapping_search_task

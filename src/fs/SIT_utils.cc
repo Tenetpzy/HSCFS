@@ -5,7 +5,6 @@
 #include "cache/SIT_NAT_cache.hh"
 #include "journal/journal_container.hh"
 #include "utils/hscfs_log.h"
-#include "SIT_utils.hh"
 
 namespace hscfs {
 

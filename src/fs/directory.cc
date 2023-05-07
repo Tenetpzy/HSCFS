@@ -99,9 +99,17 @@ dentry_handle directory::create(const std::string &name, uint8_t type, const den
         new_inode_handle = file_creator(fs_manager).create_directory();
     }
     uint32_t new_inode = new_inode_handle->get_nid();
+
+    /* 在create_blk_handle中写入新目录项 */
     create_dentry_in_blk(name, type, new_inode, create_blk_handle, create_pos);
 
-    /* to do: 将新目录项加入dentry cache */
+    /* 创建新目录项，初始化其基本信息，并加入dentry cache */
+    dentry_cache *d_cache = fs_manager->get_dentry_cache();
+    auto d_handle = d_cache->add(ino, dentry, new_inode, name);
+    d_handle->set_pos_info(create_pos);
+    d_handle.mark_dirty();
+
+    return d_handle;
 }
 
 dentry_info directory::lookup(const std::string &name)
