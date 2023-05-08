@@ -137,7 +137,7 @@ struct hscfs_node {
 		struct indirect_node in;
 	};
 	struct node_footer footer;
-} __attribute__((packed));
+};
 
 struct hscfs_nat_entry {
 	__le32 ino;		/* inode number */  // 若nid = ino，则该node为inode

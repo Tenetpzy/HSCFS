@@ -6,6 +6,7 @@
 #include "fs/fs.h"
 #include "fs/file_utils.hh"
 #include "utils/hscfs_log.h"
+#include "utils/hscfs_exceptions.hh"
 
 #include <tuple>
 #include <cstring>
@@ -23,6 +24,13 @@ dentry_handle directory::create(const std::string &name, uint8_t type, const den
      * 注意：可能有同名的老dentry，但它处于deleted状态，此时不应该出错
      * 调用者提供的create_pos_hint可能是不正确的（如果此目录添加过文件，且这个位置是SSD返回）
      */
+
+    /* 检查是否存在状态为deleted_referred_by_fd的老目录项。如果存在，不允许创建 */
+    {
+        dentry_handle d_handle = fs_manager->get_dentry_cache()->get(ino, name);
+        if (!d_handle.is_empty() && d_handle->get_state() == dentry_state::deleted_referred_by_fd)
+            throw create_file_in_delete_referred_state();
+    }
     
     dentry_store_pos create_pos;  // 最终决定的目录项创建位置
     bool create_pos_hint_valid = true;
@@ -103,10 +111,26 @@ dentry_handle directory::create(const std::string &name, uint8_t type, const den
     /* 在create_blk_handle中写入新目录项 */
     create_dentry_in_blk(name, type, new_inode, create_blk_handle, create_pos);
 
-    /* 创建新目录项，初始化其基本信息，并加入dentry cache */
+    /* 创建新目录项缓存，初始化其基本信息，并加入dentry cache */
     dentry_cache *d_cache = fs_manager->get_dentry_cache();
-    auto d_handle = d_cache->add(ino, dentry, new_inode, name);
+    dentry_handle d_handle = d_cache->get(ino, name);
+
+    if (!d_handle.is_empty())  // dentry cache中已经存在目录项，则一定为deleted状态
+    {
+        assert(d_handle->get_state() == dentry_state::deleted);
+        assert(d_handle->get_fd_refcount() == 0);
+        assert(d_handle->get_key().name == name);
+        assert(d_handle->get_key().dir_ino == ino);
+
+        /* 直接将dentry置为有效，然后把属性设置为新目录项属性 */
+        d_handle->set_state(dentry_state::valid);
+        d_handle->set_ino(new_inode);
+    }
+    else  // dentry cache中，不存在目录项，新增一个即可
+        d_handle = d_cache->add(ino, dentry, new_inode, name);
+    
     d_handle->set_pos_info(create_pos);
+    d_handle->set_type(type);
     d_handle.mark_dirty();
 
     return d_handle;

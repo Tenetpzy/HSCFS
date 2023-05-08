@@ -23,7 +23,6 @@ public:
 
     /*
      * 截断文件，只剩前remain_block_num个block
-     * 调用者需要持有fs_meta_lock
      */
     void truncate(size_t remain_block_num);
     /* to do */

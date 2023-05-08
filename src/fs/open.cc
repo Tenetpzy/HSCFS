@@ -50,10 +50,10 @@ int do_open(const char *pathname, int flags)
             /* 如果有O_CREAT，则创建该文件 */
             if (flags | O_CREAT)
             {
-                directory dir_helper(dir_dentry, fs_manager);
+                directory dir(dir_dentry, fs_manager);
 
                 /* 如果dir_dentry已经创建过文件但没写回，则target_pos_hint有可能不正确 */
-                target_dentry = dir_helper.create(file_name, HSCFS_FT_REG_FILE, &target_pos_hint);
+                target_dentry = dir.create(file_name, HSCFS_FT_REG_FILE, &target_pos_hint);
             }
             else
             {
@@ -73,7 +73,7 @@ int do_open(const char *pathname, int flags)
             }
 
             /* 如果目标文件已被删除，但仍然被fd引用，则不允许打开或创建该文件 */
-            if (target_dentry->get_state() == dentry_state::deleted_still_refed)
+            if (target_dentry->get_state() == dentry_state::deleted_referred_by_fd)
             {
                 errno = EACCES;
                 return -1;
@@ -92,6 +92,9 @@ int do_open(const char *pathname, int flags)
         auto p_opened_file = std::make_shared<opened_file>(flags, file);
         fd_array *fds = fs_manager->get_fd_array();
         int fd = fds->alloc_fd(p_opened_file);
+
+        /* 增加dentry的fd引用计数 */
+        target_dentry->add_fd_refcount();
         
         return fd;
     }
@@ -122,6 +125,7 @@ int open(const char *pathname, int flags)
         std::lock_guard<std::mutex> lg2(fs_manager->get_fs_meta_lock());
         fs_manager->check_state();
 
+        /* do_open在获取fs meta lock的情况下，内部再次捕获异常，可以确保不可恢复标志位设置后，无法向SSD写入 */
         return do_open(pathname, flags);
     } 
     catch (const std::exception &e) 

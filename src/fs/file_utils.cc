@@ -705,4 +705,27 @@ void inode_time_util::set_mtime(hscfs_inode *inode, const timespec *time)
 	inode->i_mtime_nsec = time->tv_nsec;
 }
 
+void inode_time_util::mark_access(uint32_t ino)
+{
+	auto inode_handle = node_cache_helper(fs_manager).get_node_entry(ino, INVALID_NID);
+	hscfs_node *node = inode_handle->get_node_block_ptr();
+	assert(node->footer.ino == ino);
+	assert(node->footer.nid == ino);
+	assert(node->footer.offset == 0);
+	set_atime(&node->i);
+	inode_handle.mark_dirty();
+}
+
+void inode_time_util::mark_modified(uint32_t ino)
+{
+	auto inode_handle = node_cache_helper(fs_manager).get_node_entry(ino, INVALID_NID);
+	hscfs_node *node = inode_handle->get_node_block_ptr();
+	assert(node->footer.ino == ino);
+	assert(node->footer.nid == ino);
+	assert(node->footer.offset == 0);
+	set_atime(&node->i);
+	set_mtime(&node->i);
+	inode_handle.mark_dirty();
+}
+
 } // namespace hscfs

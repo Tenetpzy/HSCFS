@@ -14,6 +14,7 @@ dentry::dentry(uint32_t dir_ino, dentry *parent, uint32_t dentry_ino, const std:
     this->parent = parent;
     this->fs_manager = fs_manager;
     ref_count = 0;
+    fd_ref_count = 0;
 
     /* 由ssd path lookup无法获得文件类型，暂时置为unknown，第一次访问时从inode block中读取并缓存 */
     type = HSCFS_FT_UNKNOWN;

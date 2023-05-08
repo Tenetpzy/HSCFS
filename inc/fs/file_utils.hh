@@ -187,11 +187,34 @@ private:
 class inode_time_util
 {
 public:
-    /* 设置inode中，i_atime和i_atime_nsec为time参数。若time为空则置为当前时间 */
+    inode_time_util(file_system_manager *fs_manager)
+    {
+        this->fs_manager = fs_manager;
+    }
+
+    /* 
+     * 设置inode中，i_atime和i_atime_nsec为time参数。若time为空则置为当前时间
+     * 需要调用者标记dirty
+     */
     static void set_atime(hscfs_inode *inode, const timespec *time = nullptr);
 
     /* 设置inode中mtime，其余与set_atime相同 */
     static void set_mtime(hscfs_inode *inode, const timespec *time = nullptr);
+
+    /* 
+     * 标记文件被访问，更新atime为当前时间
+     * 此方法内部标记inode为dirty
+     */
+    void mark_access(uint32_t ino);
+
+    /*
+     * 标记文件被修改，更新atime和mtime为当前时间
+     * 此方法内部标记inode为dirty
+     */
+    void mark_modified(uint32_t ino);
+    
+private:
+    file_system_manager *fs_manager;
 };
 
 }  // namespace hscfs

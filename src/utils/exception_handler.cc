@@ -11,7 +11,8 @@ namespace hscfs {
 using std::type_index;
 
 std::unordered_map<std::type_index, int> exception_handler::recoverable_exceptions_errno = {
-    {type_index(typeid(user_path_invalid)), EINVAL}
+    {type_index(typeid(user_path_invalid)), EINVAL},
+    {type_index(typeid(create_file_in_delete_referred_state)), EACCES}
 };
 
 int exception_handler::convert_to_errno(bool set_unrecoverable)
