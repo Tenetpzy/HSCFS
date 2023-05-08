@@ -30,14 +30,16 @@ public:
         content_state = sta;
     }
 
+    /* to do */
+
+private:
+
     /* 对is_dirty进行CAS操作(由false更改为true)，成功返回true */
     bool mark_dirty()
     {
         bool expect = false;
         return is_dirty.compare_exchange_strong(expect, true);
     }
-
-    /* to do */
 
 private:
     uint32_t blkoff;   // 文件内块偏移
@@ -65,6 +67,7 @@ private:
     std::atomic_bool is_dirty;
 
     friend class page_cache;
+    friend class page_entry_handle;
 };
 
 class page_cache;

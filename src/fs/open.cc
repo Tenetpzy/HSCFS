@@ -14,9 +14,9 @@ namespace hscfs {
 
 int do_open(const char *pathname, int flags)
 {
+    file_system_manager *fs_manager = file_system_manager::get_instance();
     try
     {
-        file_system_manager *fs_manager = file_system_manager::get_instance();
         std::string abs_path = path_helper::extract_abs_path(pathname);
         std::string dir_path = path_helper::extract_dir_path(abs_path);
         std::string file_name = path_helper::extract_file_name(abs_path);
@@ -100,7 +100,7 @@ int do_open(const char *pathname, int flags)
     }
     catch (std::exception &e)
     {
-        int err = exception_handler(e).convert_to_errno(true);
+        int err = exception_handler(fs_manager, e).convert_to_errno(true);
         errno = err;
         return -1;
     }
@@ -118,9 +118,9 @@ int do_open(const char *pathname, int flags)
  */
 int open(const char *pathname, int flags)
 {
+    file_system_manager *fs_manager = file_system_manager::get_instance();
     try 
     {
-        file_system_manager *fs_manager = file_system_manager::get_instance();
         rwlock_guard lg1(fs_manager->get_fs_freeze_lock(), rwlock_guard::lock_type::rdlock);
         std::lock_guard<std::mutex> lg2(fs_manager->get_fs_meta_lock());
         fs_manager->check_state();
@@ -130,7 +130,7 @@ int open(const char *pathname, int flags)
     } 
     catch (const std::exception &e) 
     {
-        errno = exception_handler(e).convert_to_errno();
+        errno = exception_handler(fs_manager, e).convert_to_errno();
         return -1;
     }
 }

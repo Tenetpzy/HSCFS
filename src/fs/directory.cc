@@ -133,6 +133,10 @@ dentry_handle directory::create(const std::string &name, uint8_t type, const den
     d_handle->set_type(type);
     d_handle.mark_dirty();
 
+    inode_time_util::set_atime(inode);
+    inode_time_util::set_mtime(inode);
+    inode_handle.mark_dirty();
+
     return d_handle;
 }
 

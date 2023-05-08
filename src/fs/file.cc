@@ -4,7 +4,9 @@
 #include "cache/node_block_cache.hh"
 #include "fs/file.hh"
 #include "fs/fs_manager.hh"
+#include "fs/file_utils.hh"
 #include "utils/hscfs_exceptions.hh"
+#include "utils/exception_handler.hh"
 #include "utils/hscfs_log.h"
 #include "utils/lock_guards.hh"
 
@@ -27,6 +29,8 @@ file::file(uint32_t ino, const dentry_handle &dentry, file_system_manager *fs_ma
     }
     page_cache_.reset(new page_cache(fs_manager->get_page_cache_size()));
     ref_count = 0;
+    fd_ref_count = 0;
+    is_dirty = false;
     this->dentry = dentry;
 }
 
@@ -36,10 +40,47 @@ file::~file()
         HSCFS_LOG(HSCFS_LOG_WARNING, "file object is still dirty while destructed.");
     if (ref_count)
         HSCFS_LOG(HSCFS_LOG_WARNING, "file object has non-zero refcount which equals %u while destructed.", 
-            ref_count);
+            ref_count.load());
     spin_destroy(&file_meta_lock);
     rwlock_destroy(&file_op_lock);
 }
+
+int file::truncate(size_t tar_size)
+{
+    /* 等待在文件上的操作全部停止 */
+    rwlock_guard lg1(file_op_lock, rwlock_guard::lock_type::wrlock);
+
+    /* 获取文件系统元数据锁，检查工作状态 */
+    std::unique_lock<std::mutex> lg2(fs_manager->get_fs_meta_lock());
+    fs_manager->check_state();
+
+    /* 修改文件的索引以适应新大小 */
+    try 
+    {
+        auto inode_handle = node_cache_helper(fs_manager).get_node_entry(ino, INVALID_NID);
+        hscfs_inode *inode = &inode_handle->get_node_block_ptr()->i;
+        size_t i_size = inode->i_size;
+
+        file_resizer resizer(fs_manager);
+        if (i_size < tar_size)
+            resizer.expand(ino, tar_size);
+        else if (i_size > tar_size)
+            resizer.reduce(ino, tar_size);
+    }
+    catch (std::exception &e)
+    {
+        return exception_handler(fs_manager, e).convert_to_errno(true);
+    }
+
+    /* 元数据操作完成，解锁 */
+    lg2.unlock();
+
+    /* 修改file内元数据，由于获取了file_op_lock独占，所以不用再加file_meta_lock锁了 */
+    size = tar_size;
+    mark_modified();
+    is_dirty = true;
+}
+
 
 #ifdef CONFIG_PRINT_DEBUG_INFO
 void print_inode_meta(uint32_t ino, hscfs_inode *inode);
@@ -73,6 +114,19 @@ void file::read_meta()
     }
 }
 
+void file::mark_access()
+{
+    timespec_get(&atime, TIME_UTC);
+}
+
+void file::mark_modified()
+{
+    timespec t;
+    timespec_get(&t, TIME_UTC);
+    atime = t;
+    mtime = t;
+}
+
 file_handle file_obj_cache::add(uint32_t ino, const dentry_handle &dentry)
 {
     auto p_entry = std::make_unique<file>(ino, dentry, fs_manager);
@@ -95,15 +149,13 @@ file_handle file_obj_cache::get(uint32_t ino)
 
 void file_obj_cache::add_refcount(file *entry)
 {
-    ++entry->ref_count;
-    if (entry->ref_count == 1)
+    if (++entry->ref_count == 1)
         cache_manager.pin(entry->ino);
 }
 
 void file_obj_cache::sub_refcount(file *entry)
 {
-    --entry->ref_count;
-    if (entry->ref_count == 0)
+    if (--entry->ref_count == 0)
         cache_manager.unpin(entry->ino);
 }
 
@@ -127,6 +179,14 @@ void file_obj_cache::do_relpace()
     }
 }
 
+void file_obj_cache::add_to_dirty_files(const file_handle &file)
+{
+    spin_lock_guard lg(dirty_files_lock);
+    uint32_t ino = file.entry->ino;
+    assert(dirty_files.count(ino) == 0);
+    dirty_files.emplace(ino, file);
+}
+
 file_handle::~file_handle()
 {
     if (entry != nullptr)
@@ -141,6 +201,13 @@ file_handle::~file_handle()
                 "%s", e.what());
         }
     }
+}
+
+void file_handle::mark_dirty()
+{
+    bool expect = false;
+    if (entry->is_dirty.compare_exchange_strong(expect, true))
+        cache->add_to_dirty_files(*this);
 }
 
 void file_handle::do_addref()

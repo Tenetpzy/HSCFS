@@ -23,10 +23,7 @@ int exception_handler::convert_to_errno(bool set_unrecoverable)
     if (recoverable_exceptions_errno.count(type) != 0)
         ret = recoverable_exceptions_errno.at(type);
     if (ret == ENOTRECOVERABLE && set_unrecoverable)
-    {
-        file_system_manager *fs_manager = file_system_manager::get_instance();
         fs_manager->set_unrecoverable();
-    }
 
     return ret;
 }

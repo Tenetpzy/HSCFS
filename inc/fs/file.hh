@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <ctime>
+#include <atomic>
 #include "cache/dentry_cache.hh"
 #include "utils/hscfs_multithread.h"
 
@@ -22,42 +23,50 @@ public:
     ~file();
 
     /*
-     * 截断文件，只剩前remain_block_num个block
+     * 调整文件大小到tar_size
+     * 调用者只需持有fs_freeze_lock共享锁
      */
-    void truncate(size_t remain_block_num);
+    int truncate(size_t tar_size);
     /* to do */
 
 private:
     uint32_t ino;  // inode号
+    file_system_manager *fs_manager;
 
     uint64_t size;  // 当前文件大小（字节数）
     timespec atime;  // 访问时间戳
     timespec mtime;  // 修改时间戳（ctime == mtime，不设ctime字段）
-    bool is_dirty;
     
-    /* 保护size、atime、mtime、is_dirty的锁，对于文件的file对象，会被page cache层并发访问 */
+    /* 保护size、atime、mtime的锁，这些字段会在page cache层并发访问 */
     spinlock_t file_meta_lock;
     
-    file_system_manager *fs_manager;
+    /* 如果file中的元数据被修改，或page cache有脏页，则is_dirty置为true，同时加入dirty set */
+    std::atomic_bool is_dirty;
 
     /*
      * 硬连接数，访问时加fs_meta_lock
-     * close时，应当检查该字段。如果为0，且ref_count也为0，需要删除文件，修改目录项的状态为已删除且未引用 
+     * close时，应当检查该字段。如果为0，且fd_ref_count也为0，需要删除文件，修改目录项的状态为已删除且未引用 
      */
     uint32_t nlink;
 
     /* 
-     * 引用计数，访问时加fs_meta_lock
-     * 引用计数确保file对象不被置换
-     * file为dirty状态时，应把handle加到dirty_list中从而增加引用计数 
+     * file_handle引用计数，用于确保file对象不被置换
+     * file_handle构造和析构时可能不会持有任何锁，此处使用atomic变量
      */
-    uint32_t ref_count;
+    std::atomic_uint32_t ref_count;
+
+    /*
+     * 目前有多少个fd引用。值为ref_count的一部分，
+     * 需要单独设立此字段，原因是无法从ref_count判断file是否被fd引用（可能在dirty set中，但已经close了）
+     * 访问时需要加fs_meta_lock
+     */
+    uint32_t fd_ref_count;
 
     /* 当前文件对应的目录项 */
     dentry_handle dentry;
 
     /* 
-     * 对文件操作的锁。对file进行任何操作前，必须获取该锁的共享/独占
+     * 对文件操作的锁。对file进行任何操作前，获取该锁的共享/独占
      * 此锁的层级在file_mata_lock上。只在需要修改file中元数据时获取file_meta_lock
      */
     rwlock_t file_op_lock;
@@ -73,8 +82,13 @@ private:
      */
     void read_meta();
 
+    /* 标记文件被访问/修改。更新file对象内的atime和mtime为当前时间，不修改is_dirty。 */
+    void mark_access();
+    void mark_modified();
+
     friend class file_obj_cache;
     friend class file_cache_helper;
+    friend class file_handle;
 };
 
 /*
@@ -142,10 +156,7 @@ public:
         return entry == nullptr;
     }
 
-    file* operator->() const noexcept
-    {
-        return entry;
-    }
+    void mark_dirty();
 
 private:
     file *entry;
@@ -153,6 +164,8 @@ private:
 
     void do_addref();
     void do_subref();
+
+    friend class file_obj_cache;
 };
 
 /* file对象的缓存 */
@@ -166,17 +179,45 @@ public:
         cur_size = 0;
     }
 
+    /* add和get的调用者需要获取fs_meta_lock */
     file_handle add(uint32_t ino, const dentry_handle &dentry);
     file_handle get(uint32_t ino);
 
 private:
     size_t expect_size, cur_size;
     file_system_manager *fs_manager;
+
+    /* 
+     * 目前，cache_manager可以由fs_meta_lock锁及fs_freeze_lock独占锁保护，不需要额外的锁
+     * 分析见其它访问cache_manager的方法的注释
+     */
     generic_cache_manager<uint32_t, file> cache_manager;
+
+    /* 
+     * 脏文件集合，与保护这个集合的锁 
+     * 为了避免在page cache的并发读写标记dirty时，需要获取fs_meta_lock，
+     * 脏文件集合使用自己的锁保护
+     */
+    std::unordered_map<uint32_t, file_handle> dirty_files;
+    spinlock_t dirty_files_lock;
     
+    /* 在调用add、get或handle拷贝构造(加入dirty set)时调用，是安全的，
+     * 因为add、get访问cache_manager会加fs_meta_lock锁。handle拷贝时引用计数不为0，不会访问cache_manager
+     */
     void add_refcount(file *entry);
+
+    /* 
+     * 在handle析构时调用。必须保证析构时持有fs_meta_lock锁
+     * 析构的场景：1) 应用程序调用close. 2) 从dirty set中移除
+     * 以上两个场景都会加fs_meta_lock锁（或更高层次的锁）
+     */
     void sub_refcount(file *entry);
+
+    /* 仅在add内调用，获取了fs_meta_lock锁 */
     void do_relpace();
+
+    /* 由file handle调用，将file加入dirty_files几何 */
+    void add_to_dirty_files(const file_handle &file);
 
     friend class file_handle;
 };

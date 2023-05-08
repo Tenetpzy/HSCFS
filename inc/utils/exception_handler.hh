@@ -6,11 +6,13 @@
 
 namespace hscfs {
 
+class file_system_manager;
+
 /* 异常处理器 */
 class exception_handler
 {
 public:
-    exception_handler(const std::exception &except): e(except) {}
+    exception_handler(file_system_manager *fs_manager, const std::exception &except): e(except) {}
 
     /* 
      * 转换异常对象到errno
@@ -22,7 +24,9 @@ public:
     int convert_to_errno(bool set_unrecoverable = false);
     
 private:
+    file_system_manager *fs_manager;
     const std::exception &e;
+
 
     static std::unordered_map<std::type_index, int> recoverable_exceptions_errno;
 };
