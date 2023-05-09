@@ -9,6 +9,7 @@
 #include "utils/exception_handler.hh"
 #include "utils/hscfs_log.h"
 #include "utils/lock_guards.hh"
+#include "file.hh"
 
 namespace hscfs {
 
@@ -41,44 +42,32 @@ file::~file()
     if (ref_count)
         HSCFS_LOG(HSCFS_LOG_WARNING, "file object has non-zero refcount which equals %u while destructed.", 
             ref_count.load());
+    assert(fd_ref_count <= ref_count);
     spin_destroy(&file_meta_lock);
     rwlock_destroy(&file_op_lock);
 }
 
-int file::truncate(size_t tar_size)
+int file_handle::truncate(size_t tar_size)
 {
-    /* 等待在文件上的操作全部停止 */
-    rwlock_guard lg1(file_op_lock, rwlock_guard::lock_type::wrlock);
-
-    /* 获取文件系统元数据锁，检查工作状态 */
-    std::unique_lock<std::mutex> lg2(fs_manager->get_fs_meta_lock());
-    fs_manager->check_state();
-
     /* 修改文件的索引以适应新大小 */
-    try 
-    {
-        auto inode_handle = node_cache_helper(fs_manager).get_node_entry(ino, INVALID_NID);
-        hscfs_inode *inode = &inode_handle->get_node_block_ptr()->i;
-        size_t i_size = inode->i_size;
+    auto inode_handle = node_cache_helper(entry->fs_manager).get_node_entry(entry->ino, INVALID_NID);
+    hscfs_inode *inode = &inode_handle->get_node_block_ptr()->i;
+    size_t i_size = inode->i_size;
 
-        file_resizer resizer(fs_manager);
-        if (i_size < tar_size)
-            resizer.expand(ino, tar_size);
-        else if (i_size > tar_size)
-            resizer.reduce(ino, tar_size);
-    }
-    catch (std::exception &e)
-    {
-        return exception_handler(fs_manager, e).convert_to_errno(true);
-    }
+    file_resizer resizer(entry->fs_manager);
+    if (i_size < tar_size)
+        resizer.expand(entry->ino, tar_size);
+    else if (i_size > tar_size)
+        resizer.reduce(entry->ino, tar_size);
+    else
+        return 0;
 
-    /* 元数据操作完成，解锁 */
-    lg2.unlock();
+    /* 修改file内元数据，由于已经获取了file_op_lock独占，所以不用再加file_meta_lock锁了 */
+    entry->size = tar_size;
+    entry->mark_modified();
+    mark_dirty();
 
-    /* 修改file内元数据，由于获取了file_op_lock独占，所以不用再加file_meta_lock锁了 */
-    size = tar_size;
-    mark_modified();
-    is_dirty = true;
+    return 0;
 }
 
 
@@ -210,6 +199,18 @@ void file_handle::mark_dirty()
         cache->add_to_dirty_files(*this);
 }
 
+void file_handle::add_fd_refcount()
+{
+    ++entry->fd_ref_count;
+    entry->dentry->add_fd_refcount();
+}
+
+void file_handle::sub_fd_refcount()
+{
+    --entry->fd_ref_count;
+    entry->dentry->sub_fd_refcount();
+}
+
 void file_handle::do_addref()
 {
     if (entry != nullptr)
@@ -234,7 +235,7 @@ file_handle file_cache_helper::get_file_obj(uint32_t ino, const dentry_handle &d
     if (target_file.is_empty())
     {
         target_file = file_cache->add(ino, dentry);
-        target_file->read_meta();
+        target_file.read_meta();
     }
 
     return target_file;

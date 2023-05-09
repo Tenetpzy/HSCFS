@@ -22,13 +22,6 @@ public:
     file(uint32_t ino, const dentry_handle &dentry, file_system_manager *fs_manager);
     ~file();
 
-    /*
-     * 调整文件大小到tar_size
-     * 调用者只需持有fs_freeze_lock共享锁
-     */
-    int truncate(size_t tar_size);
-    /* to do */
-
 private:
     uint32_t ino;  // inode号
     file_system_manager *fs_manager;
@@ -158,6 +151,37 @@ public:
 
     void mark_dirty();
 
+    void read_meta()
+    {
+        entry->read_meta();
+    }
+
+    /*
+     * 在创建opened_file结构时调用
+     * 增加file和其关联的dentry的fd引用计数
+     * 调用者需持有fs_meta_lock
+     */
+    void add_fd_refcount();
+
+    /*
+     * opened_file结构销毁时由系统调用
+     * 增加file和其关联的dentry的fd引用计数
+     * 调用者需持有fs_meta_lock
+     */
+    void sub_fd_refcount();
+
+    rwlock_t& get_file_op_lock() noexcept
+    {
+        return entry->file_op_lock;
+    }
+
+    /*
+     * 调整文件大小到tar_size
+     * 不调整文件page cache中多余的部分。该部分应在write和write back时特殊处理
+     * 调用者应持有fs_meta_lock和file_op_lock独占
+     */
+    int truncate(size_t tar_size);
+
 private:
     file *entry;
     file_obj_cache *cache;
@@ -216,7 +240,7 @@ private:
     /* 仅在add内调用，获取了fs_meta_lock锁 */
     void do_relpace();
 
-    /* 由file handle调用，将file加入dirty_files几何 */
+    /* 由file handle调用，将file加入dirty_files集合 */
     void add_to_dirty_files(const file_handle &file);
 
     friend class file_handle;

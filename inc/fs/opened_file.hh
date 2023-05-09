@@ -13,24 +13,16 @@ class opened_file
 {
 public:
 
-    /* 构造opened_file，不关联file结构 */
-    opened_file(uint32_t flags)
-    {
-        this->flags = flags;
-        pos = 0;
-    }
+    /* 
+     * 构造opened_file并关联file结构，调用者需持有fs_meta_lock
+     * 内部将增加file和dentry的fd引用计数
+     */
+    opened_file(uint32_t flags, const file_handle &file_);
 
-    opened_file(uint32_t flags, const file_handle &file_)
-        : file(file_) 
-    {
-        this->flags = flags;
-        pos = 0;
-    }
-
-    void relate_file(const file_handle &file_)
-    {
-        file = file_;
-    }
+    /*
+     * ~opened_file()
+     * 析构时由系统控制，减少file和dentry的fd引用计数，不在析构函数中减少
+     */
 
     /* 读文件 */
     ssize_t read(void *buffer, size_t count);
@@ -41,14 +33,8 @@ public:
 private:
     uint32_t flags;  // 打开文件时的flags
     uint64_t pos;  // 当前文件读写位置
-
-    /* 
-     * 指向file对象
-     * opened_file对象析构需要上层主动调用close，
-     * 且close时需要加fs_meta_lock，为避免死锁，此处不使用智能指针自动管理
-     */
-    file_handle file;
     std::mutex pos_lock;  // 保护pos的锁
+    file_handle file;
 };
 
 }
