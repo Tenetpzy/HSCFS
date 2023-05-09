@@ -117,9 +117,10 @@ int open(const char *pathname, int flags)
                  * 此处只是对该文件进行截断
                  */
                 meta_lg.unlock();
-                rwlock_guard file_op_lg(file.get_file_op_lock(), rwlock_guard::lock_type::wrlock);
+                rwlock_guard file_op_lg(file->get_file_op_lock(), rwlock_guard::lock_type::wrlock);
                 meta_lg.lock();
-                file.truncate(0);
+                if (file->truncate(0))
+                    file.mark_dirty();
             }
 
             return fd;

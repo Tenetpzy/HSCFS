@@ -7,7 +7,7 @@ opened_file::opened_file(uint32_t flags, const file_handle &file_)
 {
     this->flags = flags;
     pos = 0;
-    file.add_fd_refcount();
+    file->add_fd_refcount();
 }
 
 } // namespace hscfs

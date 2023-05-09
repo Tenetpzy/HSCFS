@@ -46,27 +46,44 @@ file::~file()
     rwlock_destroy(&file_op_lock);
 }
 
-void file_handle::truncate(size_t tar_size)
+void file::add_fd_refcount()
+{
+    ++fd_ref_count;
+    dentry->add_fd_refcount();
+}
+
+void file::sub_fd_refcount()
+{
+    --fd_ref_count;
+    dentry->sub_fd_refcount();
+}
+
+bool file::truncate(size_t tar_size)
 {
     /* 修改文件的索引以适应新大小 */
-    auto inode_handle = node_cache_helper(entry->fs_manager).get_node_entry(entry->ino, INVALID_NID);
+    auto inode_handle = node_cache_helper(fs_manager).get_node_entry(ino, INVALID_NID);
     hscfs_inode *inode = &inode_handle->get_node_block_ptr()->i;
     size_t i_size = inode->i_size;
 
-    file_resizer resizer(entry->fs_manager);
+    file_resizer resizer(fs_manager);
     if (i_size < tar_size)
-        resizer.expand(entry->ino, tar_size);
+        resizer.expand(ino, tar_size);
     else if (i_size > tar_size)
-        resizer.reduce(entry->ino, tar_size);
+        resizer.reduce(ino, tar_size);
     else
-        return;
+        return false;
 
     /* 修改file内元数据，由于已经获取了file_op_lock独占，所以不用再加file_meta_lock锁了 */
-    entry->size = tar_size;
-    entry->mark_modified();
-    mark_dirty();
+    size = tar_size;
+    mark_modified();
+    return true;
 }
 
+bool file::mark_dirty()
+{
+    bool expect = false;
+    return is_dirty.compare_exchange_strong(expect, true);
+}
 
 #ifdef CONFIG_PRINT_DEBUG_INFO
 void print_inode_meta(uint32_t ino, hscfs_inode *inode);
@@ -191,21 +208,8 @@ file_handle::~file_handle()
 
 void file_handle::mark_dirty()
 {
-    bool expect = false;
-    if (entry->is_dirty.compare_exchange_strong(expect, true))
+    if (entry->mark_dirty())
         cache->add_to_dirty_files(*this);
-}
-
-void file_handle::add_fd_refcount()
-{
-    ++entry->fd_ref_count;
-    entry->dentry->add_fd_refcount();
-}
-
-void file_handle::sub_fd_refcount()
-{
-    --entry->fd_ref_count;
-    entry->dentry->sub_fd_refcount();
 }
 
 void file_handle::do_addref()
@@ -232,7 +236,7 @@ file_handle file_cache_helper::get_file_obj(uint32_t ino, const dentry_handle &d
     if (target_file.is_empty())
     {
         target_file = file_cache->add(ino, dentry);
-        target_file.read_meta();
+        target_file->read_meta();
     }
 
     return target_file;

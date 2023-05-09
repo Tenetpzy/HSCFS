@@ -24,12 +24,6 @@ public:
     page_entry(uint32_t blkoff);
     ~page_entry();
 
-    void set_state(page_state sta)
-    {
-        std::lock_guard<std::mutex> lg(content_state_mtx);
-        content_state = sta;
-    }
-
     /* to do */
 
 private:

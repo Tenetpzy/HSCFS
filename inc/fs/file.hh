@@ -18,9 +18,38 @@ class file
 {
 public:
 
-    /* 构造后，元数据信息(size、atime、mtime、nlink、is_dirty无效，通过read_meta_data读上来) */
+    /* 构造后，元数据信息(size、atime、mtime、nlink、is_dirty无效，需要通过read_meta读上来) */
     file(uint32_t ino, const dentry_handle &dentry, file_system_manager *fs_manager);
     ~file();
+
+    /*
+     * 在创建opened_file结构时调用
+     * 增加file和其关联的dentry的fd引用计数
+     * 调用者需持有fs_meta_lock
+     */
+    void add_fd_refcount();
+
+    /*
+     * opened_file结构销毁时由系统调用
+     * 增加file和其关联的dentry的fd引用计数
+     * 调用者需持有fs_meta_lock
+     */
+    void sub_fd_refcount();
+
+    rwlock_t& get_file_op_lock() noexcept
+    {
+        return file_op_lock;
+    }
+
+    /*
+     * 调整文件大小到tar_size
+     * 不调整文件page cache中多余的部分。该部分应在write和write back时特殊处理
+     * 调用者应持有fs_meta_lock和file_op_lock独占
+     * 此方法内无法标记dirty，如果返回true, 调用者应在稍后调用handle的mark_dirty
+     * 
+     * 如果改变了文件大小，返回true。如果没有做任何修改，返回false
+     */
+    bool truncate(size_t tar_size);
 
 private:
     uint32_t ino;  // inode号
@@ -33,7 +62,10 @@ private:
     /* 保护size、atime、mtime的锁，这些字段会在page cache层并发访问 */
     spinlock_t file_meta_lock;
     
-    /* 如果file中的元数据被修改，或page cache有脏页，则is_dirty置为true，同时加入dirty set */
+    /* 
+     * 如果file中的元数据被修改，或page cache有脏页，则is_dirty置为true，同时加入dirty set
+     * 此标记的修改始终由file_handle进行
+     */
     std::atomic_bool is_dirty;
 
     /*
@@ -68,6 +100,9 @@ private:
 
 private:
 
+    /* 对is_dirty进行CAS操作(由false更改为true)，成功返回true。由file_handle中mark_dirty调用 */
+    bool mark_dirty();
+
     /* 
      * 读取元数据到对象中，将is_dirty置位false
      * 调用此方法前，file内元数据和dirty标志都是无效的
@@ -80,13 +115,14 @@ private:
     void mark_modified();
 
     friend class file_obj_cache;
-    friend class file_cache_helper;
     friend class file_handle;
+    friend class file_cache_helper;
 };
 
 /*
  * 同其它缓存一样，file_handle封装引用计数
- * 但file_handle对象在构造、拷贝、析构时，程序必须保证获取了fs_meta_lock
+ * file_handle同时也是操作file的接口，调用file的方法，同时自动完成dirty标记，
+ * 使用file_handle做代理，核心原因是dirty标记只能由file_handle完成（需要把handle自身加入dirty set）
  */
 class file_obj_cache;
 class file_handle
@@ -144,43 +180,17 @@ public:
         return *this;
     }
 
+    file* operator->()
+    {
+        return entry;
+    }
+
     bool is_empty() const noexcept
     {
         return entry == nullptr;
     }
 
     void mark_dirty();
-
-    void read_meta()
-    {
-        entry->read_meta();
-    }
-
-    /*
-     * 在创建opened_file结构时调用
-     * 增加file和其关联的dentry的fd引用计数
-     * 调用者需持有fs_meta_lock
-     */
-    void add_fd_refcount();
-
-    /*
-     * opened_file结构销毁时由系统调用
-     * 增加file和其关联的dentry的fd引用计数
-     * 调用者需持有fs_meta_lock
-     */
-    void sub_fd_refcount();
-
-    rwlock_t& get_file_op_lock() noexcept
-    {
-        return entry->file_op_lock;
-    }
-
-    /*
-     * 调整文件大小到tar_size
-     * 不调整文件page cache中多余的部分。该部分应在write和write back时特殊处理
-     * 调用者应持有fs_meta_lock和file_op_lock独占
-     */
-    void truncate(size_t tar_size);
 
 private:
     file *entry;

@@ -165,13 +165,13 @@ public:
     }
 
     /* 
-     * 创建普通文件，返回其inode的handle 
+     * 创建普通文件，返回其inode的handle，内部标记inode为dirty
      * 目前的实现中，不使用内联文件
      */
     node_block_cache_entry_handle create_generic_file();
 
     /*
-     * 创建目录文件，返回其inode的handle
+     * 创建目录文件，返回其inode的handle，内部标记inode为dirty
      * 目前实现中不使用内联目录
      */
     node_block_cache_entry_handle create_directory();
