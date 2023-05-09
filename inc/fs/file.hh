@@ -180,7 +180,7 @@ public:
      * 不调整文件page cache中多余的部分。该部分应在write和write back时特殊处理
      * 调用者应持有fs_meta_lock和file_op_lock独占
      */
-    int truncate(size_t tar_size);
+    void truncate(size_t tar_size);
 
 private:
     file *entry;

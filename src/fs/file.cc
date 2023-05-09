@@ -9,7 +9,6 @@
 #include "utils/exception_handler.hh"
 #include "utils/hscfs_log.h"
 #include "utils/lock_guards.hh"
-#include "file.hh"
 
 namespace hscfs {
 
@@ -47,7 +46,7 @@ file::~file()
     rwlock_destroy(&file_op_lock);
 }
 
-int file_handle::truncate(size_t tar_size)
+void file_handle::truncate(size_t tar_size)
 {
     /* 修改文件的索引以适应新大小 */
     auto inode_handle = node_cache_helper(entry->fs_manager).get_node_entry(entry->ino, INVALID_NID);
@@ -60,14 +59,12 @@ int file_handle::truncate(size_t tar_size)
     else if (i_size > tar_size)
         resizer.reduce(entry->ino, tar_size);
     else
-        return 0;
+        return;
 
     /* 修改file内元数据，由于已经获取了file_op_lock独占，所以不用再加file_meta_lock锁了 */
     entry->size = tar_size;
     entry->mark_modified();
     mark_dirty();
-
-    return 0;
 }
 
 

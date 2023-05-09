@@ -126,8 +126,7 @@ int open(const char *pathname, int flags)
         }
         catch (std::exception &e)
         {
-            int err = exception_handler(fs_manager, e).convert_to_errno(true);
-            errno = err;
+            errno = exception_handler(fs_manager, e).convert_to_errno(true);
             return -1;
         }
     } 

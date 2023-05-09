@@ -5,6 +5,7 @@ aux_source_directory(${PROJECT_SOURCE_DIR}/src/communication hscfs_srcs)
 aux_source_directory(${PROJECT_SOURCE_DIR}/src/fs hscfs_srcs)
 aux_source_directory(${PROJECT_SOURCE_DIR}/src/journal hscfs_srcs)
 aux_source_directory(${PROJECT_SOURCE_DIR}/src/utils hscfs_srcs)
+aux_source_directory(${PROJECT_SOURCE_DIR}/src/api hscfs_srcs)
 
 target_sources(hscfs PRIVATE ${hscfs_srcs})
 target_include_directories(hscfs PRIVATE 
