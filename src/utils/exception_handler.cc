@@ -12,7 +12,9 @@ using std::type_index;
 
 std::unordered_map<std::type_index, int> exception_handler::recoverable_exceptions_errno = {
     {type_index(typeid(user_path_invalid)), EINVAL},
-    {type_index(typeid(create_file_in_delete_referred_state)), EACCES}
+    {type_index(typeid(create_file_in_delete_referred_state)), EACCES},
+    {type_index(typeid(invalid_fd)), EBADF},
+    {type_index(typeid(rw_conflict_with_open_flag)), EINVAL}
 };
 
 int exception_handler::convert_to_errno(bool set_unrecoverable)

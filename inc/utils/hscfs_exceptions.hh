@@ -64,6 +64,8 @@ public:
 /* 以上均为不可恢复异常 */
 /**************************************************************/
 
+/* 以下为可恢复异常。必须保证抛出异常时，未对文件系统的状态进行任何修改。 */
+
 /* 用户调用API时输入的路径字符串不合法 */
 class user_path_invalid: public std::logic_error 
 {
@@ -76,6 +78,20 @@ class create_file_in_delete_referred_state: public std::logic_error
 {
 public:
     create_file_in_delete_referred_state(): std::logic_error("create file in deleted but refered state.") {}
+};
+
+/* 用户提供的fd参数无效 */
+class invalid_fd: public std::logic_error
+{
+public:
+    invalid_fd(): std::logic_error("invalid fd.") {}
+};
+
+/* 读/写的参数无效（不能在fd上进行读/写、count越界） */
+class rw_conflict_with_open_flag: public std::logic_error
+{
+public:
+    rw_conflict_with_open_flag(const char *msg): std::logic_error(msg) {}
 };
 
 }  // namespace hscfs

@@ -18,6 +18,7 @@ public:
 
     int alloc_fd(std::shared_ptr<opened_file> &p_file);
     void free_fd(int fd);
+    opened_file* get_opened_file_of_fd(int fd);
 
 private:
     /* 

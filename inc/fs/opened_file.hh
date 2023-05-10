@@ -24,17 +24,35 @@ public:
      * 析构时由系统控制，减少file和dentry的fd引用计数，不在析构函数中减少
      */
 
-    /* 读文件 */
-    ssize_t read(void *buffer, size_t count);
+    file_handle& get_file_handle() noexcept
+    {
+        return file;
+    }
 
-    /* 写文件 */
-    ssize_t write(void *buffer, size_t count);
+    /* 
+     * 读文件 
+     * 调用者应持有fs_freeze_lock共享锁
+     */
+    ssize_t read(char *buffer, ssize_t count);
+
+    /* 
+     * 写文件
+     * 调用者应持有fs_freeze_lock共享锁 
+     */
+    ssize_t write(char *buffer, ssize_t count);
 
 private:
     uint32_t flags;  // 打开文件时的flags
     uint64_t pos;  // 当前文件读写位置
     std::mutex pos_lock;  // 保护pos的锁
     file_handle file;
+
+    enum class rw_operation {
+        read, write
+    };
+
+    /* 检查flags是否支持op操作 */
+    void rw_check_flags(rw_operation op);
 };
 
 }

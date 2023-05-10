@@ -1,6 +1,7 @@
 #include "fs/fd_array.hh"
 #include "utils/hscfs_log.h"
 #include "utils/lock_guards.hh"
+#include "utils/hscfs_exceptions.hh"
 #include <system_error>
 #include <cassert>
 
@@ -50,4 +51,12 @@ void fd_array::free_fd(int fd)
     fd_arr[fd] = nullptr;
 }
 
+opened_file* fd_array::get_opened_file_of_fd(int fd)
+{
+    spin_lock_guard lg(lock);
+    if (fd >= fd_arr.size() || fd_arr[fd] == nullptr)
+        throw invalid_fd();
+    return fd_arr[fd].get();
 }
+
+}  // namespace hscfs

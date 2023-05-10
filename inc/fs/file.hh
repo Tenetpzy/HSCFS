@@ -51,6 +51,12 @@ public:
      */
     bool truncate(size_t tar_size);
 
+    /*
+     * 从pos开始读最多count字节
+     * 调用者应持有该文件的pos_lock锁
+     */
+    ssize_t read(char *buffer, ssize_t count, uint64_t pos);
+
 private:
     uint32_t ino;  // inode号
     file_system_manager *fs_manager;
@@ -114,17 +120,36 @@ private:
     void mark_access();
     void mark_modified();
 
+    /* read过程调用，得到当前的文件大小 */
+    uint64_t get_cur_size();
+
+    /* 获取pos对应的块号 */
+    uint32_t idx_of_blk(uint64_t pos)
+    {
+        return pos / 4096;
+    }
+
+    /* 获取pos对应的块内偏移 */
+    uint32_t off_in_blk(uint64_t pos)
+    {
+        return pos % 4096;
+    }
+
+    /* 获取cur_pos所在块的尾后文件偏移 */
+    uint64_t end_pos_of_cur_blk(uint64_t cur_pos)
+    {
+        uint64_t res = cur_pos + 4096 - off_in_blk(cur_pos);
+        assert(res % 4096 == 0);
+        return res;
+    }
+
     friend class file_obj_cache;
     friend class file_handle;
     friend class file_cache_helper;
 };
 
-/*
- * 同其它缓存一样，file_handle封装引用计数
- * file_handle同时也是操作file的接口，调用file的方法，同时自动完成dirty标记，
- * 使用file_handle做代理，核心原因是dirty标记只能由file_handle完成（需要把handle自身加入dirty set）
- */
 class file_obj_cache;
+/* 同其它缓存一样，file_handle封装引用计数 */
 class file_handle
 {
 public:

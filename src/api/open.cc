@@ -38,7 +38,8 @@ int open(const char *pathname, int flags)
             std::string dir_path = path_helper::extract_dir_path(abs_path);
             std::string file_name = path_helper::extract_file_name(abs_path);
 
-            if (dir_path.length() == 0 || file_name.length() == 0)
+            /* 检查参数 */
+            if (dir_path.length() == 0 || file_name.length() == 0 || (flags & 3) == 3)
             {
                 errno = EINVAL;
                 return -1;

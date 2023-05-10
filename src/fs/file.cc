@@ -9,6 +9,7 @@
 #include "utils/exception_handler.hh"
 #include "utils/hscfs_log.h"
 #include "utils/lock_guards.hh"
+#include "file.hh"
 
 namespace hscfs {
 
@@ -79,6 +80,26 @@ bool file::truncate(size_t tar_size)
     return true;
 }
 
+ssize_t file::read(char *buffer, ssize_t count, uint64_t pos)
+{
+    /* 获得文件操作共享锁，获取后，文件长度保证不会减小(truncate需要获取此独占锁) */
+    rwlock_guard file_op_lg(file_op_lock, rwlock_guard::lock_type::rdlock);
+
+    const uint64_t cur_size = get_cur_size();  // 获取一致的文件大小
+    if (pos >= cur_size)
+        return 0;
+
+    /* 依次遍历读取范围内的每一个块 */
+    ssize_t read_count = 0;
+    while (read_count < count && pos < cur_size)
+    {
+        /* 计算当前块偏移cur_blkno和当前块内的读取范围[pos, end_pos) */
+        uint32_t cur_blkno = idx_of_blk(pos);
+        uint64_t end_pos = std::min(end_pos_of_cur_blk(pos), cur_size);
+
+    }
+}
+
 bool file::mark_dirty()
 {
     bool expect = false;
@@ -128,6 +149,12 @@ void file::mark_modified()
     timespec_get(&t, TIME_UTC);
     atime = t;
     mtime = t;
+}
+
+uint64_t file::get_cur_size()
+{
+    spin_lock_guard lg(file_meta_lock);
+    return size;
 }
 
 file_handle file_obj_cache::add(uint32_t ino, const dentry_handle &dentry)
