@@ -91,12 +91,20 @@ ssize_t file::read(char *buffer, ssize_t count, uint64_t pos)
 
     /* 依次遍历读取范围内的每一个块 */
     ssize_t read_count = 0;
+    std::unique_lock<std::mutex> pre_page_lock;  // 前一个page的锁。获取到当前page的锁后再释放
     while (read_count < count && pos < cur_size)
     {
         /* 计算当前块偏移cur_blkno和当前块内的读取范围[pos, end_pos) */
         uint32_t cur_blkno = idx_of_blk(pos);
         uint64_t end_pos = std::min(end_pos_of_cur_blk(pos), cur_size);
 
+        /* 从缓存中获取当前page，加锁，解除上一个page的锁，准备好当前page的内容(如从SSD读) */
+        page_entry_handle cur_page = page_cache_->get(cur_blkno);
+        std::unique_lock<std::mutex> cur_page_lock(cur_page->get_page_lock());
+        pre_page_lock = std::move(cur_page_lock);  // 解锁pre_page_lock，并接管cur_page_lock
+        prepare_page_content(cur_page);
+
+        
     }
 }
 

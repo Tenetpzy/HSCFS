@@ -25,6 +25,15 @@ public:
     ~page_entry();
 
     /* to do */
+    std::mutex& get_page_lock() noexcept
+    {
+        return page_lock;
+    }
+
+    block_buffer& get_page_buffer() noexcept
+    {
+        return page;
+    }
 
 private:
 
@@ -37,13 +46,17 @@ private:
 
 private:
     uint32_t blkoff;   // 文件内块偏移
+    uint32_t origin_lpa, commit_lpa;  // 旧lpa（如果之前存在）和提交时的新lpa
 
     page_state content_state;
-    std::mutex content_state_mtx;  // 保护content_state的锁
     std::condition_variable cond;  // 等待其他线程读page的条件变量
-
     block_buffer page;
-    rwlock_t page_rw_lock;  // page并发读写的锁
+
+    /*
+     * 保护page、content_state、origin_lpa的锁
+     * 获得file_op_lock独占时，不需要再加此锁
+     */
+    std::mutex page_lock;
 
     /*
      * 引用计数，在调用方与page_entry_handle生命周期绑定，一个page_entry_handle增加1引用计数

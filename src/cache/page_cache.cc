@@ -222,11 +222,8 @@ void page_entry_handle::do_subref()
 
 page_entry::page_entry(uint32_t blkoff)
 {
-    int ret = rwlock_init(&page_rw_lock);
-    if (ret != 0)
-        throw std::system_error(std::error_code(ret, std::generic_category()), 
-            "page cache entry: init page rwlock failed.");
     this->blkoff = blkoff;
+    origin_lpa = commit_lpa = 0;
     content_state = page_state::invalid;
     ref_count.store(0);
     is_dirty.store(false);    
@@ -234,10 +231,6 @@ page_entry::page_entry(uint32_t blkoff)
 
 page_entry::~page_entry()
 {
-    int ret = rwlock_destroy(&page_rw_lock);
-    if (ret != 0)
-        HSCFS_LOG(HSCFS_LOG_WARNING, "page cache entry(blkoff = %u): "
-            "destroy page rwlock failed while destructed.", blkoff);
     if (ref_count != 0)
         HSCFS_LOG(HSCFS_LOG_WARNING, "page cache entry(blkoff = %u): "
             "refcount = %u while destructed.", blkoff, ref_count.load());

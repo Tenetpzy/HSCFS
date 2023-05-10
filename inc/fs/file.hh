@@ -9,6 +9,7 @@
 namespace hscfs {
 
 class page_cache;
+class page_entry_handle;
 class file_system_manager;
 
 /* 
@@ -142,6 +143,12 @@ private:
         assert(res % 4096 == 0);
         return res;
     }
+
+    /*
+     * 准备好一个page的内容，包括缓存，lpa，dirty等字段（要么从SSD读上来，要么初始化一个新页面，并初始化其它信息）
+     * 调用者需持有该page的page_lock
+     */
+    void prepare_page_content(page_entry_handle &page);
 
     friend class file_obj_cache;
     friend class file_handle;
