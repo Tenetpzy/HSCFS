@@ -146,7 +146,7 @@ private:
 
     /*
      * 准备好一个page的内容，包括缓存，lpa，dirty等字段（要么从SSD读上来，要么初始化一个新页面，并初始化其它信息）
-     * 调用者需持有该page的page_lock
+     * 调用者需持有该page的page_lock，不得持有fs_meta_lock
      */
     void prepare_page_content(page_entry_handle &page);
 

@@ -165,6 +165,53 @@ uint64_t file::get_cur_size()
     return size;
 }
 
+void file::prepare_page_content(page_entry_handle &page)
+{
+    /* to do... */
+
+    /* page内容有效，直接返回 */
+    if (page->get_state() == page_state::ready)
+        return;
+    
+    /* page内容无效，判断是应该从SSD读，还是应该直接初始化 */
+    page->set_state(page_state::ready);
+    std::lock_guard<std::mutex> fs_meta_lg(fs_manager->get_fs_meta_lock());
+    uint32_t blkoff = page->get_blkoff();
+
+    /* 获取该文件的inode block，得到当前inode中文件的最大块偏移 */
+    node_cache_helper node_helper(fs_manager);
+    auto inode_handle = node_helper.get_node_entry(ino, INVALID_NID);
+    hscfs_inode *inode = &inode_handle->get_node_block_ptr()->i;
+    uint64_t size_in_inode = inode->i_size;
+    uint64_t max_blkoff_in_inode = SIZE_TO_BLOCK(size_in_inode) - 1;
+
+    /* page超出了文件块偏移范围，origin_lpa和commit_lpa都为INVALID_LPA，内容初始化为0即可(block_buffer构造时自动完成) */
+    if (blkoff > max_blkoff_in_inode)
+    {
+        page->set_origin_lpa(INVALID_LPA);
+        page->set_commit_lpa(INVALID_LPA);
+        return;
+    }
+
+    /* page在文件块偏移范围内，通过文件索引查询找到它的LPA */
+    block_addr_info page_addr = file_mapping_util(fs_manager).get_addr_of_block(ino, blkoff);
+
+    /* 如果page在文件空洞范围内，origin_lpa和commit_lpa都为INVALID_LPA，内容初始化为0 */
+    if (page_addr.lpa == INVALID_LPA)
+    {
+        HSCFS_LOG(HSCFS_LOG_DEBUG, "page offset %u of file(ino = %u) is in file holes.", blkoff, ino);
+        page->set_origin_lpa(INVALID_LPA);
+        page->set_commit_lpa(INVALID_LPA);
+        return;        
+    }
+
+    /* 否则，初始化其origin_lpa，从SSD读出内容 */
+    HSCFS_LOG(HSCFS_LOG_DEBUG, "the LPA of page offset %u in file(ino = %u) is %u.", blkoff, ino, page_addr.lpa);
+    page->set_origin_lpa(page_addr.lpa);
+    page->set_commit_lpa(INVALID_LPA);
+    page->get_page_buffer().read_from_lpa(fs_manager->get_device(), page_addr.lpa);
+}
+
 file_handle file_obj_cache::add(uint32_t ino, const dentry_handle &dentry)
 {
     auto p_entry = std::make_unique<file>(ino, dentry, fs_manager);

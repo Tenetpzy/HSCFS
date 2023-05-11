@@ -13,9 +13,8 @@ namespace hscfs {
 
 enum class page_state
 {
-    invalid,  // 缓存还没从SSD读上来
-    reading,  // 缓存正在由某个线程从SSD读
-    ready  // SSD的内容已经在缓存中
+    invalid,  // 缓存块内容无效(未从SSD读或未初始化。未初始化包括文件空洞、文件增加部分等)
+    ready  // 缓存块内容有效
 };
 
 class page_entry
@@ -24,7 +23,6 @@ public:
     page_entry(uint32_t blkoff);
     ~page_entry();
 
-    /* to do */
     std::mutex& get_page_lock() noexcept
     {
         return page_lock;
@@ -33,6 +31,41 @@ public:
     block_buffer& get_page_buffer() noexcept
     {
         return page;
+    }
+
+    page_state get_state() const noexcept
+    {
+        return content_state;
+    }
+
+    void set_state(page_state sta) noexcept
+    {
+        content_state = sta;
+    }
+
+    uint32_t get_blkoff() const noexcept
+    {
+        return blkoff;
+    }
+
+    uint32_t get_origin_lpa() const noexcept
+    {
+        return origin_lpa;
+    }
+
+    void set_origin_lpa(uint32_t origin_lpa) noexcept
+    {
+        this->origin_lpa = origin_lpa;
+    }
+
+    uint32_t get_commit_lpa() const noexcept
+    {
+        return commit_lpa;
+    }
+
+    void set_commit_lpa(uint32_t commit_lpa) noexcept
+    {
+        this->commit_lpa = commit_lpa;
     }
 
 private:
@@ -49,7 +82,6 @@ private:
     uint32_t origin_lpa, commit_lpa;  // 旧lpa（如果之前存在）和提交时的新lpa
 
     page_state content_state;
-    std::condition_variable cond;  // 等待其他线程读page的条件变量
     block_buffer page;
 
     /*

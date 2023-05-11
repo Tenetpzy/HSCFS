@@ -1,6 +1,7 @@
 #include "cache/page_cache.hh"
 #include "utils/lock_guards.hh"
 #include "utils/hscfs_log.h"
+#include "fs/fs.h"
 #include <system_error>
 
 namespace hscfs {
@@ -223,7 +224,7 @@ void page_entry_handle::do_subref()
 page_entry::page_entry(uint32_t blkoff)
 {
     this->blkoff = blkoff;
-    origin_lpa = commit_lpa = 0;
+    origin_lpa = commit_lpa = INVALID_LPA;
     content_state = page_state::invalid;
     ref_count.store(0);
     is_dirty.store(false);    
