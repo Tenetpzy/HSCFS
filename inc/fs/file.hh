@@ -146,6 +146,11 @@ private:
 
     /*
      * 准备好一个page的内容，包括缓存，lpa，dirty等字段（要么从SSD读上来，要么初始化一个新页面，并初始化其它信息）
+     * 
+     * 即使该page在文件空洞中、或超出了文件当前范围，此方法也不会将page标记为dirty
+     * 原因：对于read，不标记dirty，则维持文件空洞状态，不必分配SSD block。对于write，则应在write方法内标记为dirty。
+     * 但由于前期设计时block_buffer和内存分配耦合，会出现不必要的内存分配（未优化）
+     * 
      * 调用者需持有该page的page_lock，不得持有fs_meta_lock
      */
     void prepare_page_content(page_entry_handle &page);

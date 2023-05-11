@@ -171,8 +171,6 @@ uint64_t file::get_cur_size()
 
 void file::prepare_page_content(page_entry_handle &page)
 {
-    /* to do... */
-
     /* page内容有效，直接返回 */
     if (page->get_state() == page_state::ready)
         return;
@@ -192,6 +190,8 @@ void file::prepare_page_content(page_entry_handle &page)
     /* page超出了文件块偏移范围，origin_lpa和commit_lpa都为INVALID_LPA，内容初始化为0即可(block_buffer构造时自动完成) */
     if (blkoff > max_blkoff_in_inode)
     {
+        HSCFS_LOG(HSCFS_LOG_DEBUG, "page offset %u of file(ino = %u) is beyond file size(%u bytes).", 
+            blkoff, ino, size_in_inode);
         page->set_origin_lpa(INVALID_LPA);
         page->set_commit_lpa(INVALID_LPA);
         return;
