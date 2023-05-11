@@ -6,14 +6,18 @@
 #include "utils/declare_utils.hh"
 #include <mutex>
 #include <condition_variable>
-#include <vector>
+#include <map>
 #include <atomic>
 
 namespace hscfs {
 
 enum class page_state
 {
-    invalid,  // 缓存块内容无效(未从SSD读或未初始化。未初始化包括文件空洞、文件增加部分等)
+    /* 
+     * 缓存块内容无效(未从SSD读或未初始化。未初始化包括文件空洞、文件增加部分等)
+     * 处于invalid状态时，origin_lpa和commit_lpa是随机值
+     */
+    invalid,
     ready  // 缓存块内容有效
 };
 
@@ -92,7 +96,7 @@ private:
 
     /*
      * 引用计数，在调用方与page_entry_handle生命周期绑定，一个page_entry_handle增加1引用计数
-     * page cache内的dirty list中的page entry也增加引用计数
+     * page cache内的dirty page set中的page entry也增加引用计数
      * 
      * 通过page_cache.get获取page_entry_handle时，对page_cache加cache_lock锁后增加ref_count
      * ref_count为0时，一定是page cache内部独占访问page_entry(内部加了cache_lock锁，外部没有句柄，无法访问)
@@ -136,6 +140,7 @@ public:
         return entry;
     }
 
+    /* 尝试将page entry的dirty置位。如果是由本线程将dirty置位，则加入page cache的dirty pages集合 */
     void mark_dirty();
 
 private:
@@ -144,6 +149,8 @@ private:
 
     void do_addref();
     void do_subref();
+
+    friend class page_cache;
 };
 
 /* 
@@ -164,11 +171,20 @@ public:
      */
     page_entry_handle get(uint32_t blkoff);
 
+    /*
+     * 截断文件后调用，将page cache内块偏移严格大于max_blkoff的缓存page的dirty位清除，置位invalid状态，但
+     * 不将它们删除，因为也许之后又会访问
+     * 调用者必须持有对应文件的file_op_lock独占锁（此时仅有一个线程能操作文件的page cache）
+     */
+    void truncate(uint32_t max_blkoff);
+
 private:
     generic_cache_manager<uint32_t, page_entry> cache_manager;
     spinlock_t cache_lock;  // 保护cache_manager
-    std::vector<page_entry*> dirty_list;
-    spinlock_t dirty_list_lock;
+
+    /* 由于dirty_pages有范围remove需求，所以用map<blkoff, page_handle>维护 */
+    std::map<uint32_t, page_entry_handle> dirty_pages;
+    spinlock_t dirty_pages_lock;
 
     size_t expect_size, cur_size;
 
@@ -182,7 +198,7 @@ private:
      * 由page_entry_handle的mark_dirty方法调用
      * 调用时能保证ref_count不为0，因为发起调用的page_entry_handle仍有效，所以内部不加cache_lock锁
      */
-    void add_to_dirty_list(page_entry *entry);
+    void add_to_dirty_pages(page_entry_handle &page);
 
     friend class page_entry_handle;
 };

@@ -3,6 +3,7 @@
 #include "utils/hscfs_log.h"
 #include "fs/fs.h"
 #include <system_error>
+#include "page_cache.hh"
 
 namespace hscfs {
 
@@ -13,10 +14,10 @@ page_cache::page_cache(size_t expect_size)
         throw std::system_error(std::error_code(ret, std::generic_category()), 
             "page cache: init cache spin failed.");
     /* 任意对锁初始化失败的异常均为panic，上层应该捕获异常并终止程序，故此处不再释放成功初始化的锁 */
-    ret = spin_init(&dirty_list_lock);
+    ret = spin_init(&dirty_pages_lock);
     if (ret != 0)
         throw std::system_error(std::error_code(ret, std::generic_category()), 
-            "page cache: init dirty list spin failed.");
+            "page cache: init dirty page set spin failed.");
 
     this->expect_size = expect_size;
     cur_size = 0;
@@ -25,7 +26,7 @@ page_cache::page_cache(size_t expect_size)
 page_cache::~page_cache()
 {
     // page cache析构内不会并发访问，不加锁
-    if (!dirty_list.empty())
+    if (!dirty_pages.empty())
         HSCFS_LOG(HSCFS_LOG_WARNING, "page cache still has dirty page while destructed.");
 }
 
@@ -76,6 +77,22 @@ page_entry_handle page_cache::get(uint32_t blkoff)
         add_refcount(p_entry);
 
     return page_entry_handle(p_entry, this);
+}
+
+void page_cache::truncate(uint32_t max_blkoff)
+{
+    /* 由于调用者已经加了file_op_lock，内部不用加任何锁了 */
+    auto start_itr = dirty_pages.upper_bound(max_blkoff);
+    for (auto itr = start_itr; itr != dirty_pages.end(); ++itr)
+    {
+        /* 将范围外的所有page的dirty标记清除，标记为invalid */
+        auto &handle = itr->second;
+        handle->is_dirty = false;
+        handle->content_state = page_state::invalid;
+    }
+
+    /* 从dirty pages集合中移除范围外的所有page */
+    dirty_pages.erase(start_itr, dirty_pages.end());
 }
 
 /* 调用者需要加cache_lock，除非能够保证调用时ref_count不会为0 */
@@ -147,12 +164,12 @@ void page_cache::do_replace()
     }
 }
 
-void page_cache::add_to_dirty_list(page_entry *entry)
+void page_cache::add_to_dirty_pages(page_entry_handle &page)
 {
-    spin_lock_guard lg(dirty_list_lock);
-    assert(entry->ref_count.load() >= 1);
-    dirty_list.push_back(entry);
-    add_refcount(entry);
+    spin_lock_guard lg(dirty_pages_lock);
+    assert(page->ref_count.load() >= 1);
+    dirty_pages.emplace(page->blkoff, page);
+    add_refcount(page.entry);
 }
 
 page_entry_handle::page_entry_handle(const page_entry_handle &o)
@@ -204,9 +221,9 @@ page_entry_handle::~page_entry_handle()
 
 void page_entry_handle::mark_dirty()
 {
-    /* 若返回true，说明是由本线程将dirty置位，因此本线程负责将其加入cache的dirty list */
+    /* 若返回true，说明是由本线程将dirty置位，因此本线程负责将其加入cache的dirty page set */
     if (entry->mark_dirty())
-        cache->add_to_dirty_list(entry);
+        cache->add_to_dirty_pages(*this);
 }
 
 void page_entry_handle::do_addref()

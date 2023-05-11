@@ -77,6 +77,10 @@ bool file::truncate(size_t tar_size)
     /* 修改file内元数据，由于已经获取了file_op_lock独占，所以不用再加file_meta_lock锁了 */
     size = tar_size;
     mark_modified();
+
+    /* 将page cache内多余的page置为INVALID状态 */
+    page_cache_->truncate(SIZE_TO_BLOCK(tar_size) - 1);
+
     return true;
 }
 
