@@ -1,4 +1,5 @@
 #include <system_error>
+#include <cstring>
 
 #include "cache/page_cache.hh"
 #include "cache/node_block_cache.hh"
@@ -89,27 +90,93 @@ ssize_t file::read(char *buffer, ssize_t count, uint64_t pos)
     /* 获得文件操作共享锁，获取后，文件长度保证不会减小(truncate需要获取此独占锁) */
     rwlock_guard file_op_lg(file_op_lock, rwlock_guard::lock_type::rdlock);
 
-    const uint64_t cur_size = get_cur_size();  // 获取一致的文件大小
+    const uint64_t cur_size = get_cur_size();  // 获取一致的page cache中文件大小
     if (pos >= cur_size)
         return 0;
 
-    /* 依次遍历读取范围内的每一个块 */
-    ssize_t read_count = 0;
-    std::unique_lock<std::mutex> pre_page_lock;  // 前一个page的锁。获取到当前page的锁后再释放
-    while (read_count < count && pos < cur_size)
+    /* 依次遍历读取范围内的每一个page */
+    ssize_t read_count = 0;  // 当前已经读取的字节数
+
     {
-        /* 计算当前块偏移cur_blkno和当前块内的读取范围[pos, end_pos) */
-        uint32_t cur_blkno = idx_of_blk(pos);
-        uint64_t end_pos = std::min(end_pos_of_cur_blk(pos), cur_size);
-
-        /* 从缓存中获取当前page，加锁，解除上一个page的锁，准备好当前page的内容(如从SSD读) */
-        page_entry_handle cur_page = page_cache_->get(cur_blkno);
-        std::unique_lock<std::mutex> cur_page_lock(cur_page->get_page_lock());
-        pre_page_lock = std::move(cur_page_lock);  // 解锁pre_page_lock，并接管cur_page_lock
-        prepare_page_content(cur_page);
-
+        page_entry_handle pre_page;  // 必须保持上一个page的引用，确保解锁上一个page时pre_page_lock不是悬垂引用
+        std::unique_lock<std::mutex> pre_page_lock;  // 前一个page的锁。获取到当前page的锁后再释放(必须定义在pre_page后)
         
+        while (read_count < count && pos < cur_size)
+        {
+            /* 计算当前块偏移cur_blkno和当前块内需读取的文件偏移范围[pos, end_pos) */
+            const uint32_t cur_blkno = idx_of_blk(pos);
+            const uint64_t end_pos = std::min(end_pos_of_cur_blk(pos), cur_size);
+            assert(end_pos > pos && end_pos - pos <= 4096);
+            HSCFS_LOG(HSCFS_LOG_DEBUG, "read in file %u, blkno %u, range [%u, %u).", ino, cur_blkno, pos, end_pos);
+
+            /* 从缓存中获取当前page，加锁，解除上一个page的锁，准备好当前page的内容(如从SSD读) */
+            page_entry_handle cur_page = page_cache_->get(cur_blkno);
+            std::unique_lock<std::mutex> cur_page_lock(cur_page->get_page_lock());
+            pre_page_lock = std::move(cur_page_lock);  // 解锁pre_page_lock，并接管cur_page_lock
+            prepare_page_content(cur_page);
+
+            /* 从page中拷贝内容到用户缓冲区 */
+            const size_t cp_start_off = off_in_blk(pos);
+            const size_t cp_cnt = end_pos - pos;
+            char *page_buffer = cur_page->get_page_buffer().get_ptr();
+            std::memcpy(buffer + read_count, page_buffer + cp_start_off, cp_cnt);
+
+            read_count += cp_cnt;
+            pos += cp_cnt;
+            pre_page = std::move(cur_page);
+        }
+        /* pre_page_lock析构，自动释放最后一个page的锁 */
     }
+
+    mark_access();  // 更新atime
+
+    return read_count;
+}
+
+ssize_t file::write(char *buffer, ssize_t count, uint64_t pos)
+{
+    /* 获得文件操作共享锁，获取后，文件长度保证不会减小(truncate需要获取此独占锁) */
+    rwlock_guard file_op_lg(file_op_lock, rwlock_guard::lock_type::rdlock);
+    const uint64_t write_end_pos = pos + count;  // 写入范围的尾后位置
+    ssize_t write_count = 0;  // 当前已经写入的字节数
+
+    /* 依次遍历写入范围内的每一个page(包括超过文件当前page cache大小的page) */
+    {
+        page_entry_handle pre_page;  // 必须保持上一个page的引用，确保解锁上一个page时pre_page_lock不是悬垂引用
+        std::unique_lock<std::mutex> pre_page_lock;  // 前一个page的锁。获取到当前page的锁后再释放(必须定义在pre_page后)
+        
+        while (write_count < count)
+        {
+            /* 计算当前块偏移cur_blkno和当前块内需写入的文件偏移范围[pos, end_pos) */
+            assert(pos < write_end_pos);
+            const uint32_t cur_blkno = idx_of_blk(pos);
+            const uint64_t end_pos = std::min(end_pos_of_cur_blk(pos), write_end_pos);
+            assert(end_pos > pos && end_pos - pos <= 4096);
+            HSCFS_LOG(HSCFS_LOG_DEBUG, "write in file %u, blkno %u, range [%u, %u).", ino, cur_blkno, pos, end_pos);
+
+            /* 从缓存中获取当前page，加锁，解除上一个page的锁，准备好当前page的内容(如从SSD读) */
+            page_entry_handle cur_page = page_cache_->get(cur_blkno);
+            std::unique_lock<std::mutex> cur_page_lock(cur_page->get_page_lock());
+            pre_page_lock = std::move(cur_page_lock);  // 解锁pre_page_lock，并接管cur_page_lock
+            prepare_page_content(cur_page);
+
+            /* 从用户缓冲区拷贝内容到page中 */
+            const size_t cp_start_off = off_in_blk(pos);
+            const size_t cp_cnt = end_pos - pos;
+            char *page_buffer = cur_page->get_page_buffer().get_ptr();
+            std::memcpy(page_buffer + cp_start_off, buffer + write_count, cp_cnt);
+
+            write_count += cp_cnt;
+            pos += cp_cnt;
+            pre_page = std::move(cur_page);
+        }
+        /* pre_page_lock析构，自动释放最后一个page的锁 */
+    }
+
+    /* 更新访问时间和文件大小 */
+    set_cur_size_if_larger(write_end_pos);
+    mark_modified();
+    return write_count;
 }
 
 bool file::mark_dirty()
@@ -152,13 +219,17 @@ void file::read_meta()
 
 void file::mark_access()
 {
-    timespec_get(&atime, TIME_UTC);
+    timespec t;
+    timespec_get(&t, TIME_UTC);
+    spin_lock_guard lg(file_meta_lock);
+    atime = t;
 }
 
 void file::mark_modified()
 {
     timespec t;
     timespec_get(&t, TIME_UTC);
+    spin_lock_guard lg(file_meta_lock);
     atime = t;
     mtime = t;
 }
@@ -167,6 +238,13 @@ uint64_t file::get_cur_size()
 {
     spin_lock_guard lg(file_meta_lock);
     return size;
+}
+
+void file::set_cur_size_if_larger(uint64_t size_after_write)
+{
+    spin_lock_guard lg(file_meta_lock);
+    if (size_after_write > size)
+        size = size_after_write;
 }
 
 void file::prepare_page_content(page_entry_handle &page)

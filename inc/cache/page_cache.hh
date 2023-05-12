@@ -119,6 +119,11 @@ class page_cache;
 class page_entry_handle
 {
 public:
+    page_entry_handle() noexcept
+    {
+        cache = nullptr;
+        entry = nullptr;
+    }
     page_entry_handle(page_entry *entry, page_cache *cache) noexcept
     {
         this->cache = cache;

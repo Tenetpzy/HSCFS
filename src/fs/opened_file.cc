@@ -16,8 +16,24 @@ ssize_t opened_file::read(char *buffer, ssize_t count)
 {
     std::lock_guard<std::mutex> lg(pos_lock);
     rw_check_flags(rw_operation::read);
-    assert(count >= 0);
-    
+    if (count < 0)
+        count = 0;
+    ssize_t num_read = file->read(buffer, count, pos);
+    file.mark_dirty();
+    pos += num_read;
+    return num_read;
+}
+
+ssize_t opened_file::write(char *buffer, ssize_t count)
+{
+    std::lock_guard<std::mutex> lg(pos_lock);
+    rw_check_flags(rw_operation::write);
+    if (count < 0)
+        count = 0;
+    ssize_t num_write = file->write(buffer, count, pos);
+    file.mark_dirty();
+    pos += num_write;
+    return num_write;    
 }
 
 void opened_file::rw_check_flags(rw_operation op)

@@ -54,9 +54,19 @@ public:
 
     /*
      * 从pos开始读最多count字节
+     * 更新file内的atime(但不更新inode中对应元数据)
+     * 调用者应在稍后使用file_handle标记dirty
      * 调用者应持有该文件的pos_lock锁
      */
     ssize_t read(char *buffer, ssize_t count, uint64_t pos);
+
+    /*
+     * 从pos开始写入count字节
+     * 更新file内的atime和mtime，如果增加了大小，更新size(但不更新inode中对应的元数据)
+     * 调用者应在稍后使用file_handle标记dirty
+     * 调用者应持有该文件的pos_lock锁
+     */
+    ssize_t write(char *buffer, ssize_t count, uint64_t pos);
 
 private:
     uint32_t ino;  // inode号
@@ -117,12 +127,24 @@ private:
      */
     void read_meta();
 
-    /* 标记文件被访问/修改。更新file对象内的atime和mtime为当前时间，不修改is_dirty。 */
+    /* 
+     * 标记文件被访问/修改。更新file对象内的atime和mtime为当前时间，不修改is_dirty。
+     * 调用者不需要获取file_meta_lock
+     */
     void mark_access();
     void mark_modified();
 
-    /* read过程调用，得到当前的文件大小 */
+    /* 
+     * read过程调用，得到file的文件大小size字段
+     * 调用者不需要获取file_meta_lock
+     */
     uint64_t get_cur_size();
+
+    /*
+     * write过程调用。如果size_after_write大于file->size，则file->size更新为size_after_write
+     * 调用者不需要获取file_meta_lock
+     */
+    void set_cur_size_if_larger(uint64_t size_after_write);
 
     /* 获取pos对应的块号 */
     uint32_t idx_of_blk(uint64_t pos)
