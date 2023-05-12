@@ -18,7 +18,7 @@ struct hscfs_super_block
 	__le32 log_blocks_per_seg;	/* log2 # of blocks per segment */
 	__le64 block_count;		/* total # of user blocks */
 	__le32 segment_count;		/* total # of segments(used) */
-	__le32 segment_count_sit;	/* # of segments for SIT */
+	__le32 segment_count_sit;	/* # of segments for SIT(used) */
 	__le32 segment_count_nat;	/* # of segments for NAT(used) */
 	__le32 segment_count_srmap;	/* # of segments for SRMAP */
     __le32 segment_count_meta_journal;  /* # of segments for Meta Journal*/
@@ -29,7 +29,7 @@ struct hscfs_super_block
 	__le32 srmap_blkaddr;		/* start block address of SRMAP */
     __le32 meta_journal_blkaddr;   /* start block address of Meta Journal */
 	__le32 main_blkaddr;		/* start block address of main area */
-	__le32 root_ino;		/* root inode number */
+	__le32 root_ino;		/* root inode number(used) */
 	__le32 node_ino;		/* node inode number */
 	__le32 meta_ino;		/* meta inode number */
 
