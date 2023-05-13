@@ -89,6 +89,8 @@ public:
 
     const dentry_key& get_parent_key() const noexcept
     {
+        if (parent == nullptr)  // 如果是根目录
+            return key;
         return parent->get_key();
     }
 
@@ -145,7 +147,7 @@ private:
     dentry_key key;
     uint32_t ino;  // 目录项的inode
     uint8_t type;  // 目录项的文件类型
-    dentry *parent;  // 目录树中的父目录，根目录需指向自己
+    dentry *parent;  // 目录树中的父目录，根目录则为nullptr
 
     dentry_store_pos pos;
     
@@ -276,7 +278,15 @@ public:
         return dentry_handle(raw_p, this);
     }
 
-    /* to do: add root */
+    dentry_handle add_root(uint32_t root_ino)
+    {
+        auto p_root = std::make_unique<dentry>(root_ino, nullptr, root_ino, "/", fs_manager);
+        dentry *raw_p = p_root.get();
+        cache_manager.add(p_root->key, p_root);
+        add_refcount(raw_p);
+        ++cur_size;
+        return dentry_handle(raw_p, this);
+    }
 
     dentry_handle get(uint32_t dir_ino, const std::string &name)
     {

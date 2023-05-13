@@ -40,11 +40,12 @@ void file_system_manager::init(comm_dev *device)
     g_fs_manager.file_cache = std::make_unique<file_obj_cache>(file_cache_size, &g_fs_manager);
 
     g_fs_manager.dev = device;
+
     uint32_t root_inode = (*g_fs_manager.super)->root_ino;
-    /* to do: 初始化root dentry */
+    g_fs_manager.root_dentry = g_fs_manager.d_cache->add_root(root_inode);
+
     g_fs_manager.fd_arr = std::make_unique<fd_array>(fd_array_size);
     g_fs_manager.cur_journal = std::make_unique<journal_container>();
-    
     g_fs_manager.is_unrecoverable = false;
 }
 

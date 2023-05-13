@@ -3,7 +3,6 @@
 #include "utils/hscfs_log.h"
 #include "fs/fs.h"
 #include <system_error>
-#include "page_cache.hh"
 
 namespace hscfs {
 

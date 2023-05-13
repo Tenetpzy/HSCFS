@@ -4,9 +4,8 @@ project(HSCFS)
 
 set(SPDK_include_directory /home/pzy/spdk_src/spdk/build/include)
 
-add_subdirectory(third_party)
-
-add_subdirectory(test)
-
 add_library(hscfs SHARED)
+
+add_subdirectory(third_party)
+add_subdirectory(test)
 add_subdirectory(src)

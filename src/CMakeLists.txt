@@ -11,6 +11,18 @@ target_sources(hscfs PRIVATE ${hscfs_srcs})
 target_include_directories(hscfs PRIVATE 
     ${PROJECT_SOURCE_DIR}/inc 
     ${SPDK_include_directory}
-    ${PROJECT_SOURCE_DIR}/third_party/fmt/include
 )
-target_sources(hscfs PRIVATE ${PROJECT_SOURCE_DIR}/third_party/fmt/src/format.cc)
+
+if(NOT DEFINED CONFIG_PRINT_DEBUG_INFO)
+    set(CONFIG_PRINT_DEBUG_INFO No)
+endif()
+
+if(${CONFIG_PRINT_DEBUG_INFO} STREQUAL Yes)
+    message("CONFIG_PRINT_DEBUG_INFO=Yes")
+    target_include_directories(hscfs PRIVATE ${PROJECT_SOURCE_DIR}/third_party/fmt/include)
+    target_sources(hscfs PRIVATE 
+        ${PROJECT_SOURCE_DIR}/third_party/fmt/src/format.cc
+        ${PROJECT_SOURCE_DIR}/src/debug/debug_utils.cc
+    )
+    target_compile_options(hscfs PRIVATE -DCONFIG_PRINT_DEBUG_INFO)
+endif()

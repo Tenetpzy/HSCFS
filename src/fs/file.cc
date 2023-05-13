@@ -10,7 +10,6 @@
 #include "utils/exception_handler.hh"
 #include "utils/hscfs_log.h"
 #include "utils/lock_guards.hh"
-#include "file.hh"
 
 namespace hscfs {
 

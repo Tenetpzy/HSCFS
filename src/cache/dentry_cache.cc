@@ -31,20 +31,9 @@ uint8_t dentry::get_type()
     if (type != HSCFS_FT_UNKNOWN)
         return type;
     
-    /* 从inode中获取文件类型，首先从node block cache中查找ino对应block */
-    node_block_cache *node_cache = fs_manager->get_node_cache();
-    node_block_cache_entry_handle node_handle = node_cache->get(ino);
-
-    /* node block cache缓存不命中，从SSD读该node block */
-    if (node_handle.is_empty())
-    {
-        node_cache_helper node_helper(fs_manager);
-        
-        // 这里获取inode block，所以parent为INVALID_NID
-        node_handle = node_helper.get_node_entry(ino, INVALID_NID);
-    }
-
     /* 从inode中获取文件类型 */
+    node_cache_helper node_helper(fs_manager);
+    auto node_handle = node_helper.get_node_entry(ino, INVALID_NID);
     hscfs_node *node = node_handle->get_node_block_ptr();
     assert(node->footer.ino == node->footer.nid);
     type = node->i.i_type;
@@ -52,7 +41,7 @@ uint8_t dentry::get_type()
     return type;
 }
 
-void hscfs::dentry_cache::do_replace()
+void dentry_cache::do_replace()
 {
     if (cur_size > expect_size)
     {
@@ -68,8 +57,8 @@ void hscfs::dentry_cache::do_replace()
 
                 // 将parent的引用计数-1
                 dentry *parent = p->parent;
-                assert(parent != nullptr);
-                sub_refcount(parent);
+                if (parent != nullptr)  // p是root的情况下，parent == nullptr(全局析构时将root移除)
+                    sub_refcount(parent);
             }
             if (p == nullptr || cur_size <= expect_size)
                 break;
