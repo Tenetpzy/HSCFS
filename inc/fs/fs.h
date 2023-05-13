@@ -16,7 +16,7 @@ struct hscfs_super_block
 	__le32 log_sectors_per_block;	/* log2 # of sectors per block */
 	__le32 log_blocksize;		/* log2 block size in bytes */
 	__le32 log_blocks_per_seg;	/* log2 # of blocks per segment */
-	__le64 block_count;		/* total # of user blocks */
+	__le64 block_count;		/* total # of user blocks(used) */
 	__le32 segment_count;		/* total # of segments(used) */
 	__le32 segment_count_sit;	/* # of segments for SIT(used) */
 	__le32 segment_count_nat;	/* # of segments for NAT(used) */
@@ -42,7 +42,7 @@ struct hscfs_super_block
     __le32 current_node_segment_id;
     __le32 current_node_segment_blkoff;
     __le16 meta_journal_start_blkoff;
-    __le16 meta_journal_end_blkoff;
+    __le16 meta_journal_end_blkoff;  // 尾后块偏移
     __le32 free_segment_count;
     __le32 next_free_nid;  // 空闲nid链表，链表尾为INVALID_NID
 
@@ -93,7 +93,7 @@ struct hscfs_inode {
 	__le64 i_size;			/* file size in bytes(used) */
 	__le64 i_blocks;		/* file size in blocks */
 	__le64 i_atime;			/* access time(used) */
-	__le64 i_ctime;			/* change time */
+	__le64 i_dentry_num;	/* change time，不使用，用作目录文件中当前dentry数目字段(rmdir使用) */
 	__le64 i_mtime;			/* modification time(used) */
 
 	/* 

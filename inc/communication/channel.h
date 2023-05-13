@@ -107,6 +107,7 @@ int comm_channel_polling_completions_no_lock(comm_channel_handle handle, uint32_
 int comm_polling_admin_completions(comm_channel_handle handle);
 
 /*********************************************************************************/
+
 /* 信道层channel管理器 */
 typedef struct comm_channel_controller
 {

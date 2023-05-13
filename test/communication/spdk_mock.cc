@@ -90,7 +90,7 @@ int spdk_nvme_ns_cmd_read(struct spdk_nvme_ns *ns, struct spdk_nvme_qpair *qpair
         if (vir_lba_storage.count(lba + cnt))
             memcpy(static_cast<char*>(payload) + cnt * lba_size, vir_lba_storage[lba + cnt].get_ptr(), lba_size);
         else
-            memcpy(static_cast<char*>(payload) + cnt * lba_size, "empty.", sizeof("empty."));
+            memcpy(static_cast<char*>(payload) + cnt * lba_size, "empty block.", sizeof("empty block."));
     }
     qpair_io_cmds[qpair_addr_to_idx(qpair)].emplace_back(INVALID_TID, cb_fn, cb_arg);
     return 0;
@@ -137,7 +137,7 @@ int spdk_nvme_ctrlr_cmd_admin_raw(struct spdk_nvme_ctrlr *ctrlr,
 
     else if (cmd->cdw12 == 0x60021) // 获取tid对应任务结果
     {
-        static char tid_cmd_res[] = "tid stub";
+        static char tid_cmd_res[] = "tid test result";
         memcpy(buf, tid_cmd_res, std::min(static_cast<size_t>(len), sizeof(tid_cmd_res)));
     }
 
