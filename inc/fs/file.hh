@@ -265,12 +265,7 @@ private:
 class file_obj_cache
 {
 public:
-    file_obj_cache(size_t expect_size, file_system_manager *fs_manager)
-    {
-        this->expect_size = expect_size;
-        this->fs_manager = fs_manager;
-        cur_size = 0;
-    }
+    file_obj_cache(size_t expect_size, file_system_manager *fs_manager);
 
     /* add和get的调用者需要获取fs_meta_lock */
     file_handle add(uint32_t ino, const dentry_handle &dentry);

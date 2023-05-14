@@ -222,6 +222,7 @@ void write_dentry_in_dir_block(hscfs_dentry_block *blk, const std::string &name,
 void write_dir_and_file(int fd)
 {
     char buffer[4096];
+    char test_file_content[] = "hello hscfs!";
     auto node = reinterpret_cast<hscfs_node*>(buffer);
 
     /* 写node blocks */
@@ -236,7 +237,7 @@ void write_dir_and_file(int fd)
         hscfs_inode *inode = &node->i;
         inode->i_type = i == 3 ? HSCFS_FT_REG_FILE : HSCFS_FT_DIR;
         inode->i_nlink = 1;
-        inode->i_size = i == 3 ? 4096 : 4096 * 2;
+        inode->i_size = i == 3 ? sizeof(test_file_content) : 4096 * 2;
         inode->i_dentry_num = 1;
         inode->i_current_depth = 0;
         inode->i_addr[0] = data_lpa_base + i;
@@ -259,8 +260,7 @@ void write_dir_and_file(int fd)
     }
 
     memset(buffer, 0, 4096);
-    char test_str[] = "hello hscfs!";
-    memcpy(buffer, "hello hscfs!", sizeof(test_str));
+    memcpy(buffer, test_file_content, sizeof(test_file_content));
     do_lseek(fd, 525 * 4096, SEEK_SET);
     do_write(fd, buffer, 4096);
 }

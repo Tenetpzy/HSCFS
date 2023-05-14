@@ -293,6 +293,17 @@ void file::prepare_page_content(page_entry_handle &page)
     page->get_page_buffer().read_from_lpa(fs_manager->get_device(), page_addr.lpa);
 }
 
+file_obj_cache::file_obj_cache(size_t expect_size, file_system_manager *fs_manager)
+{
+    this->expect_size = expect_size;
+    this->fs_manager = fs_manager;
+    cur_size = 0;
+    int ret = spin_init(&dirty_files_lock);
+    if (ret != 0)
+        throw std::system_error(std::error_code(ret, std::generic_category()), 
+            "file object cache: init dirty files lock failed.");
+}
+
 file_handle file_obj_cache::add(uint32_t ino, const dentry_handle &dentry)
 {
     auto p_entry = std::make_unique<file>(ino, dentry, fs_manager);

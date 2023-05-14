@@ -30,7 +30,7 @@ private:
      * 释放fd时，将其加入free_set
      */
     std::vector<std::shared_ptr<opened_file>> fd_arr;
-    int alloc_pos;
+    size_t alloc_pos;
     std::set<int> free_set;
     spinlock_t lock;
 };

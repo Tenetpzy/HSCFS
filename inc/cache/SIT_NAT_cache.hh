@@ -39,7 +39,7 @@ public:
     }
 
     /* 此构造函数由SIT_NAT_cache使用，构造前增加了引用计数 */
-    SIT_NAT_cache_entry_handle(SIT_NAT_cache_entry *entry, std::shared_ptr<SIT_NAT_cache> &&cache) 
+    SIT_NAT_cache_entry_handle(SIT_NAT_cache_entry *entry, SIT_NAT_cache *cache) 
     {
         entry_ = entry;
         cache_ = cache;
@@ -50,7 +50,7 @@ public:
     SIT_NAT_cache_entry_handle(SIT_NAT_cache_entry_handle &&o) noexcept
     {
         entry_ = o.entry_;
-        cache_ = std::move(o.cache_);
+        cache_ = o.cache_;
         o.entry_ = nullptr;
     }
 
@@ -75,12 +75,7 @@ public:
 
 private:
     SIT_NAT_cache_entry *entry_;
-
-    /* 
-     * 活跃segment对应的缓存项可能会常驻内存，为了避免SIT_NAT_cache对象先析构，
-     * 导致此对象析构时引用悬挂指针，使用shared_ptr 
-     */
-    std::shared_ptr<SIT_NAT_cache> cache_;
+    SIT_NAT_cache* cache_;
 
     /* 封装entry_为nullptr的判断 */
     void do_addref();
@@ -92,7 +87,7 @@ private:
  * 以lpa(uint32_t)作为key，SIT_NAT_cache_entry作为缓存项
  * 此对象必须由shared_ptr管理
  */
-class SIT_NAT_cache: public std::enable_shared_from_this<SIT_NAT_cache>
+class SIT_NAT_cache
 {
 public:
     /* 
@@ -125,7 +120,7 @@ public:
         SIT_NAT_cache_entry *p = get_cache_entry_inner(lpa);
         add_refcount(p);
         do_replace();
-        return SIT_NAT_cache_entry_handle(p, shared_from_this());
+        return SIT_NAT_cache_entry_handle(p, this);
     }
 
     /* 

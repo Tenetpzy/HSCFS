@@ -202,7 +202,7 @@ void print_path_lookup_task(path_lookup_task *task)
 {
     char *p = reinterpret_cast<char*>(task) + sizeof(path_lookup_task);
     std::string path(p, task->pathlen);
-    HSCFS_LOG(HSCFS_LOG_INFO, "send path lookup task:\n");
+    HSCFS_LOG(HSCFS_LOG_INFO, "send path lookup task:");
     fmt::println(std::cerr, 
         "start inode: {}\n"
         "depth: {}\n"
@@ -246,7 +246,7 @@ void print_filemapping_search_result(hscfs_node *node, uint32_t level_num)
 
 void print_inode_meta(uint32_t ino, hscfs_inode *inode)
 {
-    HSCFS_LOG(HSCFS_LOG_INFO, "print inode metadata: \n");
+    HSCFS_LOG(HSCFS_LOG_INFO, "print inode metadata:");
 
     char atime_buf[128], mtime_buf[128];
     time_t atime = inode->i_atime;

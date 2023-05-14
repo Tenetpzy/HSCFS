@@ -71,7 +71,7 @@ SIT_NAT_cache_entry_handle &SIT_NAT_cache_entry_handle::operator=(SIT_NAT_cache_
     {
         do_subref();
         entry_ = o.entry_;
-        cache_ = std::move(o.cache_);
+        cache_ = o.cache_;
     }
     return *this;
 }

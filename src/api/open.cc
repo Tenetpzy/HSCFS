@@ -66,7 +66,7 @@ int open(const char *pathname, int flags)
             if (target_dentry.is_empty() || target_dentry->get_state() == dentry_state::deleted)
             {
                 /* 如果有O_CREAT，则创建该文件 */
-                if (flags | O_CREAT)
+                if (flags & O_CREAT)
                 {
                     directory dir(dir_dentry, fs_manager);
 
@@ -110,7 +110,7 @@ int open(const char *pathname, int flags)
             int fd = fds->alloc_fd(p_opened_file);
             
             /* 如果带有O_TRUNC标志，则清空文件内容 */
-            if (flags | O_TRUNC)
+            if (flags & O_TRUNC)
             {
                 /* 
                  * 加锁顺序是file_op_lock->fs_meta_lock，此处必须先解锁fs_meta_lock

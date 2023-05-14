@@ -90,10 +90,12 @@ void ssd_path_lookup_controller::construct_task(const path_parser &path_parser, 
     char *p_cur_entry = reinterpret_cast<char*>(p_task_buf.get()) + sizeof(path_lookup_task);
     for (; start_itr != end_itr; start_itr.next())
     {
-        assert(p_cur_entry - static_cast<char*>(buf) < task_size);
+        assert(static_cast<size_t>(p_cur_entry - static_cast<char*>(buf)) < task_size);
         std::string dentry = start_itr.get();
         dentry.copy(p_cur_entry, dentry.length());
         p_cur_entry += dentry.length();
+        *p_cur_entry = '/';
+        ++p_cur_entry;
     }
 
     #ifdef CONFIG_PRINT_DEBUG_INFO

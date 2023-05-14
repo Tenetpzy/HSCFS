@@ -54,7 +54,7 @@ void fd_array::free_fd(int fd)
 opened_file* fd_array::get_opened_file_of_fd(int fd)
 {
     spin_lock_guard lg(lock);
-    if (fd >= fd_arr.size() || fd_arr[fd] == nullptr)
+    if (size_t(fd) >= fd_arr.size() || fd_arr[fd] == nullptr)
         throw invalid_fd();
     return fd_arr[fd].get();
 }
