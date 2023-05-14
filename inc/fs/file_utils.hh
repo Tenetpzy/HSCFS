@@ -183,6 +183,25 @@ private:
     node_block_cache_entry_handle create_base_inode();
 };
 
+/* 文件删除器 */
+class file_deletor
+{
+public:
+    file_deletor(file_system_manager *fs_manager)
+    {
+        this->fs_manager = fs_manager;
+    }
+
+    /* 
+     * 删除ino对应的文件，调用者应保证ino有效且可删除
+     * 不处理文件（目录）数据缓存，只处理该文件的元数据，若有需要，调用者自行处理数据缓存 
+     */
+    void delete_file(uint32_t ino);
+
+private:
+    file_system_manager *fs_manager;
+};
+
 /* inode时间设置工具 */
 class inode_time_util
 {

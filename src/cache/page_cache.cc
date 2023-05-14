@@ -26,7 +26,8 @@ page_cache::~page_cache()
 {
     // page cache析构内不会并发访问，不加锁
     if (!dirty_pages.empty())
-        HSCFS_LOG(HSCFS_LOG_WARNING, "page cache still has dirty page while destructed.");
+        HSCFS_LOG(HSCFS_LOG_WARNING, "Page cache still has dirty page while destructed. "
+            "If delete a file which written but not synchronized, this will be OK.");
 }
 
 page_entry_handle page_cache::get(uint32_t blkoff)

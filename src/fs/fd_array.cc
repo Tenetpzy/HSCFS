@@ -40,21 +40,27 @@ int fd_array::alloc_fd(std::shared_ptr<opened_file> &p_file)
             fd_arr.resize(fd_arr.size() * 2);
         ret = alloc_pos++;
     }
+    HSCFS_LOG(HSCFS_LOG_INFO, "allocate fd %d.", ret);
     fd_arr[ret] = p_file;
     return ret;
 }
 
-void fd_array::free_fd(int fd)
+std::shared_ptr<opened_file> fd_array::free_fd(int fd)
 {
     spin_lock_guard lg(lock);
-    free_set.insert(fd);
+    if (static_cast<size_t>(fd) >= fd_arr.size() || fd_arr[fd] == nullptr)
+        throw invalid_fd();
+    std::shared_ptr<opened_file> ret = fd_arr[fd];
     fd_arr[fd] = nullptr;
+    free_set.insert(fd);
+    HSCFS_LOG(HSCFS_LOG_INFO, "free fd %d.", fd);
+    return ret;
 }
 
 opened_file* fd_array::get_opened_file_of_fd(int fd)
 {
     spin_lock_guard lg(lock);
-    if (size_t(fd) >= fd_arr.size() || fd_arr[fd] == nullptr)
+    if (static_cast<size_t>(fd) >= fd_arr.size() || fd_arr[fd] == nullptr)
         throw invalid_fd();
     return fd_arr[fd].get();
 }

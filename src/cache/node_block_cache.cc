@@ -28,6 +28,7 @@ void node_block_cache::sub_refcount(node_block_cache_entry *entry)
         if (entry->state == node_block_cache_entry_state::deleted)
         {
             /* 释放它的nid */
+            HSCFS_LOG(HSCFS_LOG_INFO, "delete node %u.", entry->nid);
             super_manager(fs_manager).free_nid(entry->nid);
 
             /* 将它占有的lpa标记为垃圾块 */

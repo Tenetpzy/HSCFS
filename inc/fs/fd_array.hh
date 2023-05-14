@@ -17,7 +17,15 @@ public:
     ~fd_array();
 
     int alloc_fd(std::shared_ptr<opened_file> &p_file);
-    void free_fd(int fd);
+
+    /* 
+     * 返回对应opened_file的指针，调用者应在之后维护file的fd引用计数、处理file删除(如果需要)
+     * 注：目前的实现中，虽然fd使用shared_ptr引用opened_file，
+     * 但由于不支持dup，所以opened_file只可能被一个fd引用，调用者可认为：
+     * 返回的shared_ptr析构时，opened_file随即被析构
+     */
+    std::shared_ptr<opened_file> free_fd(int fd);
+
     opened_file* get_opened_file_of_fd(int fd);
 
 private:

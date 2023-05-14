@@ -106,7 +106,7 @@ ssize_t file::read(char *buffer, ssize_t count, uint64_t pos)
             const uint32_t cur_blkno = idx_of_blk(pos);
             const uint64_t end_pos = std::min(end_pos_of_cur_blk(pos), cur_size);
             assert(end_pos > pos && end_pos - pos <= 4096);
-            HSCFS_LOG(HSCFS_LOG_DEBUG, "read in file %u, blkno %u, range [%u, %u).", ino, cur_blkno, pos, end_pos);
+            HSCFS_LOG(HSCFS_LOG_DEBUG, "read in file(inode = %u), blkno %u, range [%u, %u).", ino, cur_blkno, pos, end_pos);
 
             /* 从缓存中获取当前page，加锁，解除上一个page的锁，准备好当前page的内容(如从SSD读) */
             page_entry_handle cur_page = page_cache_->get(cur_blkno);
@@ -151,7 +151,7 @@ ssize_t file::write(char *buffer, ssize_t count, uint64_t pos)
             const uint32_t cur_blkno = idx_of_blk(pos);
             const uint64_t end_pos = std::min(end_pos_of_cur_blk(pos), write_end_pos);
             assert(end_pos > pos && end_pos - pos <= 4096);
-            HSCFS_LOG(HSCFS_LOG_DEBUG, "write in file %u, blkno %u, range [%u, %u).", ino, cur_blkno, pos, end_pos);
+            HSCFS_LOG(HSCFS_LOG_DEBUG, "write in file(inode = %u), blkno %u, range [%u, %u).", ino, cur_blkno, pos, end_pos);
 
             /* 从缓存中获取当前page，加锁，解除上一个page的锁，准备好当前page的内容(如从SSD读) */
             page_entry_handle cur_page = page_cache_->get(cur_blkno);
@@ -164,6 +164,7 @@ ssize_t file::write(char *buffer, ssize_t count, uint64_t pos)
             const size_t cp_cnt = end_pos - pos;
             char *page_buffer = cur_page->get_page_buffer().get_ptr();
             std::memcpy(page_buffer + cp_start_off, buffer + write_count, cp_cnt);
+            cur_page.mark_dirty();
 
             write_count += cp_cnt;
             pos += cp_cnt;
@@ -364,6 +365,29 @@ void file_obj_cache::add_to_dirty_files(const file_handle &file)
     dirty_files.emplace(ino, file);
 }
 
+void file_obj_cache::remove_file(file *entry)
+{
+    HSCFS_LOG(HSCFS_LOG_DEBUG, "remove file object(inode = %u) from file obj cache.", entry->ino);
+
+    /* 如果file是dirty的，把它从dirty set中移除 */
+    if (entry->is_dirty)
+    {
+        spin_lock_guard dirty_files_lg(dirty_files_lock);
+        assert(dirty_files.count(entry->ino) == 1);
+        dirty_files.erase(entry->ino);
+        entry->is_dirty = false;
+    }
+
+    /* 修改对应的dentry状态 */
+    entry->dentry->set_state(dentry_state::deleted);
+
+    /* 在缓存中移除file对象 */
+    assert(entry->ref_count == 1);  // 此方法必然由最后一个引用file的handle调用，因此ref_count只可能为1
+    entry->ref_count = 0;
+    cache_manager.unpin(entry->ino);
+    cache_manager.remove(entry->ino);  // 此时file对象析构, entry参数变为悬挂指针
+}
+
 file_handle::~file_handle()
 {
     if (entry != nullptr)
@@ -384,6 +408,16 @@ void file_handle::mark_dirty()
 {
     if (entry->mark_dirty())
         cache->add_to_dirty_files(*this);
+}
+
+void file_handle::delete_file()
+{
+    assert(entry->nlink == 0);
+    assert(entry->fd_ref_count == 0);
+    assert(entry->ref_count <= 2);
+    file_deletor(entry->fs_manager).delete_file(entry->ino);
+    cache->remove_file(entry);
+    entry = nullptr;
 }
 
 void file_handle::do_addref()

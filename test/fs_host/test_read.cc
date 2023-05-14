@@ -26,6 +26,9 @@ TEST(read_test, 1)
     ssize_t ret = hscfs::read(fd, buf, sizeof(buf));
     ASSERT_EQ(ret, test_file_size);
     EXPECT_EQ(strcmp(buf, test_file_content), 0);
+
+    if (hscfs::close(fd) != 0)
+        do_exit("close failed");
 }
 
 int main(int argc, char **argv)

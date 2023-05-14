@@ -37,6 +37,21 @@ public:
      */
     void sub_fd_refcount();
 
+    uint32_t get_fd_refcount() const noexcept
+    {
+        return fd_ref_count;
+    }
+
+    uint32_t get_nlink() const noexcept
+    {
+        return nlink;
+    }
+
+    uint32_t get_inode() const noexcept
+    {
+        return ino;
+    }
+
     rwlock_t& get_file_op_lock() noexcept
     {
         return file_op_lock;
@@ -251,6 +266,13 @@ public:
 
     void mark_dirty();
 
+    /*
+     * 删除该文件，释放该文件的全部资源，从file_obj_cache中移除entry
+     * 调用此方法后，this无效，is_empty返回true，调用者不应再使用此句柄
+     * 调用者需持有fs_meta_lock
+     */
+    void delete_file();
+
 private:
     file *entry;
     file_obj_cache *cache;
@@ -283,8 +305,8 @@ private:
 
     /* 
      * 脏文件集合，与保护这个集合的锁 
-     * 为了避免在page cache的并发读写标记dirty时，需要获取fs_meta_lock，
-     * 脏文件集合使用自己的锁保护
+     * 为了避免在page cache的并发读写标记dirty时，需要获取fs_meta_lock，脏文件集合使用自己的锁保护
+     * 有删除需求，所以使用unordered_map<inode, file_handle>维护
      */
     std::unordered_map<uint32_t, file_handle> dirty_files;
     spinlock_t dirty_files_lock;
@@ -306,6 +328,9 @@ private:
 
     /* 由file handle调用，将file加入dirty_files集合 */
     void add_to_dirty_files(const file_handle &file);
+
+    /* 由file handle调用，将entry从缓存中移除。调用者获取了fs_meta_lock */
+    void remove_file(file *entry);
 
     friend class file_handle;
 };

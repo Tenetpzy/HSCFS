@@ -681,6 +681,16 @@ node_block_cache_entry_handle file_creator::create_base_inode()
 	return handle;
 }
 
+void file_deletor::delete_file(uint32_t ino)
+{
+	/* 首先通过reduce，删除文件除inode外所有node block，并无效化所有数据块的lpa */
+	file_resizer(fs_manager).reduce(ino, 0);
+
+	/* 删除该文件的inode。上一步中一定会访问inode，所以这里直接通过缓存handle删除 */
+	node_block_cache_entry_handle inode_handle = node_cache_helper(fs_manager).get_node_entry(ino, INVALID_NID);
+	inode_handle.delete_node();
+}
+
 void inode_time_util::set_atime(hscfs_inode *inode, const timespec *time)
 {
 	timespec cur_time;
