@@ -42,6 +42,16 @@ public:
         return fd_ref_count;
     }
 
+    void add_nlink() noexcept
+    {
+        ++nlink;
+    }
+
+    void sub_nlink() noexcept
+    {
+        --nlink;
+    }
+
     uint32_t get_nlink() const noexcept
     {
         return nlink;

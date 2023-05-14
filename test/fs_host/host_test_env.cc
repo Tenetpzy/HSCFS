@@ -57,6 +57,13 @@ void host_test_env_teardown()
     close(fd);
 }
 
+void do_exit(const char *msg)
+{
+    perror(msg);
+    host_test_env_teardown();
+    exit(1);
+}
+
 static void do_pwrite(int fd, void *buffer, size_t count, off_t offset)
 {
     if (pwrite(fd, buffer, count, offset) < ssize_t(count))

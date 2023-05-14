@@ -39,21 +39,23 @@ void node_block_cache::sub_refcount(node_block_cache_entry *entry)
                 cur_lpa = entry->old_lpa;
             if (cur_lpa != INVALID_LPA)
             {
-                HSCFS_LOG(HSCFS_LOG_INFO, "the lpa of nid [%u] is [%u], which will be invalidated.", 
+                HSCFS_LOG(HSCFS_LOG_INFO, "the lpa of nid [%u] is [%u], will be invalidated.", 
                     entry->nid, cur_lpa);
                 SIT_operator(fs_manager).invalidate_lpa(cur_lpa);
             }
 
-            /* 减少父结点的引用计数 */
+            /* 将缓存项移除 */
+            uint32_t nid = entry->nid;
             uint32_t parent_nid = entry->parent_nid;
+            cache_manager.remove(nid);
+
+            /* 减少父结点的引用计数 */
             if (parent_nid != INVALID_NID)
             {
                 auto parent = cache_manager.get(parent_nid, false);
                 assert(parent != nullptr);
                 sub_refcount(parent);
             }
-
-            cache_manager.remove(entry->nid);
         }
     }
 }
@@ -136,11 +138,11 @@ void node_block_cache_entry_handle::do_subref()
 
 node_block_cache_entry::~node_block_cache_entry()
 {
-    if (ref_count != 0 || state != node_block_cache_entry_state::uptodate)
+    if (ref_count != 0 || state == node_block_cache_entry_state::dirty)
     {
-        HSCFS_LOG(HSCFS_LOG_WARNING, "node block cache entry has non-zero refcount or is in dirty state when destructed, "
-            "refcount = %u, state = %s", ref_count, 
-            state == node_block_cache_entry_state::uptodate ? "uptodate" : "dirty");
+        HSCFS_LOG(HSCFS_LOG_WARNING, "node block cache entry(nid = %u) has non-zero refcount or is in dirty state when destructed, "
+            "refcount = %u, state = %s", nid, ref_count, 
+            state == node_block_cache_entry_state::dirty ? "dirty" : "not dirty");
     }
 }
 

@@ -16,6 +16,7 @@ namespace hscfs {
 dentry_info::dentry_info()
 {
     ino = INVALID_NID;
+    type = HSCFS_FT_UNKNOWN;
 }
 
 dentry_handle directory::create(const std::string &name, uint8_t type, const dentry_store_pos *create_pos_hint)
@@ -133,6 +134,8 @@ dentry_handle directory::create(const std::string &name, uint8_t type, const den
     d_handle->set_type(type);
     d_handle.mark_dirty();
 
+    /* 更新inode中的元数据 */
+    inode->i_dentry_num++;
     inode_time_util::set_atime(inode);
     inode_time_util::set_mtime(inode);
     inode_handle.mark_dirty();
@@ -264,6 +267,48 @@ dentry_info directory::find_dentry_in_block(uint32_t blkno, const std::string &n
             target_dentry_info.store_pos.slotno);
     }
     return target_dentry_info;
+}
+
+void directory::remove(dentry_handle &dentry)
+{
+    const dentry_store_pos &store_pos = dentry->get_pos_info();
+
+    /* 如果目录项中位置信息有效，进行正确性检查，确保该位置确实是存储了该目录项(DEBUG完成后可删除此步骤) */
+    if (store_pos.is_valid)
+    {
+        const dentry_key &d_key = dentry->get_key();
+        uint32_t name_hash = hscfs_dentry_hash(d_key.name.c_str(), d_key.name.length());
+        dentry_info d_info = find_dentry_in_block(store_pos.blkno, d_key.name, name_hash);
+        assert(d_info.ino == dentry->get_ino());
+        assert(d_info.type == dentry->get_type());
+        assert(store_pos == d_info.store_pos);
+    }
+
+    /* 否则，通过主机侧lookup获取该目录项存储位置 */
+    else
+    {
+        dentry_info d_info = lookup(dentry->get_key().name);
+        assert(d_info.ino == dentry->get_ino());
+        assert(d_info.store_pos.is_valid == true);
+        dentry->set_pos_info(d_info.store_pos);
+    }
+
+    /* 现在true_store_pos存放了目标目录项的位置信息，获取存储目录项的缓存块 */
+    dir_data_block_handle blk_handle;
+    std::tie(blk_handle, std::ignore) = dir_data_cache_helper(fs_manager).get_dir_data_block(ino, 
+        dentry->get_pos_info().blkno);
+    assert(!blk_handle.is_empty());
+
+    /* 在块中删除该目录项 */
+    remove_dentry_in_blk(dentry, blk_handle, dentry->get_pos_info());
+
+    /* 更新inode中的元数据 */
+    auto inode_handle = node_cache_helper(fs_manager).get_node_entry(ino, INVALID_NID);
+    hscfs_inode *inode = &inode_handle->get_node_block_ptr()->i;
+    inode->i_dentry_num--;
+    inode_time_util::set_atime(inode);
+    inode_time_util::set_mtime(inode);
+    inode_handle.mark_dirty();
 }
 
 uint32_t directory::bucket_num(u32 level, int dir_level)
@@ -487,7 +532,7 @@ void directory::append_hash_level(hscfs_inode *inode)
     uint64_t size_after_expand = (SIZE_TO_BLOCK(inode->i_size) + blknum_need_expand) * 4096;
     HSCFS_LOG(HSCFS_LOG_DEBUG, "appending directory(ino = %u) hash level to %u, need append another %u blocks.", 
         ino, inode->i_current_depth, blknum_need_expand);
-    file_resizer(fs_manager).expand(ino, size_after_expand);  // 会将inode标记位dirty
+    file_resizer(fs_manager).expand(ino, size_after_expand);  // 会将inode标记为dirty
 }
 
 void directory::set_bitmap_pos(unsigned long slot_pos, void *bitmap_start_addr)
@@ -535,6 +580,51 @@ void directory::create_dentry_in_blk(const std::string &name, uint8_t type, uint
 
     HSCFS_LOG(HSCFS_LOG_INFO, "construct dentry %s in dir data block, hash = %#x, occupied slot num = %u.", 
         name.c_str(), hash_code, occupy_slot_num);
+}
+
+void directory::reset_bitmap_pos(unsigned long slot_pos, void *bitmap_start_addr)
+{
+    auto start_addr = static_cast<uint64_t*>(bitmap_start_addr);
+    uint64_t idx = BIT_WORD(slot_pos);
+    uint64_t off = slot_pos & (BITS_PER_LONG - 1U);
+    start_addr[idx] &= ~(1U << off);
+}
+
+void directory::remove_dentry_in_blk(const dentry_handle &dentry, dir_data_block_handle &blk_handle, const dentry_store_pos &pos)
+{
+    size_t name_len = dentry->get_key().name.length();
+    assert(name_len != 0);
+
+    uint32_t start_slot = pos.slotno;
+    uint32_t occupy_slot_num = GET_DENTRY_SLOTS(name_len);
+
+    hscfs_dentry_block *blk = blk_handle->get_block_ptr();
+    uint8_t *name_store_addr = blk->filename[start_slot];
+    uint8_t *bitmap_addr = blk->dentry_bitmap;
+    hscfs_dir_entry *dentry_ptr = &blk->dentry[start_slot];
+
+    /* 清除位图 */
+    for (uint32_t i = 0; i < occupy_slot_num; ++i)
+    {
+        assert(test_bitmap_pos(start_slot + i, bitmap_addr));
+        reset_bitmap_pos(start_slot + i, bitmap_addr);
+        assert(!test_bitmap_pos(start_slot + i, bitmap_addr));
+    }
+
+    /* 清除目录项 */
+    dentry_ptr->hash_code = 0;
+    dentry_ptr->file_type = HSCFS_FT_UNKNOWN;
+    dentry_ptr->ino = INVALID_NID;
+    dentry_ptr->name_len = 0;
+
+    /* 清除文件名 */
+    std::memset(name_store_addr, 0, name_len);
+
+    /* 标记为dirty */
+    blk_handle.mark_dirty();
+
+    HSCFS_LOG(HSCFS_LOG_INFO, "remove dentry %s in dir data block(blkno = %u).", 
+        dentry->get_key().name.c_str(), blk_handle->get_key().blkoff);
 }
 
 } // namespace hscfs

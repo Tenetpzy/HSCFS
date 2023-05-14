@@ -1,20 +1,25 @@
 #include "api/hscfs.hh"
 #include "gtest/gtest.h"
 #include "host_test_env.hh"
-#include <cstring>
 
-TEST(read_test, 1)
+TEST(unlink_test, 1)
 {
-    const ssize_t test_file_size = 13;
-    const char test_file_content[] = "hello hscfs!";
     int fd = hscfs::open("/a/b/c", O_RDONLY);
     if (fd == -1)
         do_exit("open failed");
 
-    char buf[32] = {0};
-    ssize_t ret = hscfs::read(fd, buf, sizeof(buf));
-    ASSERT_EQ(ret, test_file_size);
-    EXPECT_EQ(strcmp(buf, test_file_content), 0);
+    int ret, err;
+    ASSERT_EQ(hscfs::unlink("/a/b/c"), 0);
+
+    ret = hscfs::unlink("/a/b/c");
+    err = errno;
+    ASSERT_EQ(ret, -1);
+    ASSERT_EQ(err, ENOENT);
+
+    ret = hscfs::unlink("/a");
+    err = errno;
+    ASSERT_EQ(ret, -1);
+    ASSERT_EQ(err, EISDIR);
 
     if (hscfs::close(fd) != 0)
         do_exit("close failed");

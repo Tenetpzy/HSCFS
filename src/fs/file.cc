@@ -10,7 +10,6 @@
 #include "utils/exception_handler.hh"
 #include "utils/hscfs_log.h"
 #include "utils/lock_guards.hh"
-#include "file.hh"
 
 namespace hscfs {
 
@@ -391,7 +390,8 @@ void file_obj_cache::remove_file(file *entry)
     assert(entry->ref_count == 1);  // 此方法必然由最后一个引用file的handle调用，因此ref_count只可能为1
     entry->ref_count = 0;
     cache_manager.unpin(entry->ino);
-    cache_manager.remove(entry->ino);  // 此时file对象析构, entry参数变为悬挂指针
+    uint32_t ino = entry->ino;
+    cache_manager.remove(ino);  // 此时file对象析构, entry参数变为悬挂指针
 }
 
 file_handle::~file_handle()

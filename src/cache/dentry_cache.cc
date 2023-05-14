@@ -2,6 +2,7 @@
 #include "cache/node_block_cache.hh"
 #include "cache/super_cache.hh"
 #include "fs/fs_manager.hh"
+#include "fs/fs.h"
 #include "utils/hscfs_log.h"
 
 namespace hscfs {
@@ -39,6 +40,12 @@ uint8_t dentry::get_type()
     type = node->i.i_type;
     assert(type != HSCFS_FT_UNKNOWN);
     return type;
+}
+
+dentry_cache::~dentry_cache()
+{
+    if (!dirty_list.empty())
+        HSCFS_LOG(HSCFS_LOG_WARNING, "dentry cache still has dirty dentry when destructed.");
 }
 
 void dentry_cache::do_replace()
@@ -81,6 +88,13 @@ void dentry_handle::do_subref()
 {
     if (entry != nullptr)
         cache->sub_refcount(entry);
+}
+
+dentry_store_pos::dentry_store_pos()
+{
+    is_valid = false;
+    blkno = 0;
+    slotno = INVALID_DENTRY_BITPOS;
 }
 
 } // namespace hscfs

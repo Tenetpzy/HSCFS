@@ -28,3 +28,11 @@ target_compile_options(HscfsTest PRIVATE -DCONFIG_PRINT_DEBUG_INFO)
 add_executable(test_read test_read.cc)
 target_link_libraries(test_read HscfsTest)
 target_include_directories(test_read PRIVATE ${SPDK_include_directory})
+
+add_executable(test_truncate test_truncate.cc)
+target_link_libraries(test_truncate HscfsTest)
+target_include_directories(test_truncate PRIVATE ${SPDK_include_directory})
+
+add_executable(test_unlink test_unlink.cc)
+target_link_libraries(test_unlink HscfsTest)
+target_include_directories(test_unlink PRIVATE ${SPDK_include_directory})

@@ -43,9 +43,9 @@ void SIT_operator::change_lpa_state(uint32_t lpa, bool valid)
         return;
         
     /* 计算lpa的segment id，segment内块偏移，所处SIT表的lpa */
-    lpa -= seg0_start_lpa;
-    uint32_t segid = lpa / BLOCK_PER_SEGMENT;
-    uint32_t segoff = lpa % BLOCK_PER_SEGMENT;
+    uint32_t lpa_seg0_off = lpa - seg0_start_lpa;
+    uint32_t segid = lpa_seg0_off / BLOCK_PER_SEGMENT;
+    uint32_t segoff = lpa_seg0_off % BLOCK_PER_SEGMENT;
     uint32_t sit_lpa = sit_start_lpa + segid / SIT_ENTRY_PER_BLOCK;
     HSCFS_LOG(HSCFS_LOG_INFO, "lpa [%u]: segid = %u, segoff = %u, SIT lpa = %u", lpa, segid, segoff, sit_lpa);
 

@@ -56,9 +56,11 @@ struct dentry_store_pos
     uint32_t blkno, slotno;  // dentry在目录文件中的块号和块内slot号
     bool is_valid;  // 信息是否有效
 
-    dentry_store_pos()
+    dentry_store_pos();
+
+    bool operator==(const dentry_store_pos &o) const noexcept
     {
-        is_valid = false;
+        return is_valid == o.is_valid && blkno == o.blkno && slotno == o.slotno;
     }
 
     /* 设置位置信息，置is_valid为true */
@@ -252,6 +254,8 @@ public:
         this->fs_manager = fs_manager;
         cur_size = 0;
     }
+
+    ~dentry_cache();
 
     /* 新增一个目录项，目录项状态为dentry构造后的默认状态 */
     dentry_handle add(uint32_t dir_ino, const dentry_handle &dir_handle, uint32_t dentry_ino, 

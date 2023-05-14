@@ -36,6 +36,7 @@ public:
      * 创建一个文件，文件名为name，文件类型为type
      * 将为新文件分配inode，创建inode block并加入node block缓存
      * 创建新文件的目录项，标记为dirty，将其加入dentry cache，并将其返回
+     * 更新当前目录inode中i_dentry_num和访问时间等字段
      * 调用者可以提供创建目录项的位置信息(create_pos_hint)
      * 
      * 不应该在已经存在同名目录项name时调用create，否则结果未定义
@@ -53,6 +54,13 @@ public:
      * 调用者需持有fs_meta_lock
      */
     dentry_info lookup(const std::string &name);
+
+    /*
+     * 在目录文件中删除目录项dentry，内部会将修改过的数据和元数据标记dirty
+     * 调用者应保证该目录项存在
+     * 调用者需持有fs_meta_lock
+     */
+    void remove(dentry_handle &dentry);
 
 public:
     static uint32_t bucket_num(u32 level, int dir_level);  // 计算第level级哈希表中桶的个数
@@ -105,12 +113,23 @@ private:
     /* 增加1级哈希表 */
     void append_hash_level(hscfs_inode *inode);
 
-    /* 将位图中slot_pos置位 */
+    /* 将位图中slot_pos置为1 */
     static void set_bitmap_pos(unsigned long slot_pos, void *bitmap_start_addr);
 
     /* 在块中指定位置写入目录项信息 */
     void create_dentry_in_blk(const std::string &name, uint8_t type, uint32_t ino, 
         dir_data_block_handle blk_handle, const dentry_store_pos &pos);
+    
+    /*****************************************************************/
+
+    /* remove辅助函数 */
+
+    /* 将位图中slot_pos置为0 */
+    static void reset_bitmap_pos(unsigned long slot_pos, void *bitmap_start_addr);
+
+    /* 在块blk_handle中移除目录项dentry，pos为dentry的位置。调用者保证pos正确 */
+    void remove_dentry_in_blk(const dentry_handle &dentry, dir_data_block_handle &blk_handle, 
+        const dentry_store_pos &pos);
 };
 
 }  // namespace hscfs

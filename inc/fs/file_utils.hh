@@ -198,6 +198,13 @@ public:
      */
     void delete_file(uint32_t ino);
 
+    /*
+     * 将ino中的nlink减1，标记inode为dirty
+     * 如果ino是普通文件，还会查找file obj cache。如果存在file对象，将其中的nlink也同步减1
+     * 返回减1后的nlink值
+     */
+    uint32_t sub_nlink(uint32_t ino);
+
 private:
     file_system_manager *fs_manager;
 };
