@@ -10,6 +10,7 @@
 #include "utils/exception_handler.hh"
 #include "utils/hscfs_log.h"
 #include "utils/lock_guards.hh"
+#include "file.hh"
 
 namespace hscfs {
 
@@ -323,6 +324,11 @@ file_handle file_obj_cache::get(uint32_t ino)
     if (p_entry != nullptr)
         add_refcount(p_entry);
     return file_handle(p_entry, this);
+}
+
+bool file_obj_cache::contains(uint32_t ino)
+{
+    return cache_manager.get(ino) != nullptr;
 }
 
 void file_obj_cache::add_refcount(file *entry)

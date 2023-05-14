@@ -289,9 +289,10 @@ class file_obj_cache
 public:
     file_obj_cache(size_t expect_size, file_system_manager *fs_manager);
 
-    /* add和get的调用者需要获取fs_meta_lock */
+    /* add、get、contains的调用者需要获取fs_meta_lock */
     file_handle add(uint32_t ino, const dentry_handle &dentry);
     file_handle get(uint32_t ino);
+    bool contains(uint32_t ino);   // 检查当前file_obj_cache中，是否存在inode为ino的file对象
 
 private:
     size_t expect_size, cur_size;
