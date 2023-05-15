@@ -17,6 +17,7 @@ namespace hscfs {
  * 若出错，返回-1，置errno为：
  * ENOENT：pathname不存在，或为空
  * EISDIR: pathname是目录，unlink不能用来删除目录
+ * ENOTRECOVERABLE：文件系统出现内部错误，无法恢复正常状态
  */
 int unlink(const char *pathname)
 {
@@ -32,7 +33,7 @@ int unlink(const char *pathname)
             std::string abs_path = path_helper::extract_abs_path(pathname);
             if (abs_path.length() == 0)
             {
-                errno = ENOENT;
+                errno = EINVAL;
                 return -1;
             }
 
@@ -40,7 +41,7 @@ int unlink(const char *pathname)
             path_lookup_proc.set_abs_path(abs_path);
             dentry_handle target_dentry = path_lookup_proc.do_path_lookup();
 
-            if (target_dentry.is_empty() || target_dentry->get_state() != dentry_state::valid)
+            if (!target_dentry.is_exist())
             {
                 errno = ENOENT;
                 return -1;
@@ -53,23 +54,21 @@ int unlink(const char *pathname)
             }
 
             /* 减少文件的硬链接数。如果硬链接数减小至0，删除该文件 */
-            uint32_t nlink = file_deletor(fs_manager).sub_nlink(target_dentry->get_ino());
-            HSCFS_LOG(HSCFS_LOG_INFO, "unlink target file(name = %s, ino = %u)'s nlink equals to %u now.", 
-                target_dentry->get_key().name.c_str(), target_dentry->get_ino(), nlink);
+            uint32_t nlink = file_nlink_utils(fs_manager).sub_nlink(target_dentry->get_ino());
+            HSCFS_LOG(HSCFS_LOG_INFO, "unlink target file(%s)'s nlink equals to %u now.", abs_path.c_str(), nlink);
 
             if (nlink == 0)
             {
                 /* 如果目标文件仍有fd引用，等待全部close后删除 */
                 if (target_dentry->get_fd_refcount() > 0)
                 {
-                    HSCFS_LOG(HSCFS_LOG_INFO, "unlink target file(name = %s, ino = %u) is still referred by fd, "
-                        "will be deleted later.", target_dentry->get_key().name.c_str(), target_dentry->get_ino());
+                    HSCFS_LOG(HSCFS_LOG_INFO, "unlink target file(%s) is still referred by fd, "
+                        "will be deleted later.", abs_path.c_str());
                     target_dentry->set_state(dentry_state::deleted_referred_by_fd);
                 }
                 else  // 否则直接删除
                 {
-                    HSCFS_LOG(HSCFS_LOG_INFO, "delete unlink target file(name = %s, ino = %u).", 
-                        target_dentry->get_key().name.c_str(), target_dentry->get_ino());
+                    HSCFS_LOG(HSCFS_LOG_INFO, "delete file(%s).", abs_path.c_str());
 
                     target_dentry->set_state(dentry_state::deleted);
                     uint32_t target_ino = target_dentry->get_ino();
@@ -91,6 +90,7 @@ int unlink(const char *pathname)
                 target_dentry.mark_dirty();
 
                 /* 在父目录文件中删除目录项 */
+                HSCFS_LOG(HSCFS_LOG_DEBUG, "removing file(%s)'s dentry in its directory.", abs_path.c_str());
                 auto &parent_key = target_dentry->get_parent_key();
                 auto parent_dentry = fs_manager->get_dentry_cache()->get(parent_key.dir_ino, parent_key.name);
                 assert(!parent_dentry.is_empty());

@@ -9,6 +9,7 @@
 #include "fs/opened_file.hh"
 #include "utils/lock_guards.hh"
 #include "utils/exception_handler.hh"
+#include "utils/hscfs_log.h"
 
 namespace hscfs {
 
@@ -68,6 +69,7 @@ int open(const char *pathname, int flags)
                 /* 如果有O_CREAT，则创建该文件 */
                 if (flags & O_CREAT)
                 {
+                    HSCFS_LOG(HSCFS_LOG_DEBUG, "creating file %s.", abs_path.c_str());
                     directory dir(dir_dentry, fs_manager);
 
                     /* 如果dir_dentry已经创建过文件但没写回，则target_pos_hint有可能不正确 */
@@ -106,6 +108,7 @@ int open(const char *pathname, int flags)
             auto p_opened_file = std::make_shared<opened_file>(flags, file);
 
             /* 分配fd */
+            HSCFS_LOG(HSCFS_LOG_DEBUG, "opening file %s.", abs_path.c_str());
             fd_array *fds = fs_manager->get_fd_array();
             int fd = fds->alloc_fd(p_opened_file);
             

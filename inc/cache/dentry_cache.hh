@@ -228,6 +228,15 @@ public:
         return entry == nullptr;
     }
 
+    /* 
+     * 封装目录项是否存在的检查。
+     * 需要创建该目录项时不应该使用此接口，因为目录项有可能处于不存在(已删除)但仍被fd引用的情况，此时不能创建 
+     */
+    bool is_exist() const noexcept
+    {
+        return entry != nullptr && entry->get_state() == dentry_state::valid;
+    }
+
     dentry* operator->() const noexcept
     {
         return entry;

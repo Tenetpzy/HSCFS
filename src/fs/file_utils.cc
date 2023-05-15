@@ -656,6 +656,7 @@ node_block_cache_entry_handle file_creator::create_directory()
 
 	/* 对于目录文件，需要建立第0级哈希表，调整文件大小，留下文件空洞即可 */
 	inode->i_type = HSCFS_FT_DIR;
+	assert(inode->i_dentry_num == 0);
 	assert(inode->i_current_depth == 0);
 	assert(inode->i_dir_level == 0);
 	uint32_t blk_num = directory::bucket_num(inode->i_current_depth, inode->i_dir_level) * 
@@ -690,29 +691,6 @@ void file_deletor::delete_file(uint32_t ino)
 	/* 删除该文件的inode。上一步中一定会访问inode，所以这里直接通过缓存handle删除 */
 	node_block_cache_entry_handle inode_handle = node_cache_helper(fs_manager).get_node_entry(ino, INVALID_NID);
 	inode_handle.delete_node();
-}
-
-uint32_t file_deletor::sub_nlink(uint32_t ino)
-{
-    node_block_cache_entry_handle inode_handle = node_cache_helper(fs_manager).get_node_entry(ino, INVALID_NID);
-	hscfs_inode *inode = &inode_handle->get_node_block_ptr()->i;
-	assert(inode->i_nlink >= 1);
-	--inode->i_nlink;
-	inode_handle.mark_dirty();
-
-	if (inode->i_type == HSCFS_FT_REG_FILE)
-	{
-		file_obj_cache *file_cache = fs_manager->get_file_obj_cache();
-		if (file_cache->contains(ino))
-		{
-			file_handle file = file_cache->get(ino);
-			assert(!file.is_empty());
-			file->sub_nlink();  // 此处nlink与inode保持同步，不需要mark_dirty file
-			assert(file->get_nlink() == inode->i_nlink);
-		}
-	}
-
-	return inode->i_nlink;
 }
 
 void inode_time_util::set_atime(hscfs_inode *inode, const timespec *time)
@@ -760,6 +738,51 @@ void inode_time_util::mark_modified(uint32_t ino)
 	set_atime(&node->i);
 	set_mtime(&node->i);
 	inode_handle.mark_dirty();
+}
+
+uint32_t hscfs::file_nlink_utils::sub_nlink(uint32_t ino)
+{
+    node_block_cache_entry_handle inode_handle = node_cache_helper(fs_manager).get_node_entry(ino, INVALID_NID);
+	hscfs_inode *inode = &inode_handle->get_node_block_ptr()->i;
+	assert(inode->i_nlink >= 1);
+	--inode->i_nlink;
+	inode_handle.mark_dirty();
+
+	if (inode->i_type == HSCFS_FT_REG_FILE)
+	{
+		file_obj_cache *file_cache = fs_manager->get_file_obj_cache();
+		if (file_cache->contains(ino))
+		{
+			file_handle file = file_cache->get(ino);
+			assert(!file.is_empty());
+			file->sub_nlink();  // 此处nlink与inode保持同步，不需要mark_dirty file
+			assert(file->get_nlink() == inode->i_nlink);
+		}
+	}
+
+	return inode->i_nlink;    
+}
+
+uint32_t file_nlink_utils::add_nlink(uint32_t ino)
+{
+    node_block_cache_entry_handle inode_handle = node_cache_helper(fs_manager).get_node_entry(ino, INVALID_NID);
+	hscfs_inode *inode = &inode_handle->get_node_block_ptr()->i;
+	++inode->i_nlink;
+	inode_handle.mark_dirty();
+
+	if (inode->i_type == HSCFS_FT_REG_FILE)
+	{
+		file_obj_cache *file_cache = fs_manager->get_file_obj_cache();
+		if (file_cache->contains(ino))
+		{
+			file_handle file = file_cache->get(ino);
+			assert(!file.is_empty());
+			file->add_nlink();  // 此处nlink与inode保持同步，不需要mark_dirty file
+			assert(file->get_nlink() == inode->i_nlink);
+		}
+	}
+
+	return inode->i_nlink;  
 }
 
 } // namespace hscfs

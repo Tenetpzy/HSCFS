@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include "cache/dentry_cache.hh"
 #include "cache/block_buffer.hh"
 #include "cache/dir_data_block_cache.hh"
@@ -22,6 +23,7 @@ struct dentry_info
 
 struct hscfs_dentry_ptr;
 
+/* 目录操作类，使用此类时，调用者需持有fs_meta_lock */
 class directory
 {
 public:
@@ -40,25 +42,28 @@ public:
      * 调用者可以提供创建目录项的位置信息(create_pos_hint)
      * 
      * 不应该在已经存在同名目录项name时调用create，否则结果未定义
-     * 
-     * 调用者需持有fs_meta_lock 
      */
     dentry_handle create(const std::string &name, uint8_t type, const dentry_store_pos *create_pos_hint = nullptr);
+
+    /*
+     * 创建一个硬链接目录项，目录项名为name，链接到ino
+     * 调用者保证ino有效
+     * 与create的区别是，此处不创建新文件，不分配inode
+     * 此方法不增加ino的nlink计数
+     */
+    void link(const std::string &name, uint32_t link_ino, const dentry_store_pos *create_pos_hint = nullptr);
 
     /*
      * 在目录文件中查找目录项name，主机侧完成
      * 
      * 若目录项不存在，则返回的info中，ino为INVALID_NID，若当前目录文件还能找到存储该目录项的位置，
      * 则info的store_pos保存可创建位置
-     * 
-     * 调用者需持有fs_meta_lock
      */
     dentry_info lookup(const std::string &name);
 
     /*
      * 在目录文件中删除目录项dentry，内部会将修改过的数据和元数据标记dirty
      * 调用者应保证该目录项存在
-     * 调用者需持有fs_meta_lock
      */
     void remove(dentry_handle &dentry);
 
@@ -103,6 +108,22 @@ private:
     /* create辅助函数 */
     /*****************************************************************/
 
+    /*
+     * 查找目录项name的创建位置。返回一个数据块handle(可在该块中创建)和创建位置
+     * 优先使用create_pos_hint
+     * 当前目录中找不到可创建位置时，则新建一个哈希表
+     */
+    std::pair<dir_data_block_handle, dentry_store_pos> get_create_pos(const std::string &name, 
+        const dentry_store_pos *create_pos_hint);
+
+    /*
+     * 创建目录项，添加目录项到dentry cache，更新inode中相关的元数据，将修改过的缓存标记dirty
+     * 返回新创建目录项的handle
+     * 调用者保证blk_handle和pos指向正确的创建位置
+     */
+    dentry_handle create_dentry(const std::string &name, uint8_t type, uint32_t new_inode, 
+        dir_data_block_handle &create_blk_handle, const dentry_store_pos &create_pos);
+
     /* 
      * 检查create_pos_hint指向的位置是否确实能创建目录项name 
      * 如果create_pos_hint超过当前文件最大块偏移max_blk_off，返回false
@@ -117,7 +138,7 @@ private:
     static void set_bitmap_pos(unsigned long slot_pos, void *bitmap_start_addr);
 
     /* 在块中指定位置写入目录项信息 */
-    void create_dentry_in_blk(const std::string &name, uint8_t type, uint32_t ino, 
+    void create_dentry_in_blk(const std::string &name, uint8_t type, uint32_t new_ino, 
         dir_data_block_handle blk_handle, const dentry_store_pos &pos);
     
     /*****************************************************************/

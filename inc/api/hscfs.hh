@@ -21,8 +21,11 @@ namespace hscfs {
 int open(const char *pathname, int flags);
 int close(int fd);
 ssize_t read(int fd, void *buffer, size_t count);
+ssize_t write(int fd, void *buffer, size_t count);
 int truncate(int fd, off_t length);
 int unlink(const char *pathname);
-ssize_t write(int fd, void *buffer, size_t count);
+int link(const char *oldpath, const char *newpath);
+int mkdir(const char *pathname);
+
 
 }  // namespace hscfs

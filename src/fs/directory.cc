@@ -34,70 +34,9 @@ dentry_handle directory::create(const std::string &name, uint8_t type, const den
     }
     
     dentry_store_pos create_pos;  // 最终决定的目录项创建位置
-    bool create_pos_hint_valid = true;
-    dir_data_cache_helper dir_data_helper(fs_manager);
-    node_cache_helper node_helper(fs_manager);
-    auto inode_handle = node_helper.get_node_entry(ino, INVALID_NID);
-    hscfs_inode *inode = &inode_handle->get_node_block_ptr()->i;
-    assert(inode->i_size % 4096 == 0);
+    dir_data_block_handle create_blk_handle;  // 创建位置对应的块
+    std::tie(create_blk_handle, create_pos) = get_create_pos(name, create_pos_hint);
 
-    /* 首先要检查create_pos_hint是否有效 */
-    if (create_pos_hint == nullptr || !create_pos_hint->is_valid)
-        create_pos_hint_valid = false;
-    else
-    {
-        uint32_t max_blk_off = SIZE_TO_BLOCK(inode->i_size) - 1;  // 计算当前目录文件的最大块偏移
-
-        /* 
-        * 如果create_pos_hint在文件范围内，则检查该位置是否确实可用
-        * 如果在文件范围外，则不可用（确保接下来的步骤中，能够正确地新建哈希表）
-        */
-        create_pos_hint_valid = is_create_pos_valid(name, create_pos_hint, max_blk_off);
-    }
-
-    /* 如果调用者传入的创建位置无效，则搜索可创建位置 */
-    if (!create_pos_hint_valid)
-    {
-        dentry_info info = lookup(name);
-        assert(info.ino == INVALID_NID);
-        
-        /* 如果当前目录文件找不到可创建位置了，则新增一个哈希表 */
-        if (!info.store_pos.is_valid)
-        {
-            HSCFS_LOG(HSCFS_LOG_DEBUG, "directory(ino = %u) has no space to create dentry %s.", ino, name.c_str());
-            append_hash_level(inode);
-
-            /* 新增哈希表之后，再次进行lookup，一定能找到创建位置 */
-            info = lookup(name);
-            assert(info.ino == INVALID_NID);
-            assert(info.store_pos.is_valid == true);
-        }
-
-        create_pos = info.store_pos;
-    }
-
-    /* 如果调用者提供的位置有效，则直接使用该位置 */
-    else
-        create_pos = *create_pos_hint;
-    
-    /* 此时，create_pos是有效的，但需要判断是否为文件空洞 */
-    assert(create_pos.is_valid == true);
-    HSCFS_LOG(HSCFS_LOG_INFO, "create dentry %s in directory(ino = %u), pos: blkno = %u, slotno = %u",
-        name.c_str(), ino, create_pos.blkno, create_pos.slotno);
-
-    dir_data_block_handle create_blk_handle;
-    std::tie(create_blk_handle, std::ignore) = dir_data_helper.get_dir_data_block(ino, create_pos.blkno);
-
-    /* 如果是文件空洞，则创建一个数据块缓存（此时不分配地址，提交时再分配） */
-    if (create_blk_handle.is_empty())
-    {
-        create_blk_handle = fs_manager->get_dir_data_cache()->add(ino, create_pos.blkno, INVALID_LPA, 
-            create_formatted_data_block_buffer());
-        create_blk_handle.mark_dirty();
-        HSCFS_LOG(HSCFS_LOG_INFO, "creation pos is in file hole, allocated a dir data block buffer for it.");
-    }
-
-    /* 此时，create_blk_handle指向待创建目录项的数据块 */
     /* 分配一个inode */
     node_block_cache_entry_handle new_inode_handle;
     if (type == HSCFS_FT_REG_FILE)
@@ -109,38 +48,23 @@ dentry_handle directory::create(const std::string &name, uint8_t type, const den
     }
     uint32_t new_inode = new_inode_handle->get_nid();
 
-    /* 在create_blk_handle中写入新目录项 */
-    create_dentry_in_blk(name, type, new_inode, create_blk_handle, create_pos);
+    return create_dentry(name, type, new_inode, create_blk_handle, create_pos);
+}
 
-    /* 创建新目录项缓存，初始化其基本信息，并加入dentry cache */
-    dentry_cache *d_cache = fs_manager->get_dentry_cache();
-    dentry_handle d_handle = d_cache->get(ino, name);
-
-    if (!d_handle.is_empty())  // dentry cache中已经存在目录项，则一定为deleted状态
+void directory::link(const std::string &name, uint32_t link_ino, const dentry_store_pos *create_pos_hint)
+{
+    /* 检查是否存在状态为deleted_referred_by_fd的老目录项。如果存在，不允许创建 */
     {
-        assert(d_handle->get_state() == dentry_state::deleted);
-        assert(d_handle->get_fd_refcount() == 0);
-        assert(d_handle->get_key().name == name);
-        assert(d_handle->get_key().dir_ino == ino);
-
-        /* 直接将dentry置为有效，然后把属性设置为新目录项属性 */
-        d_handle->set_state(dentry_state::valid);
-        d_handle->set_ino(new_inode);
+        dentry_handle d_handle = fs_manager->get_dentry_cache()->get(ino, name);
+        if (!d_handle.is_empty() && d_handle->get_state() == dentry_state::deleted_referred_by_fd)
+            throw create_file_in_delete_referred_state();
     }
-    else  // dentry cache中，不存在目录项，新增一个即可
-        d_handle = d_cache->add(ino, dentry, new_inode, name);
     
-    d_handle->set_pos_info(create_pos);
-    d_handle->set_type(type);
-    d_handle.mark_dirty();
+    dentry_store_pos create_pos;  // 最终决定的目录项创建位置
+    dir_data_block_handle create_blk_handle;  // 创建位置对应的块
+    std::tie(create_blk_handle, create_pos) = get_create_pos(name, create_pos_hint);
 
-    /* 更新inode中的元数据 */
-    inode->i_dentry_num++;
-    inode_time_util::set_atime(inode);
-    inode_time_util::set_mtime(inode);
-    inode_handle.mark_dirty();
-
-    return d_handle;
+    create_dentry(name, HSCFS_FT_REG_FILE, link_ino, create_blk_handle, create_pos);
 }
 
 dentry_info directory::lookup(const std::string &name)
@@ -497,7 +421,117 @@ u32 directory::hscfs_match_name(hscfs_dentry_ptr *d, hscfs_dir_entry *de, const 
 	return 0;
 }
 
-bool directory::is_create_pos_valid(const std::string &name, const dentry_store_pos *create_pos_hint, uint32_t max_blk_off)
+std::pair<dir_data_block_handle, dentry_store_pos> directory::get_create_pos(const std::string &name, 
+    const dentry_store_pos *create_pos_hint)
+{
+    dentry_store_pos create_pos;  // 最终决定的目录项创建位置
+    bool create_pos_hint_valid = true;
+    dir_data_cache_helper dir_data_helper(fs_manager);
+    node_cache_helper node_helper(fs_manager);
+    auto inode_handle = node_helper.get_node_entry(ino, INVALID_NID);
+    hscfs_inode *inode = &inode_handle->get_node_block_ptr()->i;
+    assert(inode->i_size % 4096 == 0);
+
+    /* 首先要检查create_pos_hint是否有效 */
+    if (create_pos_hint == nullptr || !create_pos_hint->is_valid)
+        create_pos_hint_valid = false;
+    else
+    {
+        uint32_t max_blk_off = SIZE_TO_BLOCK(inode->i_size) - 1;  // 计算当前目录文件的最大块偏移
+
+        /* 
+        * 如果create_pos_hint在文件范围内，则检查该位置是否确实可用
+        * 如果在文件范围外，则不可用（确保接下来的步骤中，能够正确地新建哈希表）
+        */
+        create_pos_hint_valid = is_create_pos_valid(name, create_pos_hint, max_blk_off);
+    }
+
+    /* 如果调用者传入的创建位置无效，则搜索可创建位置 */
+    if (!create_pos_hint_valid)
+    {
+        dentry_info info = lookup(name);
+        assert(info.ino == INVALID_NID);
+        
+        /* 如果当前目录文件找不到可创建位置了，则新增一个哈希表 */
+        if (!info.store_pos.is_valid)
+        {
+            HSCFS_LOG(HSCFS_LOG_DEBUG, "directory(ino = %u) has no space to create dentry %s.", ino, name.c_str());
+            append_hash_level(inode);
+
+            /* 新增哈希表之后，再次进行lookup，一定能找到创建位置 */
+            info = lookup(name);
+            assert(info.ino == INVALID_NID);
+            assert(info.store_pos.is_valid == true);
+        }
+
+        create_pos = info.store_pos;
+    }
+
+    /* 如果调用者提供的位置有效，则直接使用该位置 */
+    else
+        create_pos = *create_pos_hint;
+    
+    /* 此时，create_pos是有效的，但需要判断是否为文件空洞 */
+    assert(create_pos.is_valid == true);
+    HSCFS_LOG(HSCFS_LOG_INFO, "create dentry %s in directory(ino = %u), pos: blkno = %u, slotno = %u",
+        name.c_str(), ino, create_pos.blkno, create_pos.slotno);
+
+    dir_data_block_handle create_blk_handle;
+    std::tie(create_blk_handle, std::ignore) = dir_data_helper.get_dir_data_block(ino, create_pos.blkno);
+
+    /* 如果是文件空洞，则创建一个数据块缓存（此时不分配地址，提交时再分配） */
+    if (create_blk_handle.is_empty())
+    {
+        create_blk_handle = fs_manager->get_dir_data_cache()->add(ino, create_pos.blkno, INVALID_LPA, 
+            create_formatted_data_block_buffer());
+        create_blk_handle.mark_dirty();
+        HSCFS_LOG(HSCFS_LOG_INFO, "creation pos is in file hole, allocated a dir data block buffer for it.");
+    }
+
+    return std::make_pair(create_blk_handle, create_pos);
+}
+
+dentry_handle directory::create_dentry(const std::string &name, uint8_t type, uint32_t new_inode, 
+    dir_data_block_handle &create_blk_handle, const dentry_store_pos &create_pos)
+{
+    /* 在create_blk_handle中写入新目录项 */
+    create_dentry_in_blk(name, type, new_inode, create_blk_handle, create_pos);
+
+    /* 创建新目录项缓存，初始化其基本信息，并加入dentry cache */
+    dentry_cache *d_cache = fs_manager->get_dentry_cache();
+    dentry_handle d_handle = d_cache->get(ino, name);
+
+    if (!d_handle.is_empty())  // dentry cache中已经存在目录项，则一定为deleted状态
+    {
+        assert(d_handle->get_state() == dentry_state::deleted);
+        assert(d_handle->get_fd_refcount() == 0);
+        assert(d_handle->get_key().name == name);
+        assert(d_handle->get_key().dir_ino == ino);
+
+        /* 直接将dentry置为有效，然后把属性设置为新目录项属性 */
+        d_handle->set_state(dentry_state::valid);
+        d_handle->set_ino(new_inode);
+    }
+    else  // dentry cache中，不存在目录项，新增一个即可
+        d_handle = d_cache->add(ino, dentry, new_inode, name);
+    
+    d_handle->set_pos_info(create_pos);
+    d_handle->set_type(type);
+    d_handle.mark_dirty();
+
+    /* 更新inode中的元数据 */
+    auto inode_handle = node_cache_helper(fs_manager).get_node_entry(ino, INVALID_NID);
+    hscfs_inode *inode = &inode_handle->get_node_block_ptr()->i;
+    inode->i_dentry_num++;
+    inode_time_util::set_atime(inode);
+    inode_time_util::set_mtime(inode);
+    inode_handle.mark_dirty();
+
+    return d_handle;
+}
+
+bool directory::is_create_pos_valid(const std::string &name, const dentry_store_pos *create_pos_hint, 
+    uint32_t max_blk_off)
 {
     if (create_pos_hint->blkno > max_blk_off)
         return false;
@@ -543,7 +577,7 @@ void directory::set_bitmap_pos(unsigned long slot_pos, void *bitmap_start_addr)
     start_addr[idx] |= (1U << off);
 }
 
-void directory::create_dentry_in_blk(const std::string &name, uint8_t type, uint32_t ino,
+void directory::create_dentry_in_blk(const std::string &name, uint8_t type, uint32_t new_ino,
     dir_data_block_handle blk_handle, const dentry_store_pos &pos)
 {
     size_t name_len = name.length();
@@ -569,7 +603,7 @@ void directory::create_dentry_in_blk(const std::string &name, uint8_t type, uint
     /* 设置目录项 */
     dentry_ptr->hash_code = hash_code;
     dentry_ptr->file_type = type;
-    dentry_ptr->ino = ino;
+    dentry_ptr->ino = new_ino;
     dentry_ptr->name_len = name_len;
 
     /* 设置文件名 */

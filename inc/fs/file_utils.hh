@@ -198,12 +198,28 @@ public:
      */
     void delete_file(uint32_t ino);
 
+private:
+    file_system_manager *fs_manager;
+};
+
+/* nlink操作工具 */
+class file_nlink_utils
+{
+public:
+    file_nlink_utils(file_system_manager *fs_manager)
+    {
+        this->fs_manager = fs_manager;
+    }
+
     /*
      * 将ino中的nlink减1，标记inode为dirty
      * 如果ino是普通文件，还会查找file obj cache。如果存在file对象，将其中的nlink也同步减1
      * 返回减1后的nlink值
      */
     uint32_t sub_nlink(uint32_t ino);
+
+    /* 将ino中nlink加1，其它处理同sub_nlink。返回加1后的nlink值 */
+    uint32_t add_nlink(uint32_t ino);
 
 private:
     file_system_manager *fs_manager;
