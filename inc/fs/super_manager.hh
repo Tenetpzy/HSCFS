@@ -45,7 +45,8 @@ public:
 
     /* 
      * 为node/data block分配一个lpa，在对应的活跃segment上进行分配，
-     * 如果活跃segment已满，将其加入对应uncommit_segs，从free segs上分配一个作为新的活跃segment，
+     * 如果活跃segment已满，将其加入对应uncommit_segs，从free segs上分配一个作为新的活跃segment。
+     * 内部会将lpa有效化
      * 返回分配的lpa 
      */
     uint32_t alloc_node_lpa();

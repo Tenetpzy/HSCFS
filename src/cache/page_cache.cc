@@ -98,6 +98,14 @@ void page_cache::truncate(uint32_t max_blkoff)
     dirty_pages.erase(start_itr, dirty_pages.end());
 }
 
+void page_cache::clear_dirty_pages()
+{
+    spin_lock_guard lg(dirty_pages_lock);
+    for (auto &entry : dirty_pages)
+        entry.second->is_dirty = false;
+    dirty_pages.clear();
+}
+
 /* 调用者需要加cache_lock，除非能够保证调用时ref_count不会为0 */
 void page_cache::add_refcount(page_entry *entry)
 {
@@ -172,7 +180,6 @@ void page_cache::add_to_dirty_pages(page_entry_handle &page)
     spin_lock_guard lg(dirty_pages_lock);
     assert(page->ref_count.load() >= 1);
     dirty_pages.emplace(page->blkoff, page);
-    add_refcount(page.entry);
 }
 
 page_entry_handle::page_entry_handle(const page_entry_handle &o)
@@ -244,7 +251,7 @@ void page_entry_handle::do_subref()
 page_entry::page_entry(uint32_t blkoff)
 {
     this->blkoff = blkoff;
-    origin_lpa = commit_lpa = INVALID_LPA;
+    lpa = INVALID_LPA;
     content_state = page_state::invalid;
     ref_count.store(0);
     is_dirty.store(false);    

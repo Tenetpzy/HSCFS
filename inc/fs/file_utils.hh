@@ -53,6 +53,13 @@ public:
      */
     block_addr_info get_addr_of_block(uint32_t ino, uint32_t blkno);
 
+    /*
+     * 更新ino中块偏移blkno的块的反向映射为new_lpa
+     * 调用者需要保证ino和blkno合法
+     * 内部会将修改过的node block标记dirty
+     */
+    block_addr_info update_block_mapping(uint32_t ino, uint32_t blkno, uint32_t new_lpa);
+
     /* 
      * file mapping查询的辅助函数
 

@@ -5,6 +5,7 @@
 #include "cache/SIT_NAT_cache.hh"
 #include "fs/fd_array.hh"
 #include "fs/file.hh"
+#include "fs/srmap_utils.hh"
 #include "journal/journal_container.hh"
 #include "fs/fs_manager.hh"
 #include "utils/hscfs_exceptions.hh"
@@ -38,6 +39,7 @@ void file_system_manager::init(comm_dev *device)
     g_fs_manager.sit_cache = std::make_unique<SIT_NAT_cache>(device, sit_cache_size);
     g_fs_manager.nat_cache = std::make_unique<SIT_NAT_cache>(device, nat_cache_size);
     g_fs_manager.file_cache = std::make_unique<file_obj_cache>(file_cache_size, &g_fs_manager);
+    g_fs_manager.srmap_util = std::make_unique<srmap_utils>(&g_fs_manager);
 
     g_fs_manager.dev = device;
 

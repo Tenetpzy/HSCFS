@@ -299,6 +299,20 @@ block_addr_info file_mapping_util::get_addr_of_block(uint32_t ino, uint32_t blkn
 	return ret;
 }
 
+block_addr_info file_mapping_util::update_block_mapping(uint32_t ino, uint32_t blkno, uint32_t new_lpa)
+{
+	block_addr_info addr = get_addr_of_block(ino, blkno);
+	assert(addr.lpa != new_lpa);
+	assert(addr.nid_handle->get_nid() == addr.nid);
+
+	uint32_t level = ino == addr.nid ? 0 : 1;
+	hscfs_node *node = addr.nid_handle->get_node_block_ptr();
+	set_lpa(node, addr.nid_off, level, new_lpa);
+	addr.nid_handle.mark_dirty();
+
+	return addr;
+}
+
 /******************************************************************************/
 
 const uint32_t file_resizer::single_node_blks = DEF_ADDRS_PER_BLOCK;

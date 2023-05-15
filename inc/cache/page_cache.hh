@@ -52,24 +52,14 @@ public:
         return blkoff;
     }
 
-    uint32_t get_origin_lpa() const noexcept
+    uint32_t& get_lpa_ref() noexcept
     {
-        return origin_lpa;
+        return lpa;
     }
 
-    void set_origin_lpa(uint32_t origin_lpa) noexcept
+    void set_lpa(uint32_t lpa) noexcept
     {
-        this->origin_lpa = origin_lpa;
-    }
-
-    uint32_t get_commit_lpa() const noexcept
-    {
-        return commit_lpa;
-    }
-
-    void set_commit_lpa(uint32_t commit_lpa) noexcept
-    {
-        this->commit_lpa = commit_lpa;
+        this->lpa = lpa;
     }
 
 private:
@@ -83,7 +73,7 @@ private:
 
 private:
     uint32_t blkoff;   // 文件内块偏移
-    uint32_t origin_lpa, commit_lpa;  // 旧lpa（如果之前存在）和提交时的新lpa
+    uint32_t lpa;  // 块地址（如果是新创建但没写回，则为INVALID_LPA）
 
     page_state content_state;
     block_buffer page;
@@ -182,6 +172,18 @@ public:
      * 调用者必须持有对应文件的file_op_lock独占锁（此时仅有一个线程能操作文件的page cache）
      */
     void truncate(uint32_t max_blkoff);
+
+    /*
+     * 获取dirty pages集合
+     * 调用者如果需要操作dirty pages，必须持有对应文件的file_op_lock独占锁
+     */
+    std::map<uint32_t, page_entry_handle> &get_dirty_pages() noexcept
+    {
+        return dirty_pages;
+    }
+
+    /* 将dirty pages中所有page的dirty位清除 */
+    void clear_dirty_pages();
 
 private:
     generic_cache_manager<uint32_t, page_entry> cache_manager;

@@ -13,6 +13,7 @@ class super_cache;
 class node_block_cache;
 class SIT_NAT_cache;
 class file_obj_cache;
+class srmap_utils;
 class fd_array;
 class dir_data_block_cache;
 class journal_container;
@@ -78,6 +79,11 @@ public:
         return file_cache.get();
     }
 
+    srmap_utils* get_srmap_util() const noexcept
+    {
+        return srmap_util.get();
+    }
+
     size_t get_page_cache_size() const noexcept
     {
         return 32;
@@ -124,6 +130,7 @@ private:
     std::unique_ptr<dir_data_block_cache> dir_data_cache;
     std::unique_ptr<SIT_NAT_cache> sit_cache, nat_cache;
     std::unique_ptr<file_obj_cache> file_cache;
+    std::unique_ptr<srmap_utils> srmap_util;
 
     comm_dev *dev;
     dentry_handle root_dentry;

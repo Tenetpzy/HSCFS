@@ -6,10 +6,13 @@
 #include "fs/file.hh"
 #include "fs/fs_manager.hh"
 #include "fs/file_utils.hh"
+#include "fs/write_back_helper.hh"
+#include "fs/srmap_utils.hh"
 #include "utils/hscfs_exceptions.hh"
 #include "utils/exception_handler.hh"
 #include "utils/hscfs_log.h"
 #include "utils/lock_guards.hh"
+#include "utils/io_utils.hh"
 
 namespace hscfs {
 
@@ -179,6 +182,47 @@ ssize_t file::write(char *buffer, ssize_t count, uint64_t pos)
     return write_count;
 }
 
+void file::write_back(bool write_meta_back)
+{
+    std::lock_guard<std::mutex> fs_meta_lg(fs_manager->get_fs_meta_lock());
+
+    auto &dirty_pages = page_cache_->get_dirty_pages();
+
+    write_back_helper wb_helper(fs_manager);
+    file_mapping_util fm_util(fs_manager);
+    srmap_utils *srmap_util = fs_manager->get_srmap_util();
+    async_vecio_synchronizer syn(dirty_pages.size());
+
+    for (auto &entry: dirty_pages)
+    {
+        page_entry_handle &page_handle = entry.second;
+        
+        /* 将page写回SSD */
+        uint32_t new_lpa = wb_helper.do_write_back_async(page_handle->get_page_buffer(), page_handle->get_lpa_ref(), 
+            write_back_helper::block_type::data, async_vecio_synchronizer::generic_callback, &syn);
+        assert(new_lpa == page_handle->get_lpa_ref());
+
+        /* 更新file mapping */
+        block_addr_info addr = fm_util.update_block_mapping(ino, page_handle->get_blkoff(), new_lpa);
+
+        /* 写入SRMAP表 */
+        srmap_util->write_srmap_of_data(new_lpa, addr.nid, addr.nid_off);
+    }
+
+    /* 等待所有异步I/O完成 */
+    comm_cmd_result res = syn.wait_cplt();
+    if (res != comm_cmd_result::COMM_CMD_SUCCESS)
+        throw io_error("write back page cache failed.");
+    
+    page_cache_->clear_dirty_pages();  // 清除页面的脏标记
+    srmap_util->write_dirty_srmap_sync();  // 写回SRMAP
+
+    if (write_meta_back)
+    {
+        /* to do: 文件系统元数据写回 */
+    }
+}
+
 bool file::mark_dirty()
 {
     bool expect = false;
@@ -265,32 +309,29 @@ void file::prepare_page_content(page_entry_handle &page)
     uint64_t size_in_inode = inode->i_size;
     uint64_t max_blkoff_in_inode = SIZE_TO_BLOCK(size_in_inode) - 1;
 
-    /* page超出了文件块偏移范围，origin_lpa和commit_lpa都为INVALID_LPA，内容初始化为0即可(block_buffer构造时自动完成) */
+    /* page超出了文件块偏移范围，lpa为INVALID_LPA，内容初始化为0即可(block_buffer构造时自动完成) */
     if (blkoff > max_blkoff_in_inode)
     {
         HSCFS_LOG(HSCFS_LOG_DEBUG, "page offset %u of file(ino = %u) is beyond file size(%u bytes).", 
             blkoff, ino, size_in_inode);
-        page->set_origin_lpa(INVALID_LPA);
-        page->set_commit_lpa(INVALID_LPA);
+        page->set_lpa(INVALID_LPA);
         return;
     }
 
     /* page在文件块偏移范围内，通过文件索引查询找到它的LPA */
     block_addr_info page_addr = file_mapping_util(fs_manager).get_addr_of_block(ino, blkoff);
 
-    /* 如果page在文件空洞范围内，origin_lpa和commit_lpa都为INVALID_LPA，内容初始化为0 */
+    /* 如果page在文件空洞范围内，lpa为INVALID_LPA，内容初始化为0 */
     if (page_addr.lpa == INVALID_LPA)
     {
         HSCFS_LOG(HSCFS_LOG_DEBUG, "page offset %u of file(ino = %u) is in file holes.", blkoff, ino);
-        page->set_origin_lpa(INVALID_LPA);
-        page->set_commit_lpa(INVALID_LPA);
+        page->set_lpa(INVALID_LPA);
         return;        
     }
 
-    /* 否则，初始化其origin_lpa，从SSD读出内容 */
+    /* 否则，初始化其lpa，从SSD读出内容 */
     HSCFS_LOG(HSCFS_LOG_DEBUG, "the LPA of page offset %u in file(ino = %u) is %u.", blkoff, ino, page_addr.lpa);
-    page->set_origin_lpa(page_addr.lpa);
-    page->set_commit_lpa(INVALID_LPA);
+    page->set_lpa(page_addr.lpa);
     page->get_page_buffer().read_from_lpa(fs_manager->get_device(), page_addr.lpa);
 }
 

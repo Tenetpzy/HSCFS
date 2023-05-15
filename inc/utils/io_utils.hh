@@ -41,6 +41,13 @@ public:
         return io_cplt.get_future().get();
     }
 
+    /* 提供通信层异步向量I/O的通用回调 */
+    static void generic_callback(comm_cmd_result res, void *arg)
+    {
+        async_vecio_synchronizer *syr = static_cast<async_vecio_synchronizer*>(arg);
+        syr->cplt_once(res);
+    }
+
 private:
     comm_cmd_result io_res;
     std::atomic_uint64_t _io_num;

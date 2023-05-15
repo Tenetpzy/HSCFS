@@ -1,6 +1,7 @@
 #pragma once
 
 #include "utils/declare_utils.hh"
+#include "communication/comm_api.h"
 #include <cstdint>
 
 struct comm_dev;
@@ -27,6 +28,13 @@ public:
 
     /* 从SSD读lpa到buffer中，同步，完成读操作后返回 */
     void read_from_lpa(comm_dev *dev, uint32_t lpa);
+
+    /* 把buffer中的内容写入lpa，同步，完成写操作后返回 */
+    void write_to_lpa_sync(comm_dev *dev, uint32_t lpa);
+
+    /* 把buffer中的内容写入lpa，异步，立刻返回 */
+    void write_to_lpa_async(comm_dev *dev, uint32_t lpa, comm_async_cb_func cb_func, void *cb_arg);
+
     char *get_ptr() noexcept
     {
         return buffer;

@@ -93,6 +93,13 @@ public:
      */
     ssize_t write(char *buffer, ssize_t count, uint64_t pos);
 
+    /*
+     * 将所有脏页写回SSD
+     * 若write_meta_back为true, 同时将所有修改过的元数据写回SSD
+     * 调用者应持有file_op_lock独占或更高层级的独占锁
+     */
+    void write_back(bool write_meta_back = false);
+
 private:
     uint32_t ino;  // inode号
     file_system_manager *fs_manager;

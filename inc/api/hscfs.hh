@@ -26,6 +26,6 @@ int truncate(int fd, off_t length);
 int unlink(const char *pathname);
 int link(const char *oldpath, const char *newpath);
 int mkdir(const char *pathname);
-
+int rmdir(const char *pathname);
 
 }  // namespace hscfs
