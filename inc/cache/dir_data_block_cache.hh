@@ -195,10 +195,28 @@ public:
         return dir_data_block_handle(p_entry, this);
     }
 
+    /* 移除目录文件ino的所有数据缓存，即使它们是dirty的。在删除目录文件时调用 */
+    void remove_ino_blks(uint32_t ino)
+    {
+        if (dirty_blks.count(ino))
+            dirty_blks.erase(ino);
+        
+        for (auto it = cache_manager.begin(); it != cache_manager.end(); )
+        {
+            dir_data_block_entry_key key = it->first;
+            if (key.ino == ino)
+                it = cache_manager.erase(it);
+            else
+                ++it;
+        }
+    }
+
 private:
     size_t expect_size, cur_size;
     generic_cache_manager<dir_data_block_entry_key, dir_data_block_entry> cache_manager;
-    std::vector<dir_data_block_handle> dirty_list;
+
+    /* 有删除一个目录文件所有缓存的需求，因此把一个目录的脏block组织为vector，使用目录ino索引 */
+    std::unordered_map<uint32_t, std::vector<dir_data_block_handle>> dirty_blks;
 
 private:
     void add_refcount(dir_data_block_entry *entry)
@@ -221,7 +239,7 @@ private:
         if (handle.entry->state != dir_data_block_entry_state::dirty)
         {
             handle.entry->state = dir_data_block_entry_state::dirty;
-            dirty_list.emplace_back(handle);
+            dirty_blks[handle.entry->key.ino].emplace_back(handle);
         }
     }
 

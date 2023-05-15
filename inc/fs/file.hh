@@ -279,6 +279,7 @@ public:
     /*
      * 删除该文件，释放该文件的全部资源，从file_obj_cache中移除entry
      * 调用此方法后，this无效，is_empty返回true，调用者不应再使用此句柄
+     * 将对应dentry状态置为deleted，标记dirty
      * 调用者需持有fs_meta_lock
      */
     void delete_file();

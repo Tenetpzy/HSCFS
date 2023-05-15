@@ -9,7 +9,7 @@ namespace hscfs {
 
 dir_data_block_cache::~dir_data_block_cache()
 {
-    if (!dirty_list.empty())
+    if (!dirty_blks.empty())
         HSCFS_LOG(HSCFS_LOG_WARNING, "dir data block cache still has dirty block while destructed.");
 }
 

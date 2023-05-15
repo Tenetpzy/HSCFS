@@ -57,6 +57,10 @@ int rmdir(const char *pathname)
             uint32_t nlink = file_nlink_utils(fs_manager).sub_nlink(target_dentry->get_ino());
             assert(nlink == 0);
 
+            /* 释放目录文件资源 */
+            file_deletor(fs_manager).delete_dir_with_data_cache(target_dentry->get_ino());
+            target_dentry->set_state(dentry_state::deleted);
+
             /* 删除目录项 */
             auto &parent_key = target_dentry->get_key();
             auto parent_dentry = fs_manager->get_dentry_cache()->get(parent_key.dir_ino, parent_key.name);
@@ -68,7 +72,7 @@ int rmdir(const char *pathname)
         }
         catch(const std::exception& e)
         {
-            errno = exception_handler(fs_manager, e).convert_to_errno();
+            errno = exception_handler(fs_manager, e).convert_to_errno(true);
             return -1;
         }
     }

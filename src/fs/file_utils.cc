@@ -693,6 +693,13 @@ void file_deletor::delete_file(uint32_t ino)
 	inode_handle.delete_node();
 }
 
+void file_deletor::delete_dir_with_data_cache(uint32_t ino)
+{
+	delete_file(ino);
+	dir_data_block_cache *dir_data_cache = fs_manager->get_dir_data_cache();
+	dir_data_cache->remove_ino_blks(ino);
+}
+
 void inode_time_util::set_atime(hscfs_inode *inode, const timespec *time)
 {
 	timespec cur_time;

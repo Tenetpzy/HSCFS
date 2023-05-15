@@ -198,6 +198,9 @@ public:
      */
     void delete_file(uint32_t ino);
 
+    /* 删除ino对应的目录，同时删除该目录的数据块缓存 */
+    void delete_dir_with_data_cache(uint32_t ino);
+
 private:
     file_system_manager *fs_manager;
 };

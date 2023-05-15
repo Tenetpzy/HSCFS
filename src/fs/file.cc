@@ -385,6 +385,7 @@ void file_obj_cache::remove_file(file *entry)
 
     /* 修改对应的dentry状态 */
     entry->dentry->set_state(dentry_state::deleted);
+    entry->dentry.mark_dirty();
 
     /* 在缓存中移除file对象 */
     assert(entry->ref_count == 1);  // 此方法必然由最后一个引用file的handle调用，因此ref_count只可能为1
@@ -392,6 +393,7 @@ void file_obj_cache::remove_file(file *entry)
     cache_manager.unpin(entry->ino);
     uint32_t ino = entry->ino;
     cache_manager.remove(ino);  // 此时file对象析构, entry参数变为悬挂指针
+    --cur_size;
 }
 
 file_handle::~file_handle()

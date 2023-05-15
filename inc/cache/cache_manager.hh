@@ -22,6 +22,9 @@ template <typename key_t, typename entry_t>
 class cache_hash_index
 {
 public:
+    using iterator_t = typename std::unordered_map<key_t, std::unique_ptr<entry_t>>::iterator;
+
+public:
     void add(const key_t &key, std::unique_ptr<entry_t> &p_entry)
     {
         assert(index.count(key) == 0);
@@ -47,6 +50,21 @@ public:
         if (index.count(key) == 0)
             return nullptr;
         return index[key].get();
+    }
+
+    iterator_t begin()
+    {
+        return index.begin();
+    }
+
+    iterator_t end()
+    {
+        return index.end();
+    }
+
+    iterator_t erase(const iterator_t pos)
+    {
+        return index.erase(pos);
     }
 
 private:
@@ -182,6 +200,10 @@ private:
  * void add(const key_t &key, std::unique_ptr<entry_t> &p_entry);
  * std::unique_ptr<entry_t> remove(const key_t &key);
  * entry_t *get(const key_t &key);
+ * iterator_t begin();
+ * iterator_t end();
+ * iterator_t erase(const iterator_t pos);
+ * 其中，iterator_t能够进行自增、自减操作
  * 
  * 缓存置换器的类型为 replacer_t<key_t>，能够调用：
  * void add(const key_t &key);
@@ -197,6 +219,9 @@ template <typename key_t, typename entry_t,
     template <typename> class replacer_t = lru_replacer>
 class generic_cache_manager
 {
+public:
+    using iterator_t = typename index_t<key_t, entry_t>::iterator_t;
+
 public:
     /* 增加缓存项p_entry，并把该缓存项的所有权交给cache_manager */
     void add(const key_t &key, std::unique_ptr<entry_t> &p_entry)
@@ -251,8 +276,26 @@ public:
     /* 手动移除缓存项，无论是否被pin住 */
     void remove(const key_t &key)
     {
-        index.remove(key);
         replacer.remove(key);
+        index.remove(key);
+    }
+
+    iterator_t begin()
+    {
+        return index.begin();
+    }
+
+    iterator_t end()
+    {
+        return index.end();
+    }
+
+    iterator_t erase(const iterator_t pos)
+    {
+        const key_t &key = pos->first;
+        replacer.remove(key);
+        iterator_t ret = index.erase(pos);
+        return ret;
     }
 
 private:

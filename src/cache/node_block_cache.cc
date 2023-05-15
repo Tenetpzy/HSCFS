@@ -48,6 +48,7 @@ void node_block_cache::sub_refcount(node_block_cache_entry *entry)
             uint32_t nid = entry->nid;
             uint32_t parent_nid = entry->parent_nid;
             cache_manager.remove(nid);
+            --cur_size;
 
             /* 减少父结点的引用计数 */
             if (parent_nid != INVALID_NID)

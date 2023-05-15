@@ -74,7 +74,7 @@ int unlink(const char *pathname)
                     uint32_t target_ino = target_dentry->get_ino();
                     file_obj_cache *file_cache = fs_manager->get_file_obj_cache();
 
-                    /* 如果file对象缓存中存在file对象，则通过file handle删除(可同时删除file对象) */
+                    /* 如果file obj cache中存在file对象，则通过file handle删除(可同时删除file对象) */
                     if (file_cache->contains(target_ino))
                     {
                         file_handle target_handle = file_cache_helper(file_cache).get_file_obj(target_ino, 

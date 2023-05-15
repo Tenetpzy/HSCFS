@@ -89,6 +89,9 @@ void page_cache::truncate(uint32_t max_blkoff)
         auto &handle = itr->second;
         handle->is_dirty = false;
         handle->content_state = page_state::invalid;
+
+        /* 范围外的page将被移除，所以递减cur_size */
+        --cur_size;
     }
 
     /* 从dirty pages集合中移除范围外的所有page */

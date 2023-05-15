@@ -46,10 +46,10 @@ public:
     dentry_handle create(const std::string &name, uint8_t type, const dentry_store_pos *create_pos_hint = nullptr);
 
     /*
-     * 创建一个硬链接目录项，目录项名为name，链接到ino
-     * 调用者保证ino有效
+     * 创建一个硬链接目录项，目录项名为name，链接到link_ino
+     * 调用者保证link_ino有效
      * 与create的区别是，此处不创建新文件，不分配inode
-     * 此方法不增加ino的nlink计数
+     * 此方法不增加link_ino的nlink计数
      */
     void link(const std::string &name, uint32_t link_ino, const dentry_store_pos *create_pos_hint = nullptr);
 
