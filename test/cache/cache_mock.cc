@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <cstdint>
+#include "communication/comm_api.h"
 
 extern "C" {
 
@@ -8,13 +9,14 @@ struct comm_dev
     int unused;
 };
 
-typedef enum comm_io_direction
-{
-    COMM_IO_READ, COMM_IO_WRITE
-} comm_io_direction;
-
 int comm_submit_sync_rw_request(comm_dev *dev, void *buffer, uint64_t lba, uint32_t lba_count, 
     comm_io_direction dir)
+{
+    return 0;
+}
+
+int comm_submit_async_rw_request(comm_dev *dev, void *buffer, uint64_t lba, uint32_t lba_count,
+    comm_async_cb_func cb_func, void *cb_arg, comm_io_direction dir)
 {
     return 0;
 }

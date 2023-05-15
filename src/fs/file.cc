@@ -216,11 +216,6 @@ void file::write_back(bool write_meta_back)
     
     page_cache_->clear_dirty_pages();  // 清除页面的脏标记
     srmap_util->write_dirty_srmap_sync();  // 写回SRMAP
-
-    if (write_meta_back)
-    {
-        /* to do: 文件系统元数据写回 */
-    }
 }
 
 bool file::mark_dirty()

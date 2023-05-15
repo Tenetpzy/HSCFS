@@ -7,7 +7,7 @@
 
 namespace hscfs {
 
-int truncate(int fd, off_t length)
+int fsync(int fd)
 {
     file_system_manager *fs_manager = file_system_manager::get_instance();
     try
@@ -18,9 +18,7 @@ int truncate(int fd, off_t length)
             opened_file *file = fs_manager->get_fd_array()->get_opened_file_of_fd(fd);
             file_handle &handle = file->get_file_handle();
             rwlock_guard file_op_lg(handle->get_file_op_lock(), rwlock_guard::lock_type::wrlock);
-            std::lock_guard<std::mutex> fs_meta_lg(fs_manager->get_fs_meta_lock());
-            if (handle->truncate(length))
-                handle.mark_dirty();
+            handle->write_back();
             return 0;
         }
         catch (const std::exception &e)
@@ -41,9 +39,9 @@ int truncate(int fd, off_t length)
 
 #ifdef CONFIG_C_API
 
-extern "C" int truncate(int fd, off_t length)
+extern "C" int fsync(int fd)
 {
-    return hscfs::truncate(fd, length);
+    return hscfs::fsync(fd);
 }
 
 #endif

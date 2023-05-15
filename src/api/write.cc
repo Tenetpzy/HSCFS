@@ -15,7 +15,7 @@ ssize_t write(int fd, void *buffer, size_t count)
         opened_file *file = fs_manager->get_fd_array()->get_opened_file_of_fd(fd);
         return file->write(static_cast<char*>(buffer), count);
     }
-    catch (std::exception& e)
+    catch (const std::exception& e)
     {
         errno = exception_handler(fs_manager, e).convert_to_errno();
         return -1;
