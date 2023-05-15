@@ -118,9 +118,7 @@ int unlink(const char *pathname)
 
 #ifdef CONFIG_C_API
 
-extern "C" int unlink(const char *pathname);
-
-int unlink(const char *pathname)
+extern "C" int unlink(const char *pathname)
 {
     return hscfs::unlink(pathname);
 }

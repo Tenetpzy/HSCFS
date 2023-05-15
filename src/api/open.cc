@@ -144,9 +144,7 @@ int open(const char *pathname, int flags)
 
 #ifdef CONFIG_C_API
 
-extern "C" int open(const char *pathname, int flags, ...);
-
-int open(const char *pathname, int flags, ...)
+extern "C" int open(const char *pathname, int flags, ...)
 {
     return hscfs::open(pathname, flags);
 }

@@ -48,9 +48,7 @@ int close(int fd)
 
 #ifdef CONFIG_C_API
 
-extern "C" int close(int fd);
-
-int int close(int fd)
+extern "C" int close(int fd)
 {
     return hscfs::close(fd);
 }

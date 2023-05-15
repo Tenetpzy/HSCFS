@@ -41,9 +41,7 @@ int truncate(int fd, off_t length)
 
 #ifdef CONFIG_C_API
 
-extern "C" int truncate(int fd, off_t length);
-
-int truncate(int fd, off_t length)
+extern "C" int truncate(int fd, off_t length)
 {
     return hscfs::truncate(fd, length);
 }
