@@ -186,6 +186,8 @@ void file::write_back(bool write_meta_back)
 {
     std::lock_guard<std::mutex> fs_meta_lg(fs_manager->get_fs_meta_lock());
 
+    /* to do：若文件大小发生变化，则应该先expand */
+
     auto &dirty_pages = page_cache_->get_dirty_pages();
 
     write_back_helper wb_helper(fs_manager);

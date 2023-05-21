@@ -7,7 +7,7 @@
                 "${workspaceFolder}/inc",
                 "${workspaceFolder}/test/inc",
                 "${workspaceFolder}/third_party/**",
-                "/home/pzy/spdk_src/spdk/build/include"
+                "/home/pzy/software/spdk/build/include"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++",
