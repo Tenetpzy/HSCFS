@@ -8,9 +8,10 @@
 namespace hscfs {
 
 write_back_helper::write_back_helper(file_system_manager *fs_manager)
-    : super(fs_manager), sit_operator(fs_manager)
+    : sit_operator(fs_manager)
 {
     this->fs_manager = fs_manager;
+    this->super = fs_manager->get_super_manager();
 }
 
 uint32_t write_back_helper::do_write_back_async(block_buffer &buffer, uint32_t &lpa, block_type type,
@@ -18,9 +19,9 @@ uint32_t write_back_helper::do_write_back_async(block_buffer &buffer, uint32_t &
 {
     uint32_t new_lpa;
     if (type == block_type::data)
-        new_lpa = super.alloc_data_lpa();
+        new_lpa = super->alloc_data_lpa();
     else
-        new_lpa = super.alloc_node_lpa();
+        new_lpa = super->alloc_node_lpa();
     
     if (lpa != INVALID_LPA)
         sit_operator.invalidate_lpa(lpa);

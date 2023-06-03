@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include "communication/comm_api.h"
-#include "fs/super_manager.hh"
 #include "fs/SIT_utils.hh"
 
 namespace hscfs {
@@ -35,9 +34,15 @@ public:
     uint32_t do_write_back_async(block_buffer &buffer, uint32_t &lpa, block_type type, 
         comm_async_cb_func cb_func, void *cb_arg);
 
+    /*
+     * 将文件系统中所有脏元数据回写
+     * 返回该回写事务的淘汰保护信息
+     */
+    void write_meta_back_sync();
+
 private:
     file_system_manager *fs_manager;
-    super_manager super;
+    super_manager *super;
     SIT_operator sit_operator;
 };
 

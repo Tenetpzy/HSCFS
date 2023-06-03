@@ -94,11 +94,11 @@ public:
     ssize_t write(char *buffer, ssize_t count, uint64_t pos);
 
     /*
-     * 将所有脏页写回SSD
-     * 若write_meta_back为true, 同时将所有修改过的元数据写回SSD
-     * 调用者应持有file_op_lock独占或更高层级的独占锁
+     * 将所有脏页写回SSD，将这些页的脏标记去除
+     * 更新文件和文件系统的元数据，但不回写这些元数据
+     * 调用者应持有file_op_lock独占和fs_meta_lock，或更高层级的独占锁
      */
-    void write_back(bool write_meta_back = false);
+    void write_back();
 
 private:
     uint32_t ino;  // inode号
@@ -208,6 +208,12 @@ private:
      * 调用者需持有该page的page_lock，不得持有fs_meta_lock
      */
     void prepare_page_content(page_entry_handle &page);
+
+    /* 
+     * 回写时，检查是否需要扩展文件大小，若需要，则调整文件元数据进行扩展
+     * 调用者应持有file_op_lock独占和fs_meta_lock，或更高层级的锁
+     */
+    void write_back_append();
 
     friend class file_obj_cache;
     friend class file_handle;

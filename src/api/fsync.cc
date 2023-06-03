@@ -18,7 +18,9 @@ int fsync(int fd)
             opened_file *file = fs_manager->get_fd_array()->get_opened_file_of_fd(fd);
             file_handle &handle = file->get_file_handle();
             rwlock_guard file_op_lg(handle->get_file_op_lock(), rwlock_guard::lock_type::wrlock);
+            std::lock_guard<std::mutex> fs_meta_lg(fs_manager->get_fs_meta_lock());
             handle->write_back();
+            /* TODO : 写回文件系统元数据 */
             return 0;
         }
         catch (const std::exception &e)

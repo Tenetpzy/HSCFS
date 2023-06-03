@@ -6,6 +6,7 @@
 #include "fs/fd_array.hh"
 #include "fs/file.hh"
 #include "fs/srmap_utils.hh"
+#include "fs/super_manager.hh"
 #include "journal/journal_container.hh"
 #include "fs/fs_manager.hh"
 #include "utils/hscfs_exceptions.hh"
@@ -33,6 +34,7 @@ void file_system_manager::init(comm_dev *device)
 
     g_fs_manager.super = std::make_unique<super_cache>(device, super_block_lpa);
     g_fs_manager.super->read_super_block();
+    g_fs_manager.sp_manager = std::make_unique<super_manager>(&g_fs_manager);
     g_fs_manager.d_cache = std::make_unique<dentry_cache>(dentry_cache_size, &g_fs_manager);
     g_fs_manager.node_cache = std::make_unique<node_block_cache>(&g_fs_manager, node_cache_size);
     g_fs_manager.dir_data_cache = std::make_unique<dir_data_block_cache>(dir_data_cache_size);

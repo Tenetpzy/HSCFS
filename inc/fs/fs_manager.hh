@@ -9,6 +9,7 @@ struct comm_dev;
 
 namespace hscfs {
 
+class super_manager;
 class super_cache;
 class node_block_cache;
 class SIT_NAT_cache;
@@ -42,6 +43,11 @@ public:
     rwlock_t& get_fs_freeze_lock() noexcept
     {
         return fs_freeze_lock;
+    }
+
+    super_manager* get_super_manager() const noexcept
+    {
+        return sp_manager.get();
     }
 
     super_cache* get_super_cache() const noexcept
@@ -125,6 +131,7 @@ private:
     rwlock_t fs_freeze_lock;
 
     std::unique_ptr<super_cache> super;
+    std::unique_ptr<super_manager> sp_manager;
     std::unique_ptr<dentry_cache> d_cache;
     std::unique_ptr<node_block_cache> node_cache;
     std::unique_ptr<dir_data_block_cache> dir_data_cache;

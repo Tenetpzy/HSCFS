@@ -29,7 +29,7 @@ void node_block_cache::sub_refcount(node_block_cache_entry *entry)
         {
             /* 释放它的nid */
             HSCFS_LOG(HSCFS_LOG_INFO, "delete node %u.", entry->nid);
-            super_manager(fs_manager).free_nid(entry->nid);
+            fs_manager->get_super_manager()->free_nid(entry->nid);
 
             /* 将它占有的lpa标记为垃圾块 */
             uint32_t cur_lpa = INVALID_LPA;
@@ -185,7 +185,7 @@ node_block_cache_entry_handle node_cache_helper::get_node_entry(uint32_t nid, ui
 node_block_cache_entry_handle node_cache_helper::create_node_entry(uint32_t ino, uint32_t noffset, uint32_t parent_nid)
 {
     /* 分配nid，创建node block缓存项并加入缓存 */
-    uint32_t new_nid = super_manager(fs_manager).alloc_nid(ino);
+    uint32_t new_nid = fs_manager->get_super_manager()->alloc_nid(ino);
     auto handle = node_cache->add(block_buffer(), new_nid, parent_nid, INVALID_LPA);
     hscfs_node *node = handle->get_node_block_ptr();
 
@@ -204,7 +204,7 @@ node_block_cache_entry_handle node_cache_helper::create_node_entry(uint32_t ino,
 node_block_cache_entry_handle node_cache_helper::create_inode_entry()
 {
     /* 分配nid，创建inode block缓存项并加入缓存 */
-    uint32_t new_nid = super_manager(fs_manager).alloc_nid(INVALID_NID, true);
+    uint32_t new_nid = fs_manager->get_super_manager()->alloc_nid(INVALID_NID, true);
     auto handle = node_cache->add(block_buffer(), new_nid, INVALID_NID, INVALID_LPA);
     hscfs_node *node = handle->get_node_block_ptr();
 

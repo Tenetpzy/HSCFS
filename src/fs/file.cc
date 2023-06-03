@@ -182,11 +182,10 @@ ssize_t file::write(char *buffer, ssize_t count, uint64_t pos)
     return write_count;
 }
 
-void file::write_back(bool write_meta_back)
+void file::write_back()
 {
-    std::lock_guard<std::mutex> fs_meta_lg(fs_manager->get_fs_meta_lock());
-
-    /* to do：若文件大小发生变化，则应该先expand */
+    /* 若文件大小增加，则expand */
+    write_back_append();
 
     auto &dirty_pages = page_cache_->get_dirty_pages();
 
@@ -217,7 +216,6 @@ void file::write_back(bool write_meta_back)
         throw io_error("write back page cache failed.");
     
     page_cache_->clear_dirty_pages();  // 清除页面的脏标记
-    srmap_util->write_dirty_srmap_sync();  // 写回SRMAP
 }
 
 bool file::mark_dirty()
@@ -330,6 +328,18 @@ void file::prepare_page_content(page_entry_handle &page)
     HSCFS_LOG(HSCFS_LOG_DEBUG, "the LPA of page offset %u in file(ino = %u) is %u.", blkoff, ino, page_addr.lpa);
     page->set_lpa(page_addr.lpa);
     page->get_page_buffer().read_from_lpa(fs_manager->get_device(), page_addr.lpa);
+}
+
+void file::write_back_append()
+{
+    node_cache_helper node_helper(fs_manager);
+    auto inode_handle = node_helper.get_node_entry(ino, INVALID_NID);
+    hscfs_inode *inode = &inode_handle->get_node_block_ptr()->i;
+    if (size > inode->i_size)
+    {
+        file_resizer resizer(fs_manager);
+        resizer.expand(ino, size);
+    }
 }
 
 file_obj_cache::file_obj_cache(size_t expect_size, file_system_manager *fs_manager)

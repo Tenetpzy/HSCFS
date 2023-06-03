@@ -116,11 +116,11 @@ struct hscfs_inode {
 
 struct direct_node {
 	__le32 addr[DEF_ADDRS_PER_BLOCK];	/* array of data block address */
-} __attribute__((packed));
+};
 
 struct indirect_node {
 	__le32 nid[NIDS_PER_BLOCK];	/* array of data block address */
-} __attribute__((packed));
+};
 
 struct node_footer {
 	__le32 nid;		/* node id */
