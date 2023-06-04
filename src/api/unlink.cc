@@ -59,45 +59,49 @@ int unlink(const char *pathname)
 
             if (nlink == 0)
             {
-                /* 如果目标文件仍有fd引用，等待全部close后删除 */
-                if (target_dentry->get_fd_refcount() > 0)
+                file_obj_cache *file_cache = fs_manager->get_file_obj_cache();
+                uint32_t target_ino = target_dentry->get_ino();
+                file_handle target_handle;
+                bool delete_now = true;
+
+                /* 检查是否有fd引用（如果有，则file对象一定存在） */
+                if (file_cache->contains(target_ino))
                 {
-                    HSCFS_LOG(HSCFS_LOG_INFO, "unlink target file(%s) is still referred by fd, "
-                        "will be deleted later.", abs_path.c_str());
-                    target_dentry->set_state(dentry_state::deleted_referred_by_fd);
+                    target_handle = file_cache_helper(file_cache).get_file_obj(target_ino);
+                    if (target_handle->get_fd_refcount() > 0)  // 当前还有fd引用，则暂时不删除
+                    {
+                        HSCFS_LOG(HSCFS_LOG_INFO, "unlink target file(%s) is still referred by fd, "
+                            "will be deleted later.", abs_path.c_str());
+                        delete_now = false;
+                    }
                 }
-                else  // 否则直接删除
+                
+                if (delete_now)
                 {
                     HSCFS_LOG(HSCFS_LOG_INFO, "delete file(%s).", abs_path.c_str());
 
-                    target_dentry->set_state(dentry_state::deleted);
-                    uint32_t target_ino = target_dentry->get_ino();
-                    file_obj_cache *file_cache = fs_manager->get_file_obj_cache();
-
                     /* 如果file obj cache中存在file对象，则通过file handle删除(可同时删除file对象) */
-                    if (file_cache->contains(target_ino))
-                    {
-                        file_handle target_handle = file_cache_helper(file_cache).get_file_obj(target_ino, 
-                            target_dentry);
+                    if (!target_handle.is_empty())
                         target_handle.delete_file();
-                    }
 
                     /* 没有file对象，直接在文件系统中删除 */
                     else
                         file_deletor(fs_manager).delete_file(target_ino);
                 }
-
-                target_dentry.mark_dirty();
-
-                /* 在父目录文件中删除目录项 */
-                HSCFS_LOG(HSCFS_LOG_DEBUG, "removing file(%s)'s dentry in its directory.", abs_path.c_str());
-                auto &parent_key = target_dentry->get_parent_key();
-                auto parent_dentry = fs_manager->get_dentry_cache()->get(parent_key.dir_ino, parent_key.name);
-                assert(!parent_dentry.is_empty());
-                directory parent_dir(parent_dentry, fs_manager);
-                parent_dir.remove(target_dentry);
             }
-            
+
+            /* 将目录项缓存中的对象标记为删除 */
+            target_dentry->set_state(dentry_state::deleted);
+            target_dentry.mark_dirty();
+
+            /* 在父目录文件中删除pathname对应的目录项 */
+            HSCFS_LOG(HSCFS_LOG_DEBUG, "removing file(%s)'s dentry in its directory.", abs_path.c_str());
+            auto &parent_key = target_dentry->get_parent_key();
+            auto parent_dentry = fs_manager->get_dentry_cache()->get(parent_key.dir_ino, parent_key.name);
+            assert(!parent_dentry.is_empty());
+            directory parent_dir(parent_dentry, fs_manager);
+            parent_dir.remove(target_dentry);
+
             return 0;
         }
         catch(const std::exception &e)

@@ -26,13 +26,6 @@ dentry_handle directory::create(const std::string &name, uint8_t type, const den
      * 调用者提供的create_pos_hint可能是不正确的（如果此目录添加过文件，且这个位置是SSD返回）
      */
 
-    /* 检查是否存在状态为deleted_referred_by_fd的老目录项。如果存在，不允许创建 */
-    {
-        dentry_handle d_handle = fs_manager->get_dentry_cache()->get(ino, name);
-        if (!d_handle.is_empty() && d_handle->get_state() == dentry_state::deleted_referred_by_fd)
-            throw create_file_in_delete_referred_state();
-    }
-    
     dentry_store_pos create_pos;  // 最终决定的目录项创建位置
     dir_data_block_handle create_blk_handle;  // 创建位置对应的块
     std::tie(create_blk_handle, create_pos) = get_create_pos(name, create_pos_hint);
@@ -53,13 +46,6 @@ dentry_handle directory::create(const std::string &name, uint8_t type, const den
 
 void directory::link(const std::string &name, uint32_t link_ino, const dentry_store_pos *create_pos_hint)
 {
-    /* 检查是否存在状态为deleted_referred_by_fd的老目录项。如果存在，不允许创建 */
-    {
-        dentry_handle d_handle = fs_manager->get_dentry_cache()->get(ino, name);
-        if (!d_handle.is_empty() && d_handle->get_state() == dentry_state::deleted_referred_by_fd)
-            throw create_file_in_delete_referred_state();
-    }
-    
     dentry_store_pos create_pos;  // 最终决定的目录项创建位置
     dir_data_block_handle create_blk_handle;  // 创建位置对应的块
     std::tie(create_blk_handle, create_pos) = get_create_pos(name, create_pos_hint);
@@ -504,7 +490,6 @@ dentry_handle directory::create_dentry(const std::string &name, uint8_t type, ui
     if (!d_handle.is_empty())  // dentry cache中已经存在目录项，则一定为deleted状态
     {
         assert(d_handle->get_state() == dentry_state::deleted);
-        assert(d_handle->get_fd_refcount() == 0);
         assert(d_handle->get_key().name == name);
         assert(d_handle->get_key().dir_ino == ino);
 

@@ -47,7 +47,6 @@ class file_system_manager;
 enum class dentry_state
 {
     valid,
-    deleted_referred_by_fd,
     deleted
 };
 
@@ -119,21 +118,6 @@ public:
         return pos;
     }
 
-    void add_fd_refcount() noexcept
-    {
-        ++fd_ref_count;
-    }
-
-    void sub_fd_refcount() noexcept
-    {
-        --fd_ref_count;
-    }
-
-    uint32_t get_fd_refcount() const noexcept
-    {
-        return fd_ref_count;
-    }
-
     /* 当dentry为deleted，且又需要创建一个同名目录项时，可直接使用以下两个方法设置新属性 */
     void set_ino(uint32_t ino) noexcept
     {
@@ -155,7 +139,6 @@ private:
     
     file_system_manager *fs_manager;
     uint32_t ref_count;
-    uint32_t fd_ref_count;  // 当前有多少个fd引用。删除文件时，根据此字段的值将dentry设置为不同的删除状态
     dentry_state state;
 
     /* 
@@ -228,10 +211,7 @@ public:
         return entry == nullptr;
     }
 
-    /* 
-     * 封装目录项是否存在的检查。
-     * 需要创建该目录项时不应该使用此接口，因为目录项有可能处于不存在(已删除)但仍被fd引用的情况，此时不能创建 
-     */
+    /* 封装目录项是否存在的检查 */
     bool is_exist() const noexcept
     {
         return entry != nullptr && entry->get_state() == dentry_state::valid;

@@ -60,6 +60,7 @@ int rmdir(const char *pathname)
             /* 释放目录文件资源 */
             file_deletor(fs_manager).delete_dir_with_data_cache(target_dentry->get_ino());
             target_dentry->set_state(dentry_state::deleted);
+            target_dentry.mark_dirty();
 
             /* 删除目录项 */
             auto &parent_key = target_dentry->get_key();

@@ -16,7 +16,7 @@
 
 namespace hscfs {
 
-file::file(uint32_t ino, const dentry_handle &dentry, file_system_manager *fs_manager)
+file::file(uint32_t ino, file_system_manager *fs_manager)
 {
     this->ino = ino;
     this->fs_manager = fs_manager;
@@ -35,7 +35,6 @@ file::file(uint32_t ino, const dentry_handle &dentry, file_system_manager *fs_ma
     ref_count = 0;
     fd_ref_count = 0;
     is_dirty = false;
-    this->dentry = dentry;
 }
 
 file::~file()
@@ -48,18 +47,6 @@ file::~file()
     assert(fd_ref_count <= ref_count);
     spin_destroy(&file_meta_lock);
     rwlock_destroy(&file_op_lock);
-}
-
-void file::add_fd_refcount()
-{
-    ++fd_ref_count;
-    dentry->add_fd_refcount();
-}
-
-void file::sub_fd_refcount()
-{
-    --fd_ref_count;
-    dentry->sub_fd_refcount();
 }
 
 bool file::truncate(size_t tar_size)
@@ -238,6 +225,7 @@ void file::read_meta()
     assert(ino == node->footer.ino);
     assert(ino == node->footer.nid);
     assert(0 == node->footer.offset);
+    assert(inode->i_type == HSCFS_FT_REG_FILE);
 
     #ifdef CONFIG_PRINT_DEBUG_INFO
     print_inode_meta(ino, inode);
@@ -353,9 +341,9 @@ file_obj_cache::file_obj_cache(size_t expect_size, file_system_manager *fs_manag
             "file object cache: init dirty files lock failed.");
 }
 
-file_handle file_obj_cache::add(uint32_t ino, const dentry_handle &dentry)
+file_handle file_obj_cache::add(uint32_t ino)
 {
-    auto p_entry = std::make_unique<file>(ino, dentry, fs_manager);
+    auto p_entry = std::make_unique<file>(ino, fs_manager);
     assert(cache_manager.get(ino) == nullptr);
     file *raw_p = p_entry.get();
     cache_manager.add(ino, p_entry);
@@ -431,10 +419,6 @@ void file_obj_cache::remove_file(file *entry)
         entry->is_dirty = false;
     }
 
-    /* 修改对应的dentry状态 */
-    entry->dentry->set_state(dentry_state::deleted);
-    entry->dentry.mark_dirty();
-
     /* 在缓存中移除file对象 */
     assert(entry->ref_count == 1);  // 此方法必然由最后一个引用file的handle调用，因此ref_count只可能为1
     entry->ref_count = 0;
@@ -488,7 +472,7 @@ void file_handle::do_subref()
         cache->sub_refcount(entry);
 }
 
-file_handle file_cache_helper::get_file_obj(uint32_t ino, const dentry_handle &dentry)
+file_handle file_cache_helper::get_file_obj(uint32_t ino)
 {
     file_handle target_file = file_cache->get(ino);
 
@@ -499,7 +483,7 @@ file_handle file_cache_helper::get_file_obj(uint32_t ino, const dentry_handle &d
      */
     if (target_file.is_empty())
     {
-        target_file = file_cache->add(ino, dentry);
+        target_file = file_cache->add(ino);
         target_file->read_meta();
     }
 

@@ -74,7 +74,7 @@ int link(const char *oldpath, const char *newpath)
             path_lookup_proc.set_rel_path(new_dir_dentry, new_file);
             dentry_store_pos create_pos_hint;
             dentry_handle new_file_dentry = path_lookup_proc.do_path_lookup(&create_pos_hint);
-            if (!new_file_dentry.is_empty() && new_file_dentry->get_state() != dentry_state::deleted)
+            if (new_file_dentry.is_exist())
             {
                 errno = EEXIST;
                 return -1;

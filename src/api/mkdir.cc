@@ -48,7 +48,7 @@ int mkdir(const char *pathname)
             path_lookup_proc.set_rel_path(dir_dentry, file);
             dentry_store_pos create_pos_hint;
             dentry_handle target_dentry = path_lookup_proc.do_path_lookup(&create_pos_hint);
-            if (!target_dentry.is_empty() && target_dentry->get_state() != dentry_state::deleted)
+            if (target_dentry.is_exist())
             {
                 errno = EEXIST;
                 return -1;

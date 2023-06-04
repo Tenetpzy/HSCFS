@@ -20,22 +20,28 @@ class file
 public:
 
     /* 构造后，元数据信息(size、atime、mtime、nlink、is_dirty无效，需要通过read_meta读上来) */
-    file(uint32_t ino, const dentry_handle &dentry, file_system_manager *fs_manager);
+    file(uint32_t ino, file_system_manager *fs_manager);
     ~file();
 
     /*
      * 在创建opened_file结构时调用
-     * 增加file和其关联的dentry的fd引用计数
+     * 增加file的fd引用计数
      * 调用者需持有fs_meta_lock
      */
-    void add_fd_refcount();
+    void add_fd_refcount()
+    {
+        ++fd_ref_count;
+    }
 
     /*
      * opened_file结构销毁时由系统调用
-     * 增加file和其关联的dentry的fd引用计数
+     * 减少file的fd引用计数
      * 调用者需持有fs_meta_lock
      */
-    void sub_fd_refcount();
+    void sub_fd_refcount()
+    {
+        --fd_ref_count;
+    }
 
     uint32_t get_fd_refcount() const noexcept
     {
@@ -137,7 +143,6 @@ private:
     uint32_t fd_ref_count;
 
     /* 当前文件对应的目录项 */
-    dentry_handle dentry;
 
     /* 
      * 对文件操作的锁。对file进行任何操作前，获取该锁的共享/独占
@@ -292,7 +297,6 @@ public:
     /*
      * 删除该文件，释放该文件的全部资源，从file_obj_cache中移除entry
      * 调用此方法后，this无效，is_empty返回true，调用者不应再使用此句柄
-     * 将对应dentry状态置为deleted，标记dirty
      * 调用者需持有fs_meta_lock
      */
     void delete_file();
@@ -314,7 +318,7 @@ public:
     file_obj_cache(size_t expect_size, file_system_manager *fs_manager);
 
     /* add、get、contains的调用者需要获取fs_meta_lock */
-    file_handle add(uint32_t ino, const dentry_handle &dentry);
+    file_handle add(uint32_t ino);
     file_handle get(uint32_t ino);
     bool contains(uint32_t ino);   // 检查当前file_obj_cache中，是否存在inode为ino的file对象
 
@@ -369,13 +373,12 @@ public:
     }
 
     /*
-     * 获得inode对应的file对象
-     * 参数为file对象的ino，该inode对应的dentry
+     * 获得ino对应的file对象
      * 保证返回的file对象内元数据有效
      * 调用者应确保ino和dentry合法
      * 调用者需持有fs_meta_lock 
      */
-    file_handle get_file_obj(uint32_t ino, const dentry_handle &dentry);
+    file_handle get_file_obj(uint32_t ino);
 
 private:
     file_obj_cache *file_cache;

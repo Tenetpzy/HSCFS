@@ -52,7 +52,7 @@ int open(const char *pathname, int flags)
             dentry_handle dir_dentry = proc.do_path_lookup();
 
             /* 目录不存在或不是目录 */
-            if (dir_dentry.is_empty() || dir_dentry->get_type() != HSCFS_FT_DIR)
+            if (!dir_dentry.is_exist() || dir_dentry->get_type() != HSCFS_FT_DIR)
             {
                 errno = ENOENT;
                 return -1;
@@ -64,7 +64,7 @@ int open(const char *pathname, int flags)
             dentry_handle target_dentry = proc.do_path_lookup(&target_pos_hint);
 
             /* 如果目标文件不存在，查看是否有O_CREATE标志 */
-            if (target_dentry.is_empty() || target_dentry->get_state() == dentry_state::deleted)
+            if (!target_dentry.is_exist())
             {
                 /* 如果有O_CREAT，则创建该文件 */
                 if (flags & O_CREAT)
@@ -82,27 +82,15 @@ int open(const char *pathname, int flags)
                 }
             }
 
-            /* 如果目标文件存在，判断其它错误情况 */
-            else
+            /* 如果目标文件存在，但不是普通文件，返回错误 */
+            else if (target_dentry->get_type() != HSCFS_FT_REG_FILE)
             {
-                /* 如果目标文件不是普通文件，返回错误 */
-                if (target_dentry->get_type() != HSCFS_FT_REG_FILE)
-                {
-                    errno = EISDIR;
-                    return -1;
-                }
-
-                /* 如果目标文件已被删除，但仍然被fd引用，则不允许打开或创建该文件 */
-                if (target_dentry->get_state() == dentry_state::deleted_referred_by_fd)
-                {
-                    errno = EACCES;
-                    return -1;
-                }
+                errno = EISDIR;
+                return -1;
             }
 
             /* 此时目标文件一定存在，获得目标文件的file对象 */
-            file_handle file = file_cache_helper(fs_manager->get_file_obj_cache())
-                .get_file_obj(target_dentry->get_ino(), target_dentry);
+            file_handle file = file_cache_helper(fs_manager->get_file_obj_cache()).get_file_obj(target_dentry->get_ino());
 
             /* 分配opened_file结构，增加file和dentry的fd引用计数 */
             auto p_opened_file = std::make_shared<opened_file>(flags, file);
