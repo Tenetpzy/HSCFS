@@ -217,13 +217,11 @@ public:
         return node_block_cache_entry_handle(p_entry, this);
     }
 
-    std::list<node_block_cache_entry_handle> get_dirty_list() const noexcept
-    {
-        return dirty_list;
-    }
-
-    /* 将dirty list中的缓存项置为uptodate状态，并清空dirty list */
-    void clear_dirty_list()
+    /* 
+     * 清除dirty list中的node缓存项的dirty标记，清空dirty list，并返回原先的dirty list用作淘汰保护
+     * 返回的dirty list中的元素，已经不带脏标记。
+     */
+    std::list<node_block_cache_entry_handle> get_and_clear_dirty_list()
     {
         for (auto &handle :dirty_list)
         {
@@ -231,7 +229,11 @@ public:
                 handle.entry->ref_count >= 1);
             handle.entry->state = node_block_cache_entry_state::uptodate;
         }
-        dirty_list.clear();
+
+        std::list<node_block_cache_entry_handle> ret;
+        dirty_list.swap(ret);
+        assert(dirty_list.size() == 0);
+        return ret;
     }
 
     void force_replace()

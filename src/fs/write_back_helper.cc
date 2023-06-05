@@ -32,4 +32,10 @@ uint32_t write_back_helper::do_write_back_async(block_buffer &buffer, uint32_t &
     return lpa;
 }
 
+transaction_replace_protect_record write_back_helper::write_meta_back_sync()
+{
+    /* 回写node block */
+    
+}
+
 } // namespace hscfs

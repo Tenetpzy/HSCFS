@@ -5,6 +5,8 @@
 #include <utility>
 #include <cassert>
 #include <vector>
+#include <tuple>
+#include <type_traits>
 
 struct hscfs_dentry_block;
 
@@ -209,6 +211,29 @@ public:
             else
                 ++it;
         }
+    }
+
+    /* 
+     * 清除dirty blks中的dir data缓存项的dirty标记，清空dirty blks，并返回原先的dirty blks用作淘汰保护
+     * 返回的dirty blks中的元素，已经不带脏标记。
+     */
+    std::unordered_map<uint32_t, std::vector<dir_data_block_handle>> get_and_clear_dirty_blks()
+    {
+        for (auto &entry: dirty_blks)
+        {
+            std::vector<dir_data_block_handle> &dirty_list = entry.second;
+            for (auto &handle: dirty_list)
+            {
+                assert(handle.entry->state == dir_data_block_entry_state::dirty &&
+                    handle.entry->ref_count >= 1);
+                handle.entry->state = dir_data_block_entry_state::uptodate;
+            }
+        }
+
+        std::unordered_map<uint32_t, std::vector<dir_data_block_handle>> ret;
+        dirty_blks.swap(ret);
+        assert(dirty_blks.size() == 0);
+        return ret;
     }
 
 private:

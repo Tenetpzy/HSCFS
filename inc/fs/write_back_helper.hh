@@ -3,6 +3,7 @@
 #include <cstdint>
 #include "communication/comm_api.h"
 #include "fs/SIT_utils.hh"
+#include "fs/replace_proc.hh"
 
 namespace hscfs {
 
@@ -38,7 +39,7 @@ public:
      * 将文件系统中所有脏元数据回写
      * 返回该回写事务的淘汰保护信息
      */
-    void write_meta_back_sync();
+    transaction_replace_protect_record write_meta_back_sync();
 
 private:
     file_system_manager *fs_manager;

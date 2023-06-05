@@ -1,6 +1,6 @@
 #pragma once
 
-#include <list>
+#include <vector>
 #include <string>
 #include <cassert>
 #include "cache/cache_manager.hh"
@@ -289,11 +289,19 @@ public:
         return dentry_handle(entry, this);
     }
 
+    std::vector<dentry_handle> get_and_clear_dirty_list()
+    {
+        std::vector<dentry_handle> ret;
+        dirty_list.swap(ret);
+        assert(dirty_list.size() == 0);
+        return ret;
+    }
+
 private:
     size_t expect_size, cur_size;
     file_system_manager *fs_manager;
     generic_cache_manager<dentry_key, dentry> cache_manager;
-    std::list<dentry_handle> dirty_list;
+    std::vector<dentry_handle> dirty_list;
 
     void add_refcount(dentry *entry)
     {
