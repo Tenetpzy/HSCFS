@@ -20,7 +20,6 @@ namespace hscfs {
  * EINVAL：pathname或flags不合法
  * ENOENT：路径中某个目录项不存在
  * EISDIR：试图打开目录文件
- * EACCES：目标文件已经被删除，但此时系统中仍有引用，不允许再次打开或创建同名文件
  * ENOTRECOVERABLE：文件系统出现内部错误，无法恢复正常状态
  */
 int open(const char *pathname, int flags)

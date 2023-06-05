@@ -73,13 +73,6 @@ public:
     user_path_invalid(const char *s): std::logic_error(s) {}
 };
 
-/* 文件被删除，但还有引用时，试图创建文件。 */
-class create_file_in_delete_referred_state: public std::logic_error
-{
-public:
-    create_file_in_delete_referred_state(): std::logic_error("create file in deleted but refered state.") {}
-};
-
 /* 用户提供的fd参数无效 */
 class invalid_fd: public std::logic_error
 {
