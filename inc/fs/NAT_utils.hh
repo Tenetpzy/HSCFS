@@ -18,6 +18,9 @@ public:
     /* 访问NAT表，得到nid的lpa */
     uint32_t get_lpa_of_nid(uint32_t nid);
 
+    /* 将NAT表中nid对应表项的lba字段更改为new_lpa */
+    void set_lpa_of_nid(uint32_t nid, uint32_t new_lpa);
+
 private:
     uint32_t nat_start_lpa;
     uint32_t nat_segment_cnt;

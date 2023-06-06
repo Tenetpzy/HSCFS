@@ -32,16 +32,11 @@ void node_block_cache::sub_refcount(node_block_cache_entry *entry)
             fs_manager->get_super_manager()->free_nid(entry->nid);
 
             /* 将它占有的lpa标记为垃圾块 */
-            uint32_t cur_lpa = INVALID_LPA;
-            if (entry->new_lpa != INVALID_LPA)  // 有新地址，则标记新地址，旧地址(如果有)应当在写入时标记过了
-                cur_lpa = entry->new_lpa;
-            else if (entry->old_lpa != INVALID_LPA)  // 否则，如果有旧地址（说明不是新创建且未写入的），则标记旧地址
-                cur_lpa = entry->old_lpa;
-            if (cur_lpa != INVALID_LPA)
+            if (entry->lpa != INVALID_LPA)
             {
                 HSCFS_LOG(HSCFS_LOG_INFO, "the lpa of nid [%u] is [%u], will be invalidated.", 
-                    entry->nid, cur_lpa);
-                SIT_operator(fs_manager).invalidate_lpa(cur_lpa);
+                    entry->nid, entry->lpa);
+                SIT_operator(fs_manager).invalidate_lpa(entry->lpa);
             }
 
             /* 将缓存项移除 */

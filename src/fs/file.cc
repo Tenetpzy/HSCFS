@@ -194,7 +194,7 @@ void file::write_back()
         block_addr_info addr = fm_util.update_block_mapping(ino, page_handle->get_blkoff(), new_lpa);
 
         /* 写入SRMAP表 */
-        srmap_util->write_srmap_of_data(new_lpa, addr.nid, addr.nid_off);
+        srmap_util->write_srmap_of_data(new_lpa, ino, page_handle->get_blkoff());
     }
 
     /* 等待所有异步I/O完成 */

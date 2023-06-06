@@ -36,7 +36,7 @@ public:
         comm_async_cb_func cb_func, void *cb_arg);
 
     /*
-     * 将文件系统中所有脏元数据回写
+     * 生成一个元数据回写事务，将文件系统中所有脏元数据回写
      * 返回该回写事务的淘汰保护信息
      */
     transaction_replace_protect_record write_meta_back_sync();

@@ -6,7 +6,6 @@
 #include <cassert>
 #include <vector>
 #include <tuple>
-#include <type_traits>
 
 struct hscfs_dentry_block;
 
@@ -45,14 +44,24 @@ public:
         return key;
     }
 
+    uint32_t& get_lpa_ref() noexcept
+    {
+        return lpa;
+    }
+
     hscfs_dentry_block* get_block_ptr() noexcept
     {
         return reinterpret_cast<hscfs_dentry_block*>(block.get_ptr());
     }
 
+    block_buffer& get_block_buffer() noexcept
+    {
+        return block;
+    }
+
 private:
     dir_data_block_entry_key key;  // hash key
-    uint32_t origin_lpa, commit_lpa;  // block的旧lpa，和写入时应写的新lpa
+    uint32_t lpa;
     block_buffer block;
 
     dir_data_block_entry_state state;

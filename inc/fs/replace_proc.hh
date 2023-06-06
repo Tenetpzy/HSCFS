@@ -17,7 +17,7 @@ public:
     transaction_replace_protect_record(uint32_t tx_id, std::list<node_block_cache_entry_handle> &&dirty_nodes_,
         std::vector<dentry_handle> &&dirty_dentrys_, std::unique_ptr<journal_container> &tx_journal, 
         std::vector<uint32_t> &&uncommit_node_segs_, std::vector<uint32_t> &&uncommit_data_segs_);
-    
+
     
 
 private:

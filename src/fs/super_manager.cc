@@ -90,6 +90,22 @@ uint32_t super_manager::alloc_data_lpa()
     return alloc_lpa_inner(ctx);
 }
 
+std::vector<uint32_t> super_manager::get_and_clear_uncommit_node_segs()
+{
+    std::vector<uint32_t> ret;
+    uncommit_node_segs.swap(ret);
+    assert(uncommit_node_segs.size() == 0);
+    return ret;
+}
+
+std::vector<uint32_t> super_manager::get_and_clear_uncommit_data_segs()
+{
+    std::vector<uint32_t> ret;
+    uncommit_data_segs.swap(ret);
+    assert(uncommit_data_segs.size() == 0);
+    return ret;
+}
+
 lpa_alloc_context super_manager::create_lpa_alloc_context(lpa_alloc_type type)
 {
     if (type == lpa_alloc_type::node)

@@ -110,11 +110,14 @@ public:
         return fd_arr.get();
     }
 
-    // 获取运行时的修改日志容器，未提交时所有修改日志写入此容器
+    /* 获取运行时的修改日志容器，未提交时所有修改日志写入此容器 */
     journal_container* get_cur_journal() const noexcept
     {
         return cur_journal.get();
     }
+
+    /* 返回cur_journal，然后将cur_journal清空 */
+    std::unique_ptr<journal_container> get_and_reset_cur_journal() noexcept;
 
     /* 置为不可恢复状态 */
     void set_unrecoverable() noexcept

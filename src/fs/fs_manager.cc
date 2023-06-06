@@ -53,6 +53,13 @@ void file_system_manager::init(comm_dev *device)
     g_fs_manager.is_unrecoverable = false;
 }
 
+std::unique_ptr<journal_container> file_system_manager::get_and_reset_cur_journal() noexcept
+{
+    std::unique_ptr<journal_container> ret = std::make_unique<journal_container>();
+    cur_journal.swap(ret);
+    return ret;
+}
+
 void file_system_manager::check_state() const
 {
     if (is_unrecoverable)

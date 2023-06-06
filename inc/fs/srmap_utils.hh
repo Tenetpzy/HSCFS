@@ -17,7 +17,7 @@ public:
     srmap_utils(file_system_manager *fs_manager);
     ~srmap_utils();
 
-    void write_srmap_of_data(uint32_t data_lpa, uint32_t nid, uint32_t offset);
+    void write_srmap_of_data(uint32_t data_lpa, uint32_t ino, uint32_t blkoff);
 
     void write_srmap_of_node(uint32_t node_lpa, uint32_t nid);
 

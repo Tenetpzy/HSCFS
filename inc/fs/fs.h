@@ -215,6 +215,14 @@ struct hscfs_sit_block {
 #define	SUMMARY_SIZE		8	/* sizeof(struct summary) */
 
 /* a summary entry for a 4KB-sized block in a segment */
+/* 
+ * 对于node block，nid字段为它的nid，ofs_in_node无效
+ * 
+ * 对于data block，nid字段为所属文件inode号(而不是直接索引该data block的node block)
+ * ofs_in_node实际保存块偏移(而不是索引node block内的索引项偏移)
+ * 这么做的原因：node block的淘汰保护，要求非叶节点必须在缓存中，
+ * 因此不能只记录直接索引的node block，这样在垃圾回收修改node block时无法满足前述要求，会出现叶节点在缓存而非叶节点不在的情况。
+ */
 struct hscfs_summary {
 	__le32 nid;		/* parent node id */
 	__le32 ofs_in_node;	/* block index in parent node */

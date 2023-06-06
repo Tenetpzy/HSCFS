@@ -21,15 +21,15 @@ srmap_utils::~srmap_utils()
         HSCFS_LOG(HSCFS_LOG_WARNING, "SRMAP cache still has dirty lpa while destructed.");
 }
 
-void srmap_utils::write_srmap_of_data(uint32_t data_lpa, uint32_t nid, uint32_t offset)
+void srmap_utils::write_srmap_of_data(uint32_t data_lpa, uint32_t ino, uint32_t blkoff)
 {
     uint32_t srmap_lpa, srmap_idx;
     std::tie(srmap_lpa, srmap_idx) = get_srmap_pos_of_lpa(data_lpa);
     block_buffer &buffer = get_srmap_blk(srmap_lpa);
     hscfs_summary_block *srmap_blk = reinterpret_cast<hscfs_summary_block*>(buffer.get_ptr());
-    srmap_blk->entries[srmap_idx].nid = nid;
-    srmap_blk->entries[srmap_idx].ofs_in_node = offset;
-    HSCFS_LOG(HSCFS_LOG_INFO, "set srmap of data lpa %u: nid = %u, offset = %u.", data_lpa, nid, offset);
+    srmap_blk->entries[srmap_idx].nid = ino;
+    srmap_blk->entries[srmap_idx].ofs_in_node = blkoff;
+    HSCFS_LOG(HSCFS_LOG_INFO, "set srmap of data lpa %u: ino = %u, blkoff = %u.", data_lpa, ino, blkoff);
     dirty_blks.insert(srmap_lpa);
 }
 

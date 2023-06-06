@@ -52,6 +52,9 @@ public:
     uint32_t alloc_node_lpa();
     uint32_t alloc_data_lpa();
 
+    std::vector<uint32_t> get_and_clear_uncommit_node_segs();
+    std::vector<uint32_t> get_and_clear_uncommit_data_segs();
+
 private:
     file_system_manager *fs_manager;
     super_cache &super;

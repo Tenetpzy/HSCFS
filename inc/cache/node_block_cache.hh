@@ -19,29 +19,24 @@ enum class node_block_cache_entry_state
 class node_block_cache_entry
 {
 public:
-    node_block_cache_entry(block_buffer &&buffer, uint32_t nid, uint32_t parent_nid, uint32_t old_lpa)
+    node_block_cache_entry(block_buffer &&buffer, uint32_t nid, uint32_t parent_nid, uint32_t lpa)
         : node(std::move(buffer))
     {
         this->nid = nid;
         this->parent_nid = parent_nid;
-        this->old_lpa = old_lpa;
-        this->new_lpa = INVALID_LPA;
+        this->lpa = lpa;
         this->ref_count = 0;
         this->state = node_block_cache_entry_state::uptodate;
     }
 
     ~node_block_cache_entry();
 
-    uint32_t get_old_lpa() const noexcept {
-        return old_lpa;
-    }
-
-    uint32_t get_new_lpa() const noexcept {
-        return new_lpa;
+    uint32_t& get_lpa_ref() noexcept {
+        return lpa;
     }
 
     void set_new_lpa(uint32_t new_lpa) noexcept {
-        this->new_lpa = new_lpa;
+        this->lpa = new_lpa;
     }
 
     void set_state(node_block_cache_entry_state sta) noexcept {
@@ -56,6 +51,10 @@ public:
         return reinterpret_cast<hscfs_node*>(node.get_ptr());
     }
 
+    block_buffer& get_node_buffer() noexcept {
+        return node;
+    }
+
     uint32_t get_nid() const noexcept {
         return nid;
     }
@@ -63,7 +62,7 @@ public:
 private:
     uint32_t nid;
     uint32_t parent_nid;
-    uint32_t old_lpa, new_lpa;
+    uint32_t lpa;
     block_buffer node;
 
     uint32_t ref_count;
@@ -179,12 +178,12 @@ public:
      * parent_nid为索引树上的父node block，若此node为inode，则parent_nid应置为INVALID_NID
      * 调用者应确保parent_nid在缓存中
      */
-    node_block_cache_entry_handle add(block_buffer &&buffer, uint32_t nid, uint32_t parent_nid, uint32_t old_lpa)
+    node_block_cache_entry_handle add(block_buffer &&buffer, uint32_t nid, uint32_t parent_nid, uint32_t lpa)
     {
         assert(cache_manager.get(nid, false) == nullptr);
 
         // 构造新的缓存项
-        auto p_entry = std::make_unique<node_block_cache_entry>(std::move(buffer), nid, parent_nid, old_lpa);
+        auto p_entry = std::make_unique<node_block_cache_entry>(std::move(buffer), nid, parent_nid, lpa);
 
         // 将parent_nid的引用计数+1
         if (parent_nid != INVALID_NID)
