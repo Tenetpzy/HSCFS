@@ -3,6 +3,8 @@
 #include "journal/journal_container.hh"
 #include "communication/memory.h"
 #include "communication/comm_api.h"
+#include "fs/fs_manager.hh"
+#include "fs/replace_protect.hh"
 #include "utils/hscfs_exceptions.hh"
 #include "utils/hscfs_log.h"
 
@@ -239,10 +241,9 @@ void journal_processor::process_tx_record()
         auto &tx_rc = tx_record.front();
         if (tx_rc.is_applied(head_lpa, tail_lpa))
         {
-            /* to do */
-            /* 调用淘汰保护模块，通知该事务日志已经应用完成 */
             HSCFS_LOG(HSCFS_LOG_DEBUG, "transaction %lu completed, which applied journal area: "
                 "start = %lu, end = %lu\n", tx_rc.get_tx_id(), tx_rc.get_start_lpa(), tx_rc.get_end_lpa());
+            file_system_manager::get_instance()->get_replace_protect_manager()->notify_cplt_tx(tx_rc.get_tx_id());
             tx_record.pop_front();
         }
         else

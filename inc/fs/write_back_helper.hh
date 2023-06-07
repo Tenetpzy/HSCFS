@@ -3,7 +3,6 @@
 #include <cstdint>
 #include "communication/comm_api.h"
 #include "fs/SIT_utils.hh"
-#include "fs/replace_proc.hh"
 
 namespace hscfs {
 
@@ -35,11 +34,8 @@ public:
     uint32_t do_write_back_async(block_buffer &buffer, uint32_t &lpa, block_type type, 
         comm_async_cb_func cb_func, void *cb_arg);
 
-    /*
-     * 生成一个元数据回写事务，将文件系统中所有脏元数据回写
-     * 返回该回写事务的淘汰保护信息
-     */
-    transaction_replace_protect_record write_meta_back_sync();
+    /* 将文件系统中所有脏元数据回写，生成一个事务，提交当前日志到日志管理层，将事务淘汰保护信息交给系统管理 */
+    void write_meta_back_sync();
 
 private:
     file_system_manager *fs_manager;

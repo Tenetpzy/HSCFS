@@ -31,6 +31,11 @@ public:
         return tx_id;
     }
 
+    void set_tx_id(uint64_t id) noexcept
+    {
+        tx_id = id;
+    }
+    
 private:
     std::vector<super_block_journal_entry> super_block_journal;
     std::vector<NAT_journal_entry> NAT_journal;
@@ -52,11 +57,6 @@ private:
     const std::vector<SIT_journal_entry>& get_SIT_journal() const noexcept
     {
         return SIT_journal;
-    }
-
-    void set_tx_id(uint64_t id) noexcept
-    {
-        tx_id = id;
     }
 
     friend class journal_process_env;

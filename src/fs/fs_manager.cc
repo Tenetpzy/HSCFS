@@ -7,8 +7,10 @@
 #include "fs/file.hh"
 #include "fs/srmap_utils.hh"
 #include "fs/super_manager.hh"
-#include "journal/journal_container.hh"
 #include "fs/fs_manager.hh"
+#include "fs/replace_protect.hh"
+#include "fs/server_thread.hh"
+#include "journal/journal_container.hh"
 #include "utils/hscfs_exceptions.hh"
 #include <system_error>
 
@@ -50,6 +52,10 @@ void file_system_manager::init(comm_dev *device)
 
     g_fs_manager.fd_arr = std::make_unique<fd_array>(fd_array_size);
     g_fs_manager.cur_journal = std::make_unique<journal_container>();
+    g_fs_manager.rp_manager = std::make_unique<replace_protect_manager>(&g_fs_manager);
+    g_fs_manager.server_th = std::make_unique<server_thread>();
+    g_fs_manager.server_th->start();
+
     g_fs_manager.is_unrecoverable = false;
 }
 

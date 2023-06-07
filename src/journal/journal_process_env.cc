@@ -15,10 +15,8 @@ journal_process_env::~journal_process_env()
         process_thread_handle.join();
 }
 
-uint64_t journal_process_env::commit_journal(journal_container *journal)
+void journal_process_env::commit_journal(journal_container *journal)
 {
-    uint64_t tx_id = alloc_tx_id();
-    journal->set_tx_id(tx_id);
     bool need_notify = false;
     {
         std::lock_guard<std::mutex> lg(mtx);
@@ -27,7 +25,6 @@ uint64_t journal_process_env::commit_journal(journal_container *journal)
     }
     if (need_notify)
         cond.notify_all();
-    return tx_id;
 }
 
 void journal_process_env::init(comm_dev *dev, uint64_t journal_start_lpa, 

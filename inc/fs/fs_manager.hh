@@ -18,6 +18,8 @@ class srmap_utils;
 class fd_array;
 class dir_data_block_cache;
 class journal_container;
+class replace_protect_manager;
+class server_thread;
 
 /*
  * super_manager, SIT cache, NAT cache等对象的组合容器
@@ -29,6 +31,8 @@ public:
 
     /* g_fs_manager初始化，必须在通信层初始化之后进行 */
     static void init(comm_dev *dev);
+
+    /* TODO: fini */
 
     static file_system_manager* get_instance()
     {
@@ -119,6 +123,16 @@ public:
     /* 返回cur_journal，然后将cur_journal清空 */
     std::unique_ptr<journal_container> get_and_reset_cur_journal() noexcept;
 
+    replace_protect_manager* get_replace_protect_manager() noexcept
+    {
+        return rp_manager.get();
+    }
+
+    server_thread* get_server_thread_handle() noexcept 
+    {
+        return server_th.get();
+    }
+
     /* 置为不可恢复状态 */
     void set_unrecoverable() noexcept
     {
@@ -147,6 +161,8 @@ private:
     std::unique_ptr<fd_array> fd_arr;
 
     std::unique_ptr<journal_container> cur_journal;
+    std::unique_ptr<replace_protect_manager> rp_manager;
+    std::unique_ptr<server_thread> server_th;
     bool is_unrecoverable;
 
     static file_system_manager g_fs_manager;

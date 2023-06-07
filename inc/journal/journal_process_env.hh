@@ -26,8 +26,14 @@ public:
         return &g_env;
     }
 
-    // 提交日志，返回分配的事务号
-    uint64_t commit_journal(journal_container *journal);
+    // 同时超过UNIT64_MAX个事务运行则会分配重复tx_id，暂不考虑这种情况
+    uint64_t alloc_tx_id() noexcept
+    {
+        return tx_id_to_alloc.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    // 提交日志，应在alloc_tx_id之后调用，调用者负责使用alloc_tx_id为journal分配事务号
+    void commit_journal(journal_container *journal);
 
     // 日志处理环境初始化
     void init(comm_dev *dev, uint64_t journal_start_lpa, uint64_t journal_end_lpa, 
@@ -51,14 +57,6 @@ private:
     std::thread process_thread_handle;
 
     std::atomic<uint64_t> tx_id_to_alloc;
-
-private:
-
-    // 同时超过UNIT64_MAX个事务运行则会分配重复tx_id，暂不考虑这种情况
-    uint64_t alloc_tx_id() noexcept
-    {
-        return tx_id_to_alloc.fetch_add(1, std::memory_order_relaxed);
-    }
 
     friend class journal_processor;
 };
