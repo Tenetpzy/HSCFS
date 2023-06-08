@@ -829,10 +829,7 @@ static int polling_thread_received_exit_request(polling_thread_env *thrd_env)
     return thrd_env->need_exit;
 }
 
-/* 
- * 会话层轮询线程
- * todo: 目前此线程没有设置取消机制。
- */
+/* 会话层轮询线程 */
 void* comm_session_polling_thread(void *arg)
 {
     comm_session_env *session_env = session_env_get_instance();

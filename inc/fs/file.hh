@@ -99,13 +99,6 @@ public:
      */
     ssize_t write(char *buffer, ssize_t count, uint64_t pos);
 
-    /*
-     * 将所有脏页写回SSD，将这些页的脏标记去除
-     * 更新文件和文件系统的元数据，但不回写这些元数据
-     * 调用者应持有file_op_lock独占和fs_meta_lock，或更高层级的独占锁
-     */
-    void write_back();
-
 private:
     uint32_t ino;  // inode号
     file_system_manager *fs_manager;
@@ -215,10 +208,20 @@ private:
     void prepare_page_content(page_entry_handle &page);
 
     /* 
-     * 回写时，检查是否需要扩展文件大小，若需要，则调整文件元数据进行扩展
+     * 更新file内的元数据(文件大小和修改时间)到文件的inode
+     * 检查是否需要扩展文件大小，若需要，则调整文件元数据进行扩展
      * 调用者应持有file_op_lock独占和fs_meta_lock，或更高层级的锁
      */
-    void write_back_append();
+    void update_meta_to_inode();
+
+    /*
+     * 将所有脏页写回SSD，将这些页的脏标记去除
+     * 将file内的文件元数据写回inode缓存
+     * 更新file mapping的映射，但不回写这些node
+     * 调用者应持有file_op_lock独占和fs_meta_lock，或更高层级的独占锁
+     * 此方法应由handle代理调用，handle中能够去除file对象的dirty状态
+     */
+    void write_back();
 
     friend class file_obj_cache;
     friend class file_handle;
@@ -294,6 +297,15 @@ public:
 
     void mark_dirty();
 
+    /* 调用者需加file_op_lock独占锁 */
+    void clear_dirty();
+
+    /* 
+     * 回写的代理函数，清除file的dirty标记，并调用file的write_back方法 
+     * 锁要求与file的write_back相同
+     */
+    void write_back();
+
     /*
      * 删除该文件，释放该文件的全部资源，从file_obj_cache中移除entry
      * 调用此方法后，this无效，is_empty返回true，调用者不应再使用此句柄
@@ -357,6 +369,9 @@ private:
 
     /* 由file handle调用，将file加入dirty_files集合 */
     void add_to_dirty_files(const file_handle &file);
+
+    /* 由file handle调用，将file移除dirty_files集合 */
+    void remove_from_dirty_files(const file_handle &file);
 
     /* 由file handle调用，将entry从缓存中移除。调用者获取了fs_meta_lock */
     void remove_file(file *entry);

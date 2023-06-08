@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include "fs/fs.h"
+#include "cache/block_buffer.hh"
 
 struct comm_dev;
 
@@ -18,13 +19,13 @@ public:
 
     hscfs_super_block* operator->()
     {
-        return &super_block;
+        return reinterpret_cast<hscfs_super_block*>(super_block.get_ptr());
     }
 
 private:
     comm_dev *dev;
     const uint64_t sb_lpa;
-    hscfs_super_block super_block;
+    block_buffer super_block;
 };
 
 }

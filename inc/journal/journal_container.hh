@@ -36,14 +36,6 @@ public:
         tx_id = id;
     }
     
-private:
-    std::vector<super_block_journal_entry> super_block_journal;
-    std::vector<NAT_journal_entry> NAT_journal;
-    std::vector<SIT_journal_entry> SIT_journal;
-
-    uint64_t tx_id;  // 事务号
-
-private:
     const std::vector<super_block_journal_entry>& get_super_block_journal() const noexcept
     {
         return super_block_journal;
@@ -58,6 +50,12 @@ private:
     {
         return SIT_journal;
     }
+private:
+    std::vector<super_block_journal_entry> super_block_journal;
+    std::vector<NAT_journal_entry> NAT_journal;
+    std::vector<SIT_journal_entry> SIT_journal;
+
+    uint64_t tx_id;  // 事务号
 
     friend class journal_process_env;
     friend class journal_writer;

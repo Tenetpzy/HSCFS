@@ -52,6 +52,10 @@ public:
     uint32_t alloc_node_lpa();
     uint32_t alloc_data_lpa();
 
+    /* 将segid对应的segment加入node/data segment链表，并记录修改日志 */
+    void add_to_node_segment_list(uint32_t segid);
+    void add_to_data_segment_list(uint32_t segid);
+
     std::vector<uint32_t> get_and_clear_uncommit_node_segs();
     std::vector<uint32_t> get_and_clear_uncommit_data_segs();
 
@@ -70,6 +74,9 @@ private:
 
     /* 从空闲segment链表中分配一个segment，记录修改日志，返回segment id */
     uint32_t alloc_segment();
+
+    /* 将segid加入目标链表(node或data segment链表) */
+    void add_seg_to_list(uint32_t segid, uint32_t &list_head_segid, uint32_t list_head_addr_off);
 
     uint32_t alloc_lpa_inner(lpa_alloc_context &ctx);
 };

@@ -1,6 +1,7 @@
 #include "fs/fs_manager.hh"
 #include "fs/fs.h"
 #include "fs/path_utils.hh"
+#include "fs/server_thread.hh"
 #include "cache/super_cache.hh"
 #include "journal/journal_process_env.hh"
 #include "communication/comm_api.h"
@@ -54,6 +55,7 @@ void host_test_env_setup()
 void host_test_env_teardown()
 {
     journal_process_env::get_instance()->stop_process_thread();
+    file_system_manager::get_instance()->get_server_thread_handle()->stop();
     close(fd);
 }
 

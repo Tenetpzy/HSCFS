@@ -37,7 +37,8 @@ private:
     std::vector<uint32_t> uncommit_node_segs, uncommit_data_segs;
 
 private:
-    transaction_replace_protect_record() {}  /* 只用于在内外层作用域间move */
+    /* 只用于在内外层作用域间move */
+    transaction_replace_protect_record() = default;
     friend class replace_protect_manager;
     friend class replace_protect_task;
 };
@@ -64,8 +65,8 @@ class replace_protect_task
 {
 public:
     replace_protect_task(file_system_manager *fs_manager, transaction_replace_protect_record &&cplt_tx_) noexcept
-        : cplt_tx(std::move(cplt_tx_))
     {
+        this->cplt_tx = std::make_shared<transaction_replace_protect_record>(std::move(cplt_tx_));
         this->fs_manager = fs_manager;
     }
 
@@ -73,7 +74,9 @@ public:
     void operator()();
 
 private:
-    transaction_replace_protect_record cplt_tx;
+
+    /* replace_protect_task交给std::function，std::function要求callable可拷贝构造，因此使用指针 */
+    std::shared_ptr<transaction_replace_protect_record> cplt_tx;
     file_system_manager *fs_manager;
 };
 

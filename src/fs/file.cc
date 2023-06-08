@@ -171,8 +171,7 @@ ssize_t file::write(char *buffer, ssize_t count, uint64_t pos)
 
 void file::write_back()
 {
-    /* 若文件大小增加，则expand */
-    write_back_append();
+    update_meta_to_inode();
 
     auto &dirty_pages = page_cache_->get_dirty_pages();
 
@@ -318,7 +317,7 @@ void file::prepare_page_content(page_entry_handle &page)
     page->get_page_buffer().read_from_lpa(fs_manager->get_device(), page_addr.lpa);
 }
 
-void file::write_back_append()
+void file::update_meta_to_inode()
 {
     node_cache_helper node_helper(fs_manager);
     auto inode_handle = node_helper.get_node_entry(ino, INVALID_NID);
@@ -328,6 +327,11 @@ void file::write_back_append()
         file_resizer resizer(fs_manager);
         resizer.expand(ino, size);
     }
+    inode->i_atime = atime.tv_sec;
+    inode->i_atime_nsec = atime.tv_nsec;
+    inode->i_mtime = mtime.tv_sec;
+    inode->i_mtime_nsec = mtime.tv_nsec;
+    inode_handle.mark_dirty();
 }
 
 file_obj_cache::file_obj_cache(size_t expect_size, file_system_manager *fs_manager)
@@ -406,6 +410,14 @@ void file_obj_cache::add_to_dirty_files(const file_handle &file)
     dirty_files.emplace(ino, file);
 }
 
+void file_obj_cache::remove_from_dirty_files(const file_handle &file)
+{
+    spin_lock_guard lg(dirty_files_lock);
+    uint32_t ino = file.entry->ino;
+    assert(dirty_files.count(ino) == 1);
+    dirty_files.erase(ino);
+}
+
 void file_obj_cache::remove_file(file *entry)
 {
     HSCFS_LOG(HSCFS_LOG_DEBUG, "remove file object(inode = %u) from file obj cache.", entry->ino);
@@ -448,6 +460,21 @@ void file_handle::mark_dirty()
 {
     if (entry->mark_dirty())
         cache->add_to_dirty_files(*this);
+}
+
+void file_handle::clear_dirty()
+{
+    if (entry->is_dirty)
+    {
+        entry->is_dirty = 0;
+        cache->remove_from_dirty_files(*this);
+    }
+}
+
+void file_handle::write_back()
+{
+    clear_dirty();
+    entry->write_back();
 }
 
 void file_handle::delete_file()

@@ -90,6 +90,16 @@ uint32_t super_manager::alloc_data_lpa()
     return alloc_lpa_inner(ctx);
 }
 
+void super_manager::add_to_node_segment_list(uint32_t segid)
+{
+    add_seg_to_list(segid, super->first_node_segment_id, offsetof(hscfs_super_block, first_node_segment_id));
+}
+
+void super_manager::add_to_data_segment_list(uint32_t segid)
+{
+    add_seg_to_list(segid, super->first_data_segment_id, offsetof(hscfs_super_block, first_data_segment_id));
+}
+
 std::vector<uint32_t> super_manager::get_and_clear_uncommit_node_segs()
 {
     std::vector<uint32_t> ret;
@@ -155,6 +165,24 @@ uint32_t super_manager::alloc_segment()
     cur_journal->append_super_block_journal_entry(super_journal);
 
     return segid;
+}
+
+void super_manager::add_seg_to_list(uint32_t segid, uint32_t &list_head_segid, uint32_t list_head_addr_off)
+{
+    uint32_t sit_lpa, sit_off;
+    std::tie(sit_lpa, sit_off) = SIT_operator(fs_manager).get_segid_pos_in_sit(segid);
+    SIT_NAT_cache_entry_handle sit_handle = fs_manager->get_sit_cache()->get(sit_lpa);
+    hscfs_sit_entry &sit_entry = sit_handle.get_sit_block_ptr()->entries[sit_off];
+
+    SET_NEXT_SEG(&sit_entry, list_head_segid);  /* SIT表中指向当前链表头 */
+    list_head_segid = segid;  /* super block中链表头指向segid */
+
+    /* 记录修改的日志 */
+    journal_container *cur_journal = fs_manager->get_cur_journal();
+    super_block_journal_entry super_journal = {.Off = list_head_addr_off, .newVal = list_head_segid};
+    cur_journal->append_super_block_journal_entry(super_journal);
+    SIT_journal_entry sit_journal = {.segID = segid, .newValue = sit_entry};
+    cur_journal->append_SIT_journal_entry(sit_journal);
 }
 
 uint32_t super_manager::alloc_lpa_inner(lpa_alloc_context &ctx)

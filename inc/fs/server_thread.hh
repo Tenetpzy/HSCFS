@@ -1,10 +1,11 @@
 #pragma once
 
 #include <deque>
-#include <future>
+#include <functional>
 #include <mutex>
 #include <condition_variable>
 #include <thread>
+#include "utils/hscfs_log.h"
 
 namespace hscfs {
 
@@ -37,7 +38,7 @@ public:
         th_handle.join();
     }
 
-    void post_task(std::packaged_task<task_t> &&task)
+    void post_task(std::function<task_t> &&task)
     {
         bool need_wakeup;
         {
@@ -51,7 +52,7 @@ public:
 
 private:
 
-    std::deque<std::packaged_task<task_t>> task_queue;
+    std::deque<std::function<task_t>> task_queue;
     bool exit_req;
     std::mutex mtx;  // 保护上两个成员的锁
     std::condition_variable cond;
@@ -77,11 +78,13 @@ private:
             /* 还有任务需要执行 */
             if (!task_queue.empty())  // 此处仍然增加判断(当前逻辑本不需要)，为后续wait_for做兼容
             {
-                std::packaged_task<task_t> task = std::move(task_queue.front());
+                std::function<task_t> task = std::move(task_queue.front());
                 task_queue.pop_front();
                 task();
             }
         }
+
+        HSCFS_LOG(HSCFS_LOG_INFO, "hscfs server thread exit.");
     }
 };
 

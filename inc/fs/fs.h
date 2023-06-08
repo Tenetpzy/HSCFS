@@ -182,7 +182,7 @@ struct hscfs_nat_block {
 #define SET_NEXT_SEG(raw_sit, next_seg)         \
     do  \
     { \
-        ((raw_sit)->vblocks) |= ((next_seg) << SIT_VBLOCKS_SHIFT)   \
+        ((raw_sit)->vblocks) |= ((next_seg) << SIT_VBLOCKS_SHIFT);   \
     }while(0)
 
 struct hscfs_sit_entry {
