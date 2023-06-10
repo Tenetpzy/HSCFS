@@ -109,7 +109,6 @@ void replace_protect_task::operator()()
         uint32_t lpa;
         std::tie(lpa, std::ignore) = nat_helper.get_nid_pos_in_nat(nid);
         nat_cache->add_SSD_version(lpa);
-        HSCFS_LOG(HSCFS_LOG_DEBUG, "add SSD version of nat cache entry(lpa = %u).", lpa);
     }
 
     SIT_NAT_cache *sit_cache = fs_manager->get_sit_cache();
@@ -120,7 +119,6 @@ void replace_protect_task::operator()()
         uint32_t lpa;
         std::tie(lpa, std::ignore) = sit_helper.get_segid_pos_in_sit(segid);
         sit_cache->add_SSD_version(lpa);
-        HSCFS_LOG(HSCFS_LOG_DEBUG, "add SSD version of sit cache entry(lpa = %u).", lpa);
     }
 
     /* 将未提交的segments加入系统对应链表 */

@@ -45,43 +45,22 @@ uint32_t write_back_helper::do_write_back_async(block_buffer &buffer, uint32_t &
 
 void write_back_helper::write_meta_back_sync()
 {
-    std::list<node_block_cache_entry_handle> dirty_nodes = fs_manager->get_node_cache()->get_and_clear_dirty_list();
-    std::unordered_map<uint32_t, std::vector<dir_data_block_handle>> dirty_dir_blks = fs_manager->get_dir_data_cache()
-        ->get_and_clear_dirty_blks();
-
-    /* 统计node和dir data block的块I/O数 */
-    uint64_t io_num = 0;
-    io_num += dirty_nodes.size();
-    for (auto &entry : dirty_dir_blks)
-    {
-        uint64_t siz = entry.second.size();
-        assert(siz > 0);
-        io_num += siz;
-    }
-    
-    async_vecio_synchronizer syn(io_num);
+    /* 注意回写顺序：dir data block -> node block -> 提交日志，前一阶段的回写可能会增加下一阶段中的脏数据 */
     srmap_utils *srmap_util = fs_manager->get_srmap_util();
     nat_lpa_mapping nat_map(fs_manager);
     file_mapping_util fm_util(fs_manager);
 
-    /* 回写dirty node */
-    for (auto &node_handle : dirty_nodes)
-    {
-        uint32_t nid = node_handle->get_nid();
-        HSCFS_LOG(HSCFS_LOG_INFO, "writing back node block(nid = %u).", nid);
-
-        /* 将node buffer异步写入SSD */
-        uint32_t new_lpa = do_write_back_async(node_handle->get_node_buffer(), node_handle->get_lpa_ref(), 
-            block_type::node, async_vecio_synchronizer::generic_callback, &syn); 
-        
-        /* 更新NAT表 */
-        nat_map.set_lpa_of_nid(nid, new_lpa);
-
-        /* 更新SRMAP表 */
-        srmap_util->write_srmap_of_node(new_lpa, nid);
-    }
-
     /* 回写dirty dir data block */
+    std::unordered_map<uint32_t, std::vector<dir_data_block_handle>> dirty_dir_blks = fs_manager->get_dir_data_cache()
+        ->get_and_clear_dirty_blks();
+    uint64_t dirty_dir_blks_num = 0;
+    for (auto &entry : dirty_dir_blks)
+    {
+        uint64_t siz = entry.second.size();
+        assert(siz > 0);
+        dirty_dir_blks_num += siz;
+    }
+    async_vecio_synchronizer syn1(dirty_dir_blks_num);
     for (auto &entry : dirty_dir_blks)
     {
         uint32_t dir_ino = entry.first;
@@ -94,7 +73,7 @@ void write_back_helper::write_meta_back_sync()
 
             /* 将data block异步写入SSD */
             uint32_t new_lpa = do_write_back_async(blk_handle->get_block_buffer(), blk_handle->get_lpa_ref(), 
-                block_type::data, async_vecio_synchronizer::generic_callback, &syn);
+                block_type::data, async_vecio_synchronizer::generic_callback, &syn1);
             
             /* 更新file mapping */
             block_addr_info addr = fm_util.update_block_mapping(dir_ino, blkoff, new_lpa);
@@ -104,11 +83,32 @@ void write_back_helper::write_meta_back_sync()
         }
     }
 
+    /* 回写dirty node */
+    std::list<node_block_cache_entry_handle> dirty_nodes = fs_manager->get_node_cache()->get_and_clear_dirty_list();
+    async_vecio_synchronizer syn2(dirty_nodes.size());
+    for (auto &node_handle : dirty_nodes)
+    {
+        uint32_t nid = node_handle->get_nid();
+        HSCFS_LOG(HSCFS_LOG_INFO, "writing back node block(nid = %u).", nid);
+
+        /* 将node buffer异步写入SSD */
+        uint32_t new_lpa = do_write_back_async(node_handle->get_node_buffer(), node_handle->get_lpa_ref(), 
+            block_type::node, async_vecio_synchronizer::generic_callback, &syn2); 
+        
+        /* 更新NAT表 */
+        nat_map.set_lpa_of_nid(nid, new_lpa);
+
+        /* 更新SRMAP表 */
+        srmap_util->write_srmap_of_node(new_lpa, nid);
+    }
+
     /* 回写SRMAP表并清空SRMAP缓存 */
     srmap_util->write_dirty_srmap_sync();
     srmap_util->clear_cache();
     
-    syn.wait_cplt();  /* 等待所有异步写入完成 */
+    /* 等待所有异步写入完成 */
+    syn1.wait_cplt();
+    syn2.wait_cplt();
 
     /* 分配事务号 */
     std::unique_ptr<journal_container> cur_journal = fs_manager->get_and_reset_cur_journal();
