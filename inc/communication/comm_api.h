@@ -47,6 +47,7 @@ int comm_submit_async_update_metajournal_tail_request(comm_dev *dev, uint64_t or
     comm_async_cb_func cb_func, void *cb_arg);
 
 // 获取元数据日志头指针命令。结果存放在head_lpa中，head_lpa必须是可DMA的内存。
+// TODO : 需要修改，实际上用此命令同时获取头尾指针，不仅是头指针
 int comm_submit_sync_get_metajournal_head_request(comm_dev *dev, uint64_t *head_lpa);
 int comm_submit_async_get_metajournal_head_request(comm_dev *dev, uint64_t *head_lpa, 
     comm_async_cb_func cb_func, void *cb_arg);

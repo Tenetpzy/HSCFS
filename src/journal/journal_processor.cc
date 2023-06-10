@@ -242,7 +242,7 @@ void journal_processor::process_tx_record()
         if (tx_rc.is_applied(head_lpa, tail_lpa))
         {
             HSCFS_LOG(HSCFS_LOG_DEBUG, "transaction %lu completed, which applied journal area: "
-                "start = %lu, end = %lu\n", tx_rc.get_tx_id(), tx_rc.get_start_lpa(), tx_rc.get_end_lpa());
+                "start lpa = %lu, end lpa = %lu\n", tx_rc.get_tx_id(), tx_rc.get_start_lpa(), tx_rc.get_end_lpa());
             file_system_manager::get_instance()->get_replace_protect_manager()->notify_cplt_tx(tx_rc.get_tx_id());
             tx_record.pop_front();
         }

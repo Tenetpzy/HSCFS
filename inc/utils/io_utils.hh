@@ -20,6 +20,10 @@ public:
     {
         _io_num = io_num;
         io_res = COMM_CMD_SUCCESS;
+
+        /* 当不需要I/O时，async_vecio_synchronizer也应该能正常工作 */
+        if (_io_num == 0)
+            io_cplt.set_value(io_res);
     }
 
     /*

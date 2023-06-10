@@ -99,6 +99,17 @@ public:
      */
     ssize_t write(char *buffer, ssize_t count, uint64_t pos);
 
+    /*
+     * 将所有脏页写回SSD，将这些页的脏标记去除
+     * 将file内的文件元数据写回inode缓存
+     * 更新file mapping的映射，但不回写这些node
+     * 调用者应持有file_op_lock独占和fs_meta_lock，或更高层级的独占锁
+     * 
+     * 此方法由handle代理调用，则handle中能够去除file对象的dirty状态，单独的fsync应使用handle代理
+     * 文件系统内部回写时，可以直接调用此方法，因为文件系统可以通过其他方式维护file_obj_cache和file的dirty状态
+     */
+    void write_back();
+
 private:
     uint32_t ino;  // inode号
     file_system_manager *fs_manager;
@@ -214,15 +225,6 @@ private:
      */
     void update_meta_to_inode();
 
-    /*
-     * 将所有脏页写回SSD，将这些页的脏标记去除
-     * 将file内的文件元数据写回inode缓存
-     * 更新file mapping的映射，但不回写这些node
-     * 调用者应持有file_op_lock独占和fs_meta_lock，或更高层级的独占锁
-     * 此方法应由handle代理调用，handle中能够去除file对象的dirty状态
-     */
-    void write_back();
-
     friend class file_obj_cache;
     friend class file_handle;
     friend class file_cache_helper;
@@ -333,6 +335,13 @@ public:
     file_handle add(uint32_t ino);
     file_handle get(uint32_t ino);
     bool contains(uint32_t ino);   // 检查当前file_obj_cache中，是否存在inode为ino的file对象
+
+    /* 
+     * 清除dirty files中的dirty标记，清空dirty files，并返回原先的dirty files
+     * 返回的dirty files中的元素，已经不带脏标记。
+     * 只应当在文件系统需要回写所有文件时调用，调用者需要获取fs_meta_lock
+     */
+    std::unordered_map<uint32_t, file_handle> get_and_clear_dirty_files();
 
 private:
     size_t expect_size, cur_size;

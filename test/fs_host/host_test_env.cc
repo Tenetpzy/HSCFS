@@ -49,13 +49,13 @@ void host_test_env_setup()
     
     journal_area.start_lpa = super->meta_journal_start_blkoff;
     journal_area.end_lpa = super->meta_journal_end_blkoff;
-    journal_area.head_lpa = journal_area.end_lpa = super->meta_journal_start_blkoff;
+    journal_area.head_lpa = journal_area.tail_lpa = super->meta_journal_start_blkoff;
 }
 
 void host_test_env_teardown()
 {
+    file_system_manager::get_instance()->fini();
     journal_process_env::get_instance()->stop_process_thread();
-    file_system_manager::get_instance()->get_server_thread_handle()->stop();
     close(fd);
 }
 
@@ -226,9 +226,9 @@ int comm_submit_sync_get_metajournal_head_request(comm_dev *dev, uint64_t *head_
             cur_head = journal_area.start_lpa;
             continue;
         }
-        fmt::println(std::cout, "journal in LPA {}:", cur_head);
-        print_block(cur_head);
-        std::cout << std::endl;
+        // fmt::println(std::cout, "journal in LPA {}:", cur_head);
+        // print_block(cur_head);
+        // std::cout << std::endl;
         ++cur_head;
     }
 

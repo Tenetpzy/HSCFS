@@ -68,9 +68,9 @@ void generate_super_block(void *buffer)
     super->first_data_segment_id = HSCFS_MAX_SEGMENT;
     super->first_node_segment_id = HSCFS_MAX_SEGMENT;
     super->current_data_segment_id = 1;
-    super->current_data_segment_blkoff = 526;
+    super->current_data_segment_blkoff = 4;
     super->current_node_segment_id = 0;
-    super->current_node_segment_blkoff = 14;
+    super->current_node_segment_blkoff = 4;
     super->meta_journal_start_blkoff = 3;
     super->meta_journal_end_blkoff = 7;
     super->free_segment_count = 0;

@@ -370,6 +370,21 @@ bool file_obj_cache::contains(uint32_t ino)
     return cache_manager.get(ino) != nullptr;
 }
 
+std::unordered_map<uint32_t, file_handle> file_obj_cache::get_and_clear_dirty_files()
+{
+    spin_lock_guard dirty_files_lg(dirty_files_lock);
+    for (auto &entry : dirty_files)
+    {
+        file_handle &handle = entry.second;
+        handle.entry->is_dirty = false;
+    }
+
+    std::unordered_map<uint32_t, file_handle> ret;
+    dirty_files.swap(ret);
+    assert(dirty_files.empty());
+    return ret;
+}
+
 void file_obj_cache::add_refcount(file *entry)
 {
     if (++entry->ref_count == 1)

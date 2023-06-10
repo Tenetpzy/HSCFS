@@ -115,7 +115,7 @@ public:
         return *this;
     }
 
-    node_block_cache_entry_handle& operator=(node_block_cache_entry_handle &&o)
+    node_block_cache_entry_handle& operator=(node_block_cache_entry_handle &&o) noexcept
     {
         if (this != &o)
         {

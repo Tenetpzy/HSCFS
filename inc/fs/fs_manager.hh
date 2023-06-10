@@ -21,18 +21,29 @@ class journal_container;
 class replace_protect_manager;
 class server_thread;
 
-/*
- * super_manager, SIT cache, NAT cache等对象的组合容器
- */
+/* super_manager, SIT cache, NAT cache等对象的组合容器 */
 class file_system_manager
 {
 public:
     file_system_manager() = default;
+    ~file_system_manager();
 
-    /* g_fs_manager初始化，必须在通信层初始化之后进行 */
+    /* 
+     * g_fs_manager初始化，必须在通信层初始化之后进行
+     * 初始化文件系统缓存层资源，启动文件系统层后台线程
+     */
     static void init(comm_dev *dev);
 
-    /* TODO: fini */
+    /* 程序结束时，将所有未回写的数据回写，然后停止后台服务线程。
+     * 此方法应先于日志层和通信层的析构调用，因为此方法依赖它们的功能 
+     */
+    void fini();
+
+    /* 
+     * 将当前所有dirty的数据和元数据回写，在回写事务的淘汰保护完成后返回
+     * 调用者应加fs_freeze_lock独占锁
+     */
+    void write_back_all_dirty_sync();
 
     static file_system_manager* get_instance()
     {

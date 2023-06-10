@@ -29,4 +29,6 @@ int link(const char *oldpath, const char *newpath);
 int mkdir(const char *pathname);
 int rmdir(const char *pathname);
 
+int init(int argc, char *argv[]);
+
 }  // namespace hscfs

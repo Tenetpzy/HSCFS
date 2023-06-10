@@ -50,6 +50,12 @@ public:
     {
         return SIT_journal;
     }
+
+    bool is_empty() const noexcept
+    {
+        return super_block_journal.empty() && NAT_journal.empty() && SIT_journal.empty();
+    }
+
 private:
     std::vector<super_block_journal_entry> super_block_journal;
     std::vector<NAT_journal_entry> NAT_journal;

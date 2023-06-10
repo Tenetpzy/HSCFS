@@ -13,6 +13,7 @@ aux_source_directory(${PROJECT_SOURCE_DIR}/src/journal hscfs_srcs)
 aux_source_directory(${PROJECT_SOURCE_DIR}/src/utils hscfs_srcs)
 aux_source_directory(${PROJECT_SOURCE_DIR}/src/api hscfs_srcs)
 aux_source_directory(${PROJECT_SOURCE_DIR}/src/debug hscfs_srcs)
+list(REMOVE_ITEM hscfs_srcs "${PROJECT_SOURCE_DIR}/src/api/init.cc")
 target_sources(HscfsTest PRIVATE ${hscfs_srcs})
 target_sources(HscfsTest PRIVATE 
     ${PROJECT_SOURCE_DIR}/third_party/fmt/src/format.cc

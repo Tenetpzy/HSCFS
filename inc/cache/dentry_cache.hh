@@ -194,7 +194,7 @@ public:
         return *this;
     }
 
-    dentry_handle& operator=(dentry_handle &&o)
+    dentry_handle& operator=(dentry_handle &&o) noexcept
     {
         if (this != &o)
         {

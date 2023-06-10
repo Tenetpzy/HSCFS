@@ -10,8 +10,11 @@
 #include "fs/fs_manager.hh"
 #include "fs/replace_protect.hh"
 #include "fs/server_thread.hh"
+#include "fs/write_back_helper.hh"
+#include "fs/replace_protect.hh"
 #include "journal/journal_container.hh"
 #include "utils/hscfs_exceptions.hh"
+#include "utils/lock_guards.hh"
 #include <system_error>
 
 namespace hscfs {
@@ -26,6 +29,13 @@ size_t file_system_manager::file_cache_size = 32;
 size_t file_system_manager::fd_array_size = 512;
 
 file_system_manager file_system_manager::g_fs_manager;
+
+file_system_manager::~file_system_manager()
+{
+    int ret = rwlock_destroy(&fs_freeze_lock);
+    if (ret != 0)
+        HSCFS_LOG(HSCFS_LOG_WARNING, "file system manager: destruct fs freeze lock failed.");
+}
 
 void file_system_manager::init(comm_dev *device)
 {
@@ -57,6 +67,52 @@ void file_system_manager::init(comm_dev *device)
     g_fs_manager.server_th->start();
 
     g_fs_manager.is_unrecoverable = false;
+}
+
+void file_system_manager::fini()
+{
+    /* 首先获取fs_freeze_lock独占，此时只有调用线程能够操作文件系统层，后续无需再加下层其它锁 */
+    rwlock_guard fs_freeze_lg(fs_freeze_lock, rwlock_guard::lock_type::wrlock);
+
+    /* 回写所有脏数据 */
+    check_state();
+    write_back_all_dirty_sync();
+
+    /* 停止服务线程 */
+    server_th->stop();
+}
+
+void file_system_manager::write_back_all_dirty_sync()
+{
+    /* 为了避免与淘汰保护任务死锁，内部不加fs_meta_lock锁，因为调用者已经加了fs_freeze_lock，此时文件系统层应只有调用者一个活跃线程 */
+
+    /* 首先回写所有的dirty files */
+    std::unordered_map<uint32_t, file_handle> dirty_files = file_cache->get_and_clear_dirty_files();
+    for (auto &entry: dirty_files)
+    {
+        file_handle &handle = entry.second;
+        handle->write_back();
+    }
+
+    /* 然后回写所有的脏元数据 */
+    write_back_helper wb_helper(this);
+    wb_helper.write_meta_back_sync();
+
+    /* 等待回写元数据的事务淘汰保护完成 */
+    rp_manager->wait_all_protect_task_cplt();
+
+    /* 
+     * 刚刚回写元数据的事务中，可能包含未提交的segments，它们在淘汰保护任务完成后才会加入系统node/data segment链表
+     * 所以，此时super block和SIT表仍然可能包含脏元数据，如果包含，则再次回写脏元数据
+     */
+    if (!cur_journal->is_empty())
+    {
+        wb_helper.write_meta_back_sync();
+        rp_manager->wait_all_protect_task_cplt();
+    }
+
+    /* 此时所有脏数据和元数据应该都落盘了 */
+    assert(cur_journal->is_empty());
 }
 
 std::unique_ptr<journal_container> file_system_manager::get_and_reset_cur_journal() noexcept
