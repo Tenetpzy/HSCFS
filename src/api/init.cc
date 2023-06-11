@@ -250,7 +250,7 @@ int init(int argc, char *argv[])
     }
     catch (const std::exception &e)
     {
-        HSCFS_LOG(HSCFS_LOG_ERROR, "exception occurred: %s", e.what());
+        HSCFS_LOG(HSCFS_LOG_ERROR, "exception occurred when initialization: %s", e.what());
         return -1;
     }
 }

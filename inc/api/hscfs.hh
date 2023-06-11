@@ -30,5 +30,6 @@ int mkdir(const char *pathname);
 int rmdir(const char *pathname);
 
 int init(int argc, char *argv[]);
+void fini();
 
 }  // namespace hscfs

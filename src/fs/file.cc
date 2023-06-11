@@ -345,6 +345,12 @@ file_obj_cache::file_obj_cache(size_t expect_size, file_system_manager *fs_manag
             "file object cache: init dirty files lock failed.");
 }
 
+file_obj_cache::~file_obj_cache()
+{
+    if (!dirty_files.empty())
+        HSCFS_LOG(HSCFS_LOG_WARNING, "file obj cache still has dirty files when destructed.");
+}
+
 file_handle file_obj_cache::add(uint32_t ino)
 {
     auto p_entry = std::make_unique<file>(ino, fs_manager);

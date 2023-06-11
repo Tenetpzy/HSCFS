@@ -7,6 +7,20 @@
 
 namespace hscfs {
 
+void do_close(int fd)
+{
+    std::shared_ptr<opened_file> o_file = file_system_manager::get_instance()->get_fd_array()->free_fd(fd);
+    file_handle &file = o_file->get_file_handle();
+    file->sub_fd_refcount();
+
+    /* 如果文件需要被删除(fd ref和nlink都为0)，则在此处删除文件 */
+    if (file->get_fd_refcount() == 0 && file->get_nlink() == 0)
+    {
+        HSCFS_LOG(HSCFS_LOG_INFO, "delete file(inode = %u) when close its last fd.", file->get_inode());
+        file.delete_file();
+    }
+}
+
 int close(int fd)
 {
     file_system_manager *fs_manager = file_system_manager::get_instance();
@@ -18,17 +32,7 @@ int close(int fd)
 
         try
         {
-            std::shared_ptr<opened_file> o_file = fs_manager->get_fd_array()->free_fd(fd);
-            file_handle &file = o_file->get_file_handle();
-            file->sub_fd_refcount();
-
-            /* 如果文件需要被删除(fd ref和nlink都为0)，则在此处删除文件 */
-            if (file->get_fd_refcount() == 0 && file->get_nlink() == 0)
-            {
-                HSCFS_LOG(HSCFS_LOG_INFO, "delete file(inode = %u) when close its last fd.", file->get_inode());
-                file.delete_file();
-            }
-
+            do_close(fd);
             return 0;
         }
         catch(const std::exception& e)

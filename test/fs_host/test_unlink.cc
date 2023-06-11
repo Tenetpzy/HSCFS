@@ -21,8 +21,8 @@ TEST(unlink_test, 1)
     ASSERT_EQ(ret, -1);
     ASSERT_EQ(err, EISDIR);
 
-    if (hscfs::close(fd) != 0)
-        do_exit("close failed");
+    // if (hscfs::close(fd) != 0)
+    //     do_exit("close failed");
 }
 
 int main(int argc, char **argv)

@@ -82,9 +82,16 @@ void file_system_manager::fini()
     server_th->stop();
 }
 
+void do_close(int fd);
+
 void file_system_manager::write_back_all_dirty_sync()
 {
     /* 为了避免与淘汰保护任务死锁，内部不加fs_meta_lock锁，因为调用者已经加了fs_freeze_lock，此时文件系统层应只有调用者一个活跃线程 */
+
+    /* 关闭所有文件描述符 */
+    std::unordered_set<int> unclosed_fds = fd_arr->get_and_clear_unclosed_fds();
+    for (int fd: unclosed_fds)
+        do_close(fd);
 
     /* 首先回写所有的dirty files */
     std::unordered_map<uint32_t, file_handle> dirty_files = file_cache->get_and_clear_dirty_files();

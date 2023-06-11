@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 #include <set>
+#include <unordered_set>
 
 #include "utils/hscfs_multithread.h"
 
@@ -28,6 +29,9 @@ public:
 
     opened_file* get_opened_file_of_fd(int fd);
 
+    /* 仅在用户进程退出时调用，系统关闭所有用户未关闭的文件描述符 */
+    std::unordered_set<int> get_and_clear_unclosed_fds();
+
 private:
     /* 
      * 在fd_arr中，[alloc_pos, fd_arr.size())之间的fd没有被分配
@@ -40,6 +44,7 @@ private:
     std::vector<std::shared_ptr<opened_file>> fd_arr;
     size_t alloc_pos;
     std::set<int> free_set;
+    std::unordered_set<int> unclosed_fds;  // 未被关闭的fd
     spinlock_t lock;
 };
 

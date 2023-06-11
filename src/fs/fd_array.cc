@@ -42,6 +42,7 @@ int fd_array::alloc_fd(std::shared_ptr<opened_file> &p_file)
     }
     HSCFS_LOG(HSCFS_LOG_INFO, "allocate fd %d.", ret);
     fd_arr[ret] = p_file;
+    unclosed_fds.insert(ret);
     return ret;
 }
 
@@ -53,6 +54,7 @@ std::shared_ptr<opened_file> fd_array::free_fd(int fd)
     std::shared_ptr<opened_file> ret = fd_arr[fd];
     fd_arr[fd] = nullptr;
     free_set.insert(fd);
+    unclosed_fds.erase(fd);
     HSCFS_LOG(HSCFS_LOG_INFO, "free fd %d.", fd);
     return ret;
 }
@@ -65,4 +67,12 @@ opened_file* fd_array::get_opened_file_of_fd(int fd)
     return fd_arr[fd].get();
 }
 
-}  // namespace hscfs
+std::unordered_set<int> fd_array::get_and_clear_unclosed_fds()
+{
+    std::unordered_set<int> ret;
+    unclosed_fds.swap(ret);
+    assert(unclosed_fds.empty());
+    return ret;
+}
+
+} // namespace hscfs
