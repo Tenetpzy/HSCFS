@@ -80,6 +80,18 @@ static void do_pread(int fd, void *buffer, size_t count, off_t offset)
 
 namespace hscfs {
 void print_journal_block(const char *start);
+
+int init(int argc, char *argv[])
+{
+    host_test_env_setup();
+    return 0;
+}
+
+void fini()
+{
+    host_test_env_teardown();
+}
+
 }
 
 static void print_block(uint64_t lpa)

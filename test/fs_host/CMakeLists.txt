@@ -38,3 +38,7 @@ target_include_directories(test_truncate PRIVATE ${SPDK_include_directory})
 add_executable(test_unlink test_unlink.cc)
 target_link_libraries(test_unlink HscfsTest)
 target_include_directories(test_unlink PRIVATE ${SPDK_include_directory})
+
+add_executable(hw_test_host ${PROJECT_SOURCE_DIR}/test/hw_test/test_main.cc)
+target_link_libraries(hw_test_host HscfsTest)
+target_include_directories(hw_test_host PRIVATE ${SPDK_include_directory})
