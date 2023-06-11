@@ -1,3 +1,5 @@
+add_library(hscfs SHARED)
+
 aux_source_directory(${PROJECT_SOURCE_DIR}/src/cache hscfs_srcs)
 aux_source_directory(${PROJECT_SOURCE_DIR}/src/communication hscfs_srcs)
 aux_source_directory(${PROJECT_SOURCE_DIR}/src/fs hscfs_srcs)
@@ -10,6 +12,9 @@ target_include_directories(hscfs PRIVATE
     ${PROJECT_SOURCE_DIR}/inc 
     ${SPDK_include_directory}
 )
+
+target_compile_options(hscfs PUBLIC -pthread)
+target_link_options(hscfs PUBLIC -pthread)
 
 if(NOT DEFINED CONFIG_PRINT_DEBUG_INFO)
     set(CONFIG_PRINT_DEBUG_INFO No)

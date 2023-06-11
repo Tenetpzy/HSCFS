@@ -25,10 +25,10 @@ struct Device_Env
     comm_dev dev;
 };
 
-static Device_Env device_env;
+Device_Env device_env;
 
 /* 初始化device_env结构体中非spdk的成员，在初始化SPDK完成后调用 */
-static int device_env_init()
+int device_env_init()
 {
     int cpu_num = get_nprocs_conf();
     if (cpu_num <= 0)
@@ -49,7 +49,7 @@ static int device_env_init()
     return 0;
 }
 
-static std::string parse_trid_from_argv(int argc, char *argv[])
+std::string parse_trid_from_argv(int argc, char *argv[])
 {
     const std::string prefix = TRID_CONFIG_PREFIX;
     std::string trid;
@@ -94,7 +94,7 @@ void attach_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid,
 }
 
 /* 初始化SPDK，并初始化device_env中与SPDK有关的成员 */
-static int spdk_init(const std::string &trid)
+int spdk_init(const std::string &trid)
 {
     spdk_env_opts opts;
     spdk_env_opts_init(&opts);
@@ -181,6 +181,8 @@ static int ssd_recovery(uint64_t &journal_fifo_pos)
 {   
     /* 分配用于保存Journal FIFO头尾指针的缓存 */
     uint64_t *journal_fifo_buffer = static_cast<uint64_t*>(comm_alloc_dma_mem(16));
+    if (journal_fifo_buffer == NULL)
+        return -1;
 
     HSCFS_LOG(HSCFS_LOG_INFO, "Waiting SSD journal recovery...");
     do
@@ -222,6 +224,8 @@ int init(int argc, char *argv[])
         if (comm_session_env_init(&device_env.dev) != 0)
             return -1;
         
+        /* TODO: 检查文件系统魔数 */
+
         /* 初始化SSD侧文件系统模块，启动SSD日志执行 */
         if (ssd_init() != 0)
             return -1;

@@ -26,7 +26,7 @@ struct hscfs_super_block
 	__le32 segment0_blkaddr;	/* start block address of segment 0(used) */
 	__le32 sit_blkaddr;		/* start block address of SIT(used) */
 	__le32 nat_blkaddr;		/* start block address of NAT(used) */
-	__le32 srmap_blkaddr;		/* start block address of SRMAP */
+	__le32 srmap_blkaddr;		/* start block address of SRMAP(used) */
     __le32 meta_journal_blkaddr;   /* start block address of Meta Journal */
 	__le32 main_blkaddr;		/* start block address of main area */
 	__le32 root_ino;		/* root inode number(used) */
@@ -52,6 +52,7 @@ struct hscfs_super_block
 #define BLOCK_PER_SEGMENT 512
 
 #define INVALID_LPA	0
+#define INVALID_SEGID 0  // 将超级块segment id用作无效的node/data/free segid
 
 #define HSCFS_NAME_LEN		255
 #define DEF_ADDRS_PER_INODE	932	/* Address Pointers in an Inode */
