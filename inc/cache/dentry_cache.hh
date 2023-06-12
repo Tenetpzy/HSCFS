@@ -276,6 +276,7 @@ public:
         auto p_root = std::make_unique<dentry>(root_ino, nullptr, root_ino, "/", fs_manager);
         dentry *raw_p = p_root.get();
         cache_manager.add(p_root->key, p_root);
+        cache_manager.pin(raw_p->key);
         add_refcount(raw_p);
         ++cur_size;
         return dentry_handle(raw_p, this);

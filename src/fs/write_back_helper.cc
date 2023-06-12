@@ -110,25 +110,29 @@ void write_back_helper::write_meta_back_sync()
     syn1.wait_cplt();
     syn2.wait_cplt();
 
-    /* 分配事务号 */
+    /* 如果产生了脏元数据，则生成一个事务 */
     std::unique_ptr<journal_container> cur_journal = fs_manager->get_and_reset_cur_journal();
-    journal_process_env *journal_proc_env = journal_process_env::get_instance();
-    uint64_t tx_id = journal_proc_env->alloc_tx_id();
-    cur_journal->set_tx_id(tx_id);
+    if (!cur_journal->is_empty())
+    {
+        /* 分配事务号 */
+        journal_process_env *journal_proc_env = journal_process_env::get_instance();
+        uint64_t tx_id = journal_proc_env->alloc_tx_id();
+        cur_journal->set_tx_id(tx_id);
 
-    /* 构造淘汰保护信息并将其交给系统维护 */
-    std::vector<dentry_handle> dirty_dentrys = fs_manager->get_dentry_cache()->get_and_clear_dirty_list();
-    super_manager *sp_manager = fs_manager->get_super_manager();
-    std::vector<uint32_t> uncommit_node_segs = sp_manager->get_and_clear_uncommit_node_segs();
-    std::vector<uint32_t> uncommit_data_segs = sp_manager->get_and_clear_uncommit_data_segs();
-    journal_container *rawp_cur_journal = cur_journal.get();  /* 保留raw pointer便于接下来提交日志 */
+        /* 构造淘汰保护信息并将其交给系统维护 */
+        std::vector<dentry_handle> dirty_dentrys = fs_manager->get_dentry_cache()->get_and_clear_dirty_list();
+        super_manager *sp_manager = fs_manager->get_super_manager();
+        std::vector<uint32_t> uncommit_node_segs = sp_manager->get_and_clear_uncommit_node_segs();
+        std::vector<uint32_t> uncommit_data_segs = sp_manager->get_and_clear_uncommit_data_segs();
+        journal_container *rawp_cur_journal = cur_journal.get();  /* 保留raw pointer便于接下来提交日志 */
 
-    transaction_replace_protect_record rp_record(tx_id, std::move(dirty_nodes), std::move(dirty_dentrys), std::move(cur_journal), 
-        std::move(uncommit_node_segs), std::move(uncommit_data_segs));
-    replace_protect_manager *rp_manager = fs_manager->get_replace_protect_manager();
-    rp_manager->add_tx(std::move(rp_record));
+        transaction_replace_protect_record rp_record(tx_id, std::move(dirty_nodes), std::move(dirty_dentrys), std::move(cur_journal), 
+            std::move(uncommit_node_segs), std::move(uncommit_data_segs));
+        replace_protect_manager *rp_manager = fs_manager->get_replace_protect_manager();
+        rp_manager->add_tx(std::move(rp_record));
 
-    journal_proc_env->commit_journal(rawp_cur_journal);  /* 提交日志 */
+        journal_proc_env->commit_journal(rawp_cur_journal);  /* 提交日志 */
+    }
 }
 
 } // namespace hscfs

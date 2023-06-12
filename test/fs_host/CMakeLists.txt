@@ -42,3 +42,10 @@ target_include_directories(test_unlink PRIVATE ${SPDK_include_directory})
 add_executable(hw_test_host ${PROJECT_SOURCE_DIR}/test/hw_test/test_main.cc)
 target_link_libraries(hw_test_host HscfsTest)
 target_include_directories(hw_test_host PRIVATE ${SPDK_include_directory})
+
+add_executable(mkfs_host ${PROJECT_SOURCE_DIR}/mkfs/mkhscfs.cc 
+    ${PROJECT_SOURCE_DIR}/src/api/init.cc
+    ${PROJECT_SOURCE_DIR}/test/fs_host/host_mkfs_env.cc
+)
+target_link_libraries(mkfs_host HscfsTest)
+target_include_directories(mkfs_host PRIVATE ${SPDK_include_directory})

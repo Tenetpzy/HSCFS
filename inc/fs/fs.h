@@ -49,6 +49,8 @@ struct hscfs_super_block
 	__u8 reserved[3964];		/* valid reserved region */
 };
 
+#define HSCFS_MAGIC_NUMBER 0x336699cc
+
 #define BLOCK_PER_SEGMENT 512
 
 #define INVALID_LPA	0

@@ -6,7 +6,6 @@
 #include "communication/memory.h"
 #include "communication/comm_api.h"
 #include "fs/fs.h"
-#include "mkfs/mkhscfs.hh"
 
 #include <string>
 #include <cstring>
@@ -17,9 +16,6 @@
 namespace hscfs {
 
 /* api/init.cc中的定义 */
-#define CHANNEL_NUM_DEFAULT 4
-#define TRID_CONFIG_PREFIX "--trid"
-
 struct Device_Env
 {
     spdk_nvme_transport_id trid;
@@ -41,7 +37,7 @@ namespace hscfs {
 
 #define LPA_SIZE 4096
 #define ROOT_INO 2
-#define META_JOURNAL_BLK_CNT ((1UL << 30) / 4096)   // meta journal默认1G，占用2^30 / 4096个块
+#define META_JOURNAL_BLK_CNT 1024   // meta journal默认占用1024个块
 #define UPPER_BOUND(x, y)  (((x) + (y) - 1) / (y))
 
 static uint32_t blk_cnt_to_seg_cnt(uint64_t blk_cnt)
@@ -145,10 +141,20 @@ static int format_super(uint64_t lpa_num)
     super_buffer->segment0_blkaddr = 0;
     HSCFS_LOG(HSCFS_LOG_INFO, "total 4KB block number: %lu, total segment number: %u.", block_count, segment_count);
 
+    /* 计算Meta Journal位置和空间使用量 */
+    uint64_t meta_journal_blk_cnt = META_JOURNAL_BLK_CNT;
+    uint32_t meta_journal_seg_cnt = blk_cnt_to_seg_cnt(meta_journal_blk_cnt);
+    uint32_t meta_journal_start_blk_lpa = BLOCK_PER_SEGMENT;  // Meta Journal紧跟Super Block segment
+    super_buffer->meta_journal_blkaddr = meta_journal_start_blk_lpa;
+    super_buffer->segment_count_meta_journal = meta_journal_seg_cnt;
+    super_buffer->meta_journal_start_blkoff = meta_journal_start_blk_lpa;
+    super_buffer->meta_journal_end_blkoff = meta_journal_start_blk_lpa + meta_journal_blk_cnt;
+    HSCFS_LOG(HSCFS_LOG_INFO, "Meta Journal start LPA: %u, occupied segment number: %u.", meta_journal_start_blk_lpa, meta_journal_seg_cnt);
+
     /* 计算SIT表位置和空间使用量 */
     uint64_t sit_blk_cnt = UPPER_BOUND(segment_count, SIT_ENTRY_PER_BLOCK);  // sit表需要的block数目
     uint32_t sit_seg_cnt = blk_cnt_to_seg_cnt(sit_blk_cnt);  // sit表需要的segment数目
-    uint32_t sit_start_blk_lpa = BLOCK_PER_SEGMENT;  // sit表的起始lpa
+    uint32_t sit_start_blk_lpa = seg_idx_to_blk_idx(blk_idx_to_seg_idx(meta_journal_start_blk_lpa) + meta_journal_seg_cnt);  // sit表的起始lpa
     super_buffer->sit_blkaddr = sit_start_blk_lpa;
     super_buffer->segment_count_sit = sit_seg_cnt;
     HSCFS_LOG(HSCFS_LOG_INFO, "SIT start LPA: %u, occupied segment number: %u.", sit_start_blk_lpa, sit_seg_cnt);
@@ -161,20 +167,10 @@ static int format_super(uint64_t lpa_num)
     super_buffer->segment_count_nat = nat_seg_cnt;
     HSCFS_LOG(HSCFS_LOG_INFO, "NAT start LPA: %u, occupied segment number: %u.", nat_start_blk_lpa, nat_seg_cnt);
 
-    /* 计算Meta Journal位置和空间使用量 */
-    uint64_t meta_journal_blk_cnt = META_JOURNAL_BLK_CNT;
-    uint32_t meta_journal_seg_cnt = blk_cnt_to_seg_cnt(meta_journal_blk_cnt);
-    uint32_t meta_journal_start_blk_lpa = seg_idx_to_blk_idx(blk_idx_to_seg_idx(nat_start_blk_lpa) + nat_seg_cnt);
-    super_buffer->meta_journal_blkaddr = meta_journal_start_blk_lpa;
-    super_buffer->segment_count_meta_journal = meta_journal_seg_cnt;
-    super_buffer->meta_journal_start_blkoff = meta_journal_start_blk_lpa;
-    super_buffer->meta_journal_end_blkoff = meta_journal_start_blk_lpa + meta_journal_blk_cnt;
-    HSCFS_LOG(HSCFS_LOG_INFO, "Meta Journal start LPA: %u, occupied segment number: %u.", meta_journal_start_blk_lpa, meta_journal_seg_cnt);
-
     /* 计算SRMAP的位置和空间使用量 */
     uint64_t srmap_blk_cnt = UPPER_BOUND(block_count, ENTRIES_IN_SUM);
     uint32_t srmap_seg_cnt = blk_cnt_to_seg_cnt(srmap_blk_cnt);
-    uint32_t srmap_start_blk_lpa = seg_idx_to_blk_idx(blk_idx_to_seg_idx(meta_journal_start_blk_lpa) + meta_journal_seg_cnt);
+    uint32_t srmap_start_blk_lpa = seg_idx_to_blk_idx(blk_idx_to_seg_idx(nat_start_blk_lpa) + nat_seg_cnt);
     super_buffer->srmap_blkaddr = srmap_start_blk_lpa;
     super_buffer->segment_count_srmap = srmap_seg_cnt;
     HSCFS_LOG(HSCFS_LOG_INFO, "SRMAP start LPA: %u, occupied segment number: %u.", srmap_start_blk_lpa, srmap_seg_cnt);
@@ -449,7 +445,7 @@ static int init_ssd_db()
 
     /* 清空元数据日志 */
     HSCFS_LOG(HSCFS_LOG_INFO, "Clearing Metajournal FIFO...");
-    if (comm_submit_fs_db_init_request(dev) != 0)
+    if (comm_submit_clear_metajournal_request(dev) != 0)
     {
         HSCFS_LOG(HSCFS_LOG_ERROR, "clear Metajournal FIFO failed.");
         return -1;
@@ -484,6 +480,8 @@ static int format_ssd()
         return -1;
     if (init_ssd_db() != 0)
         return -1;
+    if (write_magic() != 0)
+        return -1;
     HSCFS_LOG(HSCFS_LOG_INFO, "HSCFS format complete.");
     return 0;
 }
@@ -497,5 +495,7 @@ int main(int argc, char *argv[])
         return 1;
     if (format_ssd() != 0)
         return 1;
+    comm_free_dma_mem(wbuffer);
+    comm_free_dma_mem(super_buffer);
     return 0;
 }

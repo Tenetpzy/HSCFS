@@ -17,7 +17,7 @@
 namespace hscfs {
 
 #define CHANNEL_NUM_DEFAULT 4
-#define TRID_CONFIG_PREFIX "--trid"
+#define TRID_CONFIG_PREFIX "--trid="
 
 struct Device_Env
 {
@@ -131,6 +131,44 @@ int spdk_init(const std::string &trid)
     return 0;
 }
 
+#ifdef CONFIG_PRINT_DEBUG_INFO
+void print_super_block(hscfs_super_block *super);
+#endif
+
+/* 检查超级块魔数，并输出超级块信息 */
+static int check_super_block()
+{
+    hscfs_super_block *super = static_cast<hscfs_super_block*>(comm_alloc_dma_mem(4096));
+    if (super == NULL)
+    {
+        HSCFS_LOG(HSCFS_LOG_ERROR, "alloc super buffer failed.");
+        return -1;
+    }
+
+    if (comm_submit_sync_rw_request(&device_env.dev, super, 0, 8, COMM_IO_READ) != 0)
+    {
+        HSCFS_LOG(HSCFS_LOG_ERROR, "read super block failed.");
+        goto err0;
+    }
+
+    if (super->magic != HSCFS_MAGIC_NUMBER)
+    {
+        HSCFS_LOG(HSCFS_LOG_ERROR, "can not find HSCFS on target SSD!");
+        goto err0;
+    }
+
+    #ifdef CONFIG_PRINT_DEBUG_INFO
+    print_super_block(super);
+    #endif
+
+    comm_free_dma_mem(super);
+    return 0;    
+
+    err0:
+    comm_free_dma_mem(super);
+    return -1;
+}
+
 /* SSD侧文件系统初始化：启动FS模块功能，使用DB回复超级块，启动元数据日志应用。在初始化device_env和初始化通信层完成后调用。 */
 static int ssd_init()
 {
@@ -224,7 +262,9 @@ int init(int argc, char *argv[])
         if (comm_session_env_init(&device_env.dev) != 0)
             return -1;
         
-        /* TODO: 检查文件系统魔数 */
+        /* 检查文件系统魔数 */
+        if (check_super_block() != 0)
+            return -1;
 
         /* 初始化SSD侧文件系统模块，启动SSD日志执行 */
         if (ssd_init() != 0)

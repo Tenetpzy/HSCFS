@@ -464,7 +464,7 @@ int comm_submit_sync_get_metajournal_head_request(comm_dev *dev, uint64_t *head_
 {
     comm_raw_cmd cmd = {0};
     cmd.opcode = VENDOR_GET_OPCODE;
-    cmd.dword10 = 2;
+    cmd.dword10 = 4;
     cmd.dword12 = 0x70021;
     int ret = comm_raw_sync_cmd_sender(dev, head_lpa, 8, &cmd, 0, NULL, 0);
     if (ret != 0)
@@ -480,7 +480,7 @@ int comm_submit_async_get_metajournal_head_request(comm_dev *dev, uint64_t *head
 {
     comm_raw_cmd cmd = {0};
     cmd.opcode = VENDOR_GET_OPCODE;
-    cmd.dword10 = 2;
+    cmd.dword10 = 4;
     cmd.dword12 = 0x70021;
     int ret = comm_raw_async_cmd_sender(dev, head_lpa, 8, &cmd, 0, NULL, 0, cb_func, cb_arg);
     if (ret != 0)

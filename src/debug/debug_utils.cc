@@ -273,4 +273,44 @@ void print_node_footer(hscfs_node *node)
 
 /***********************************************************/
 
+void print_super_block(hscfs_super_block *super)
+{
+    fmt::println(std::cerr,
+        "super block info:\n"
+        "magic: {x}\n"
+        "block count: {}\n"
+        "segment count: {}\n"
+        "segment count sit: {}\n"
+        "segment count nat: {}\n"
+        "segment count srmap: {}\n"
+        "segment count meta journal: {}\n"
+        "segment count main: {}\n"
+        "segment0 blkaddr: {}\n"
+        "sit blkaddr: {}\n"
+        "nat blkaddr: {}\n"
+        "srmap blkaddr: {}\n"
+        "meta journal blkaddr: {}\n"
+        "main blkaddr: {}\n"
+        "root ino: {}\n"
+        "first free segment id: {}\n"
+        "first data segment id: {}\n"
+        "first node segment id: {}\n"
+        "current data segment id: {}\n"
+        "current data segment blkoff: {}\n"
+        "current node segment id: {}\n"
+        "current node segment blkoff: {}\n"
+        "meta journal start blkoff: {}\n"
+        "meta journal end blkoff: {}\n"
+        "free segment count: {}\n"
+        "next free nid: {}\n",
+        super->magic, super->block_count, super->segment_count, super->segment_count_sit, super->segment_count_nat,
+        super->segment_count_srmap, super->segment_count_meta_journal, super->segment_count_main, super->segment0_blkaddr,
+        super->sit_blkaddr, super->nat_blkaddr, super->srmap_blkaddr, super->meta_journal_blkaddr, super->main_blkaddr, 
+        super->root_ino, super->first_free_segment_id, super->first_data_segment_id, super->first_node_segment_id,
+        super->current_data_segment_id, super->current_data_segment_blkoff, super->current_node_segment_id, 
+        super->current_node_segment_blkoff, super->meta_journal_start_blkoff, super->meta_journal_end_blkoff, 
+        super->free_segment_count, super->next_free_nid
+    );
+}
+
 }  // namespace hscfs
