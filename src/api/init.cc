@@ -169,8 +169,11 @@ static int check_super_block()
     return -1;
 }
 
-/* SSD侧文件系统初始化：启动FS模块功能，使用DB回复超级块，启动元数据日志应用。在初始化device_env和初始化通信层完成后调用。 */
-static int ssd_init()
+/* 
+ * SSD侧文件系统初始化：启动FS模块功能，使用DB恢复超级块，检测超级块是否正确格式化。
+ * 启动元数据日志应用。在初始化device_env和初始化通信层完成后调用。 
+ */
+static int ssd_check_and_init()
 {
     comm_dev *dev = &device_env.dev;
 
@@ -198,6 +201,10 @@ static int ssd_init()
         HSCFS_LOG(HSCFS_LOG_ERROR, "recover SSD super block failed.");
         return -1;
     }
+
+    /* 检查文件系统魔数 */
+    if (check_super_block() != 0)
+        return -1;
 
     /* 启动元数据日志应用任务 */
     HSCFS_LOG(HSCFS_LOG_INFO, "Start SSD journal processor.");
@@ -261,13 +268,9 @@ int init(int argc, char *argv[])
         /* 初始化会话层并启动会话层轮询线程 */
         if (comm_session_env_init(&device_env.dev) != 0)
             return -1;
-        
-        /* 检查文件系统魔数 */
-        if (check_super_block() != 0)
-            return -1;
 
-        /* 初始化SSD侧文件系统模块，启动SSD日志执行 */
-        if (ssd_init() != 0)
+        /* 初始化SSD侧文件系统模块，检测文件系统，启动SSD日志执行 */
+        if (ssd_check_and_init() != 0)
             return -1;
         
         /* 等待故障恢复 */

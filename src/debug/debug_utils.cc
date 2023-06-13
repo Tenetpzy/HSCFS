@@ -277,7 +277,7 @@ void print_super_block(hscfs_super_block *super)
 {
     fmt::println(std::cerr,
         "super block info:\n"
-        "magic: {x}\n"
+        "magic: {}\n"
         "block count: {}\n"
         "segment count: {}\n"
         "segment count sit: {}\n"

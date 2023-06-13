@@ -28,7 +28,7 @@ size_t file_system_manager::nat_cache_size = 64;
 size_t file_system_manager::file_cache_size = 32;
 size_t file_system_manager::fd_array_size = 512;
 
-file_system_manager file_system_manager::g_fs_manager;
+std::unique_ptr<file_system_manager> file_system_manager::g_fs_manager;
 
 file_system_manager::~file_system_manager()
 {
@@ -39,47 +39,52 @@ file_system_manager::~file_system_manager()
 
 void file_system_manager::init(comm_dev *device)
 {
-    int ret = rwlock_init(&g_fs_manager.fs_freeze_lock);
+    g_fs_manager = std::make_unique<file_system_manager>();
+    int ret = rwlock_init(&g_fs_manager->fs_freeze_lock);
     if (ret != 0)
         throw std::system_error(std::error_code(ret, std::generic_category()), 
             "file system manager: init fs freeze lock failed.");
 
-    g_fs_manager.super = std::make_unique<super_cache>(device, super_block_lpa);
-    g_fs_manager.super->read_super_block();
-    g_fs_manager.sp_manager = std::make_unique<super_manager>(&g_fs_manager);
-    g_fs_manager.d_cache = std::make_unique<dentry_cache>(dentry_cache_size, &g_fs_manager);
-    g_fs_manager.node_cache = std::make_unique<node_block_cache>(&g_fs_manager, node_cache_size);
-    g_fs_manager.dir_data_cache = std::make_unique<dir_data_block_cache>(dir_data_cache_size);
-    g_fs_manager.sit_cache = std::make_unique<SIT_NAT_cache>(device, sit_cache_size);
-    g_fs_manager.nat_cache = std::make_unique<SIT_NAT_cache>(device, nat_cache_size);
-    g_fs_manager.file_cache = std::make_unique<file_obj_cache>(file_cache_size, &g_fs_manager);
-    g_fs_manager.srmap_util = std::make_unique<srmap_utils>(&g_fs_manager);
+    g_fs_manager->super = std::make_unique<super_cache>(device, super_block_lpa);
+    g_fs_manager->super->read_super_block();
+    g_fs_manager->sp_manager = std::make_unique<super_manager>(g_fs_manager.get());
+    g_fs_manager->d_cache = std::make_unique<dentry_cache>(dentry_cache_size, g_fs_manager.get());
+    g_fs_manager->node_cache = std::make_unique<node_block_cache>(g_fs_manager.get(), node_cache_size);
+    g_fs_manager->dir_data_cache = std::make_unique<dir_data_block_cache>(dir_data_cache_size);
+    g_fs_manager->sit_cache = std::make_unique<SIT_NAT_cache>(device, sit_cache_size);
+    g_fs_manager->nat_cache = std::make_unique<SIT_NAT_cache>(device, nat_cache_size);
+    g_fs_manager->file_cache = std::make_unique<file_obj_cache>(file_cache_size, g_fs_manager.get());
+    g_fs_manager->srmap_util = std::make_unique<srmap_utils>(g_fs_manager.get());
 
-    g_fs_manager.dev = device;
+    g_fs_manager->dev = device;
 
-    uint32_t root_inode = (*g_fs_manager.super)->root_ino;
-    g_fs_manager.root_dentry = g_fs_manager.d_cache->add_root(root_inode);
+    uint32_t root_inode = (*g_fs_manager->super)->root_ino;
+    g_fs_manager->root_dentry = g_fs_manager->d_cache->add_root(root_inode);
 
-    g_fs_manager.fd_arr = std::make_unique<fd_array>(fd_array_size);
-    g_fs_manager.cur_journal = std::make_unique<journal_container>();
-    g_fs_manager.rp_manager = std::make_unique<replace_protect_manager>(&g_fs_manager);
-    g_fs_manager.server_th = std::make_unique<server_thread>();
-    g_fs_manager.server_th->start();
+    g_fs_manager->fd_arr = std::make_unique<fd_array>(fd_array_size);
+    g_fs_manager->cur_journal = std::make_unique<journal_container>();
+    g_fs_manager->rp_manager = std::make_unique<replace_protect_manager>(g_fs_manager.get());
+    g_fs_manager->server_th = std::make_unique<server_thread>();
+    g_fs_manager->server_th->start();
 
-    g_fs_manager.is_unrecoverable = false;
+    g_fs_manager->is_unrecoverable = false;
 }
 
 void file_system_manager::fini()
 {
     /* 首先获取fs_freeze_lock独占，此时只有调用线程能够操作文件系统层，后续无需再加下层其它锁 */
-    rwlock_guard fs_freeze_lg(fs_freeze_lock, rwlock_guard::lock_type::wrlock);
+    rwlock_guard fs_freeze_lg(g_fs_manager->fs_freeze_lock, rwlock_guard::lock_type::wrlock);
 
     /* 回写所有脏数据 */
-    check_state();
-    write_back_all_dirty_sync();
+    g_fs_manager->check_state();
+    g_fs_manager->write_back_all_dirty_sync();
 
     /* 停止服务线程 */
-    server_th->stop();
+    g_fs_manager->server_th->stop();
+
+    /* 析构fs_manager */
+    g_fs_manager = nullptr;
+    HSCFS_LOG(HSCFS_LOG_INFO, "destructed all file system cache.");
 }
 
 void do_close(int fd);

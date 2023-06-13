@@ -37,7 +37,7 @@ public:
     /* 程序结束时，将所有未回写的数据回写，然后停止后台服务线程。
      * 此方法应先于日志层和通信层的析构调用，因为此方法依赖它们的功能 
      */
-    void fini();
+    static void fini();
 
     /* 
      * 将当前所有dirty的数据和元数据回写，在回写事务的淘汰保护完成后返回
@@ -47,7 +47,7 @@ public:
 
     static file_system_manager* get_instance()
     {
-        return &g_fs_manager;
+        return g_fs_manager.get();
     }
 
     std::mutex& get_fs_meta_lock() noexcept
@@ -176,7 +176,7 @@ private:
     std::unique_ptr<server_thread> server_th;
     bool is_unrecoverable;
 
-    static file_system_manager g_fs_manager;
+    static std::unique_ptr<file_system_manager> g_fs_manager;
 
     static uint64_t super_block_lpa;
     static size_t dentry_cache_size;

@@ -123,7 +123,7 @@ static uint64_t get_lpa_number()
     return lpa_num;
 }
 
-/* 格式化超级块缓存和SSD超级块，但不写入magic */
+/* 格式化超级块缓存和SSD超级块 */
 static int format_super(uint64_t lpa_num)
 {
     if (lpa_num >= UINT32_MAX)
@@ -140,6 +140,8 @@ static int format_super(uint64_t lpa_num)
     super_buffer->segment_count = segment_count;
     super_buffer->segment0_blkaddr = 0;
     HSCFS_LOG(HSCFS_LOG_INFO, "total 4KB block number: %lu, total segment number: %u.", block_count, segment_count);
+
+    super_buffer->magic = HSCFS_MAGIC_NUMBER;  /* 写入MAGIC NUMBER */
 
     /* 计算Meta Journal位置和空间使用量 */
     uint64_t meta_journal_blk_cnt = META_JOURNAL_BLK_CNT;
@@ -435,14 +437,6 @@ static int init_ssd_db()
     HSCFS_LOG(HSCFS_LOG_INFO, "Waiting SSD fs module init complete...");
     sleep(3);
 
-    /* 初始化DB区域 */
-    HSCFS_LOG(HSCFS_LOG_INFO, "Initializing SSD DB...");
-    if (comm_submit_fs_db_init_request(dev) != 0)
-    {
-        HSCFS_LOG(HSCFS_LOG_ERROR, "SSD DB init failed.");
-        return -1;
-    }
-
     /* 清空元数据日志 */
     HSCFS_LOG(HSCFS_LOG_INFO, "Clearing Metajournal FIFO...");
     if (comm_submit_clear_metajournal_request(dev) != 0)
@@ -451,18 +445,14 @@ static int init_ssd_db()
         return -1;
     }
 
-    return 0;
-}
-
-static int write_magic()
-{
-    HSCFS_LOG(HSCFS_LOG_INFO, "Writing HSCFS magic number...");
-    super_buffer->magic = HSCFS_MAGIC_NUMBER;
-    if (write_block(super_buffer, 0) != 0)
+    /* 初始化DB区域 */
+    HSCFS_LOG(HSCFS_LOG_INFO, "Initializing SSD DB...");
+    if (comm_submit_fs_db_init_request(dev) != 0)
     {
-        HSCFS_LOG(HSCFS_LOG_ERROR, "write magic failed.");
+        HSCFS_LOG(HSCFS_LOG_ERROR, "SSD DB init failed.");
         return -1;
     }
+
     return 0;
 }
 
@@ -479,8 +469,6 @@ static int format_ssd()
     if (format_main_area() != 0)
         return -1;
     if (init_ssd_db() != 0)
-        return -1;
-    if (write_magic() != 0)
         return -1;
     HSCFS_LOG(HSCFS_LOG_INFO, "HSCFS format complete.");
     return 0;
