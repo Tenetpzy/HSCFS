@@ -5,6 +5,7 @@
 #include "fs/NAT_utils.hh"
 #include "fs/SIT_utils.hh"
 #include "fs/directory.hh"
+#include "fs/replace_protect.hh"
 #include "cache/node_block_cache.hh"
 #include "communication/memory.h"
 #include "communication/comm_api.h"
@@ -23,9 +24,10 @@ namespace hscfs {
 class ssd_file_mapping_search_controller
 {
 public:
-	ssd_file_mapping_search_controller(comm_dev *device)
+	ssd_file_mapping_search_controller(file_system_manager *fs_manager)
 	{
-		dev = device;
+		this->fs_manager = fs_manager;
+		dev = fs_manager->get_device();
 	}
 
 	/* 构造命令和返回值的buffer */
@@ -40,6 +42,7 @@ public:
 	}
 
 private:
+	file_system_manager *fs_manager;
 	comm_dev *dev;
 	std::unique_ptr<filemapping_search_task, dma_buf_deletor> p_task_buf;
 	std::unique_ptr<hscfs_node, dma_buf_deletor> p_task_res_buf;
@@ -79,6 +82,10 @@ void ssd_file_mapping_search_controller::construct_task(uint32_t ino, uint32_t n
 
 void ssd_file_mapping_search_controller::do_filemapping_search()
 {
+	/* 需要等待SSD侧日志应用完成 */
+	replace_protect_manager *rp_manager = fs_manager->get_replace_protect_manager();
+	rp_manager->wait_all_journal_applied_in_SSD();
+
 	assert(p_task_buf != nullptr && p_task_res_buf != nullptr);
 	int ret = comm_submit_sync_filemapping_search_request(dev, p_task_buf.get(), p_task_res_buf.get(), 
 		level_num * sizeof(hscfs_node));
@@ -239,7 +246,7 @@ block_addr_info file_mapping_util::get_addr_of_block(uint32_t ino, uint32_t blkn
 				"node block[file(inode: %u), level %d, nid %u] miss. Prepare fetching from SSD", 
 				ino, cur_level, cur_nid);
 			int ssd_level = level - cur_level + 1;
-			ssd_file_mapping_search_controller ctrlr(fs_manager->get_device());
+			ssd_file_mapping_search_controller ctrlr(fs_manager);
 			ctrlr.construct_task(ino, cur_nid, blkno, ssd_level);
 			ctrlr.do_filemapping_search();
 

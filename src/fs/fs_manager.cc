@@ -73,15 +73,17 @@ void file_system_manager::init(comm_dev *device)
 void file_system_manager::fini()
 {
     /* 首先获取fs_freeze_lock独占，此时只有调用线程能够操作文件系统层，后续无需再加下层其它锁 */
-    rwlock_guard fs_freeze_lg(g_fs_manager->fs_freeze_lock, rwlock_guard::lock_type::wrlock);
+    {
+        rwlock_guard fs_freeze_lg(g_fs_manager->fs_freeze_lock, rwlock_guard::lock_type::wrlock);
 
-    /* 回写所有脏数据 */
-    g_fs_manager->check_state();
-    g_fs_manager->write_back_all_dirty_sync();
+        /* 回写所有脏数据 */
+        g_fs_manager->check_state();
+        g_fs_manager->write_back_all_dirty_sync();
 
-    /* 停止服务线程 */
-    g_fs_manager->server_th->stop();
-
+        /* 停止服务线程 */
+        g_fs_manager->server_th->stop();
+    }
+    
     /* 析构fs_manager */
     g_fs_manager = nullptr;
     HSCFS_LOG(HSCFS_LOG_INFO, "destructed all file system cache.");

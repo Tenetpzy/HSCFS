@@ -1,6 +1,8 @@
 #include "fs/path_utils.hh"
 #include "fs/fs_manager.hh"
 #include "fs/fs.h"
+#include "fs/replace_protect.hh"
+#include "fs/write_back_helper.hh"
 #include "communication/comm_api.h"
 #include "communication/memory.h"
 #include "utils/dma_buffer_deletor.hh"
@@ -19,9 +21,10 @@ namespace hscfs {
 class ssd_path_lookup_controller
 {
 public:
-    ssd_path_lookup_controller(comm_dev *device)
+    ssd_path_lookup_controller(file_system_manager *fs_manager)
     {
-        dev = device;
+        this->fs_manager = fs_manager;
+        dev = fs_manager->get_device();
     }
 
     /* 构造SSD路径解析命令，调用者必须保证start_ino对应文件存在 */
@@ -45,6 +48,7 @@ public:
     dentry_store_pos get_result_pos() const noexcept;
 
 private:
+    file_system_manager *fs_manager;
     comm_dev *dev;
     std::unique_ptr<path_lookup_task, dma_buf_deletor> p_task_buf;
     std::unique_ptr<path_lookup_result, dma_buf_deletor> p_task_res_buf;
@@ -120,6 +124,11 @@ void ssd_path_lookup_controller::do_pathlookup()
             throw alloc_error("SSD path lookup controller: alloc task result memory failed.");
         p_task_res_buf.reset(static_cast<path_lookup_result*>(buf));
     }
+
+    /* 需要等待SSD侧日志执行完成 */
+    replace_protect_manager *rp_manager = fs_manager->get_replace_protect_manager();
+    rp_manager->wait_all_journal_applied_in_SSD();
+
     int ret = comm_submit_sync_path_lookup_request(dev, p_task_buf.get(), task_length, p_task_res_buf.get());
     if (ret != 0)
         throw io_error("ssd path lookup controller: send path lookup task failed.");
@@ -310,9 +319,22 @@ dentry_handle path_lookup_processor::do_path_lookup(dentry_store_pos *pos_info)
          */
         if (component_dentry.is_empty())
         {
+            /* 
+             * 如果cur_dentry是新建的，则要把全部元数据写回SSD后再下发path lookup命令
+             * 否则，cur_dentry在SSD上还不存在，SSD将访问错误的NAT表和文件数据
+             */
+            if (cur_dentry->is_newly_created())
+            {
+                write_back_helper wb_helper(fs_manager);
+                wb_helper.write_meta_back_sync();
+                replace_protect_manager *rp_manager = fs_manager->get_replace_protect_manager();
+                rp_manager->wait_all_journal_applied_in_SSD();
+                assert(cur_dentry->is_newly_created() == false);
+            }
+
             HSCFS_LOG(HSCFS_LOG_INFO, "path lookup processor: dentry [%u:%s] miss, prepare searching in SSD.", 
                 cur_dentry->get_ino(), component_name.c_str());
-            ssd_path_lookup_controller ctrlr(fs_manager->get_device());
+            ssd_path_lookup_controller ctrlr(fs_manager);
             ctrlr.construct_task(p_parser, cur_dentry->get_ino(), itr);
             ctrlr.do_pathlookup();
 

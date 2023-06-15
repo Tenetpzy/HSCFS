@@ -79,6 +79,14 @@ void replace_protect_manager::wait_all_protect_task_cplt()
     });
 }
 
+void replace_protect_manager::wait_all_journal_applied_in_SSD()
+{
+    std::unique_lock<std::mutex> lg(lock);
+    trp_list_empty_cond.wait(lg, [&]() {
+        return trp_list.empty();
+    });
+}
+
 void replace_protect_manager::mark_protect_process_cplt(uint64_t tx_id)
 {
     bool is_protect_processing_tx_empty;
@@ -94,9 +102,16 @@ void replace_protect_manager::mark_protect_process_cplt(uint64_t tx_id)
         protect_cplt_cond.notify_all();
 }
 
+replace_protect_task::replace_protect_task(replace_protect_manager *rp_manager_, transaction_replace_protect_record &&cplt_tx_)
+{
+    this->cplt_tx = std::make_shared<transaction_replace_protect_record>(std::move(cplt_tx_));
+    this->rp_manager = rp_manager_;
+    this->fs_manager = rp_manager_->fs_manager;
+}
+
 void replace_protect_task::operator()()
 {
-    std::lock_guard<std::mutex> fs_meta_lg(fs_manager->get_fs_meta_lock());
+    std::unique_lock<std::mutex> fs_meta_lg(fs_manager->get_fs_meta_lock());
 
     /* 增加SIT/NAT的SSD版本号 */
     auto &journal = cplt_tx->tx_journal;
@@ -141,6 +156,8 @@ void replace_protect_task::operator()()
     uint64_t tx_id = cplt_tx->tx_id;
     assert(cplt_tx.use_count() == 1);
     cplt_tx.reset();
+
+    fs_meta_lg.unlock();  /* 可以先解锁fs_meta_lock了 */
 
     /* 在replace_protect_manager中标记此事务的淘汰保护工作已经执行完成 */
     rp_manager->mark_protect_process_cplt(tx_id);

@@ -77,8 +77,31 @@ protected:
 };
 
 enum Handler_ID {
-    open = 1, close = 2, read = 3, write = 4, trunc = 5, fsync = 6, unlink = 7, link = 8, mkdir = 9, rmdir = 10,
+    create = 0, open = 1, close = 2, read = 3, write = 4, trunc = 5, fsync = 6, unlink = 7, link = 8, mkdir = 9, rmdir = 10,
     print_fd = 11, quit = 12
+};
+
+/*
+ * args: /path/to/file
+ */
+class Create_Handler: public Ihandler
+{
+public:
+    Create_Handler(Test_Env *env): Ihandler(env) {}
+
+    void operator()() override
+    {
+        string path;
+        cin >> path;
+        int fd = hscfs::open(path.c_str(), O_RDWR | O_CREAT);
+        if (fd == -1)
+            Error_Handler("open")();
+        else
+        {
+            cout << "fd of file " << path << ": " << fd << endl;
+            test_env->add_opened_file(fd, path);
+        }
+    }
 };
 
 /*
@@ -301,6 +324,9 @@ public:
     }
 
 private:
+    static unique_ptr<Ihandler> create_constructor(Test_Env *env) {
+        return make_unique<Create_Handler>(env);
+    }
     static unique_ptr<Ihandler> open_constructor(Test_Env *env) {
         return make_unique<Open_Handler>(env);
     }
@@ -340,6 +366,7 @@ private:
 
     typedef unique_ptr<Ihandler>(*constructor_t)(Test_Env *);
     unordered_map<int, constructor_t> map = {
+        {Handler_ID::create, create_constructor},
         {Handler_ID::open, open_constructor}, 
         {Handler_ID::close, close_constructor},
         {Handler_ID::read, read_constructor},
@@ -359,6 +386,7 @@ void print_help_msg()
     cout << endl;
     cout << "input <handlerID> <args>... to call each function below:\n"
     << "handlerID: handlerName arg1 arg2...\n"
+    << Handler_ID::create << ": create path\n"
     << Handler_ID::open << ": open path\n"
     << Handler_ID::close << ": close fd\n"
     << Handler_ID::read << ": read fd output_file_name\n"

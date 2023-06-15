@@ -69,13 +69,23 @@ public:
      */
     void wait_all_protect_task_cplt();
 
+    /*
+     * 等待当前已提交的日志全部都被SSD应用
+     * 当主机侧需要下发任务时，必须等待SSD侧应用完所有日志，否则SSD可能使用不一致的数据
+     * 注意，SSD可以使用旧数据，此时正确性由主机侧的淘汰保护和缓存依赖机制保证，这里要保证的是SSD工作时不使用不一致的数据
+     * 
+     * 注：逻辑上，这个方法理应是日志管理层的方法。但目前日志层的设计，导致不方便在其中添加此方法
+     * 时间紧任务重，只能在淘汰保护模块等效地添加此方法（日志应用完成，淘汰保护模块会得到通知，因此是等效的）。
+     */
+    void wait_all_journal_applied_in_SSD();
+
 private:
     
     std::list<transaction_replace_protect_record> trp_list;  /* 日志还未应用的事务淘汰保护信息列表 */
 
     /* 
      * 用于trp_list为空时进行通知
-     * 调用wait_all_protect_task_cplt的线程会等待trp_list为空
+     * 调用wait_all_protect_task_cplt和wait_all_journal_applied_in_SSD的线程会等待trp_list为空
      */
     std::condition_variable trp_list_empty_cond;
 
@@ -105,12 +115,7 @@ private:
 class replace_protect_task
 {
 public:
-    replace_protect_task(replace_protect_manager *rp_manager_, transaction_replace_protect_record &&cplt_tx_) noexcept
-    {
-        this->cplt_tx = std::make_shared<transaction_replace_protect_record>(std::move(cplt_tx_));
-        this->rp_manager = rp_manager_;
-        this->fs_manager = rp_manager_->fs_manager;
-    }
+    replace_protect_task(replace_protect_manager *rp_manager_, transaction_replace_protect_record &&cplt_tx_);
 
     /* 
      * task执行的主函数

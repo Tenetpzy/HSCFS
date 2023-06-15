@@ -103,6 +103,11 @@ public:
         return state;
     }
 
+    bool is_newly_created() const noexcept
+    {
+        return state == dentry_state::valid && is_dirty == true;
+    }
+
     void set_state(dentry_state sta) noexcept
     {
         state = sta;
