@@ -52,6 +52,7 @@ struct filemapping_search_task
     u32 nid_to_start;
     u64 file_blk_offset;
     u8 return_all_Level;
+    u8 align[3];
 };
 typedef struct filemapping_search_task filemapping_search_task;
 

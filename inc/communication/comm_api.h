@@ -32,8 +32,8 @@ int comm_submit_async_rw_request(comm_dev *dev, void *buffer, uint64_t lba, uint
 int comm_submit_sync_migrate_request(comm_dev *dev, migrate_task *task);
 int comm_submit_async_migrate_request(comm_dev *dev, migrate_task *task, comm_async_cb_func cb_func, void *cb_arg);
 
-int comm_submit_sync_path_lookup_request(comm_dev *dev, path_lookup_task *task, path_lookup_result *res);
-int comm_submit_async_path_lookup_request(comm_dev *dev, path_lookup_task *task, path_lookup_result *res, 
+int comm_submit_sync_path_lookup_request(comm_dev *dev, path_lookup_task *task, size_t task_length, path_lookup_result *res);
+int comm_submit_async_path_lookup_request(comm_dev *dev, path_lookup_task *task, size_t task_length, path_lookup_result *res, 
     comm_async_cb_func cb_func, void *cb_arg);
 
 int comm_submit_sync_filemapping_search_request(comm_dev *dev, filemapping_search_task *task, 

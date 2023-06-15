@@ -63,7 +63,7 @@ int rmdir(const char *pathname)
             target_dentry.mark_dirty();
 
             /* 删除目录项 */
-            auto &parent_key = target_dentry->get_key();
+            auto &parent_key = target_dentry->get_parent_key();
             auto parent_dentry = fs_manager->get_dentry_cache()->get(parent_key.dir_ino, parent_key.name);
             assert(!parent_dentry.is_empty());
             directory dir(parent_dentry, fs_manager);

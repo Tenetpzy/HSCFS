@@ -276,13 +276,13 @@ int comm_submit_async_migrate_request(comm_dev *dev, migrate_task *task, comm_as
     return 0;
 }
 
-int comm_submit_sync_path_lookup_request(comm_dev *dev, path_lookup_task *task, path_lookup_result *res)
+int comm_submit_sync_path_lookup_request(comm_dev *dev, path_lookup_task *task, size_t task_length, path_lookup_result *res)
 {
     comm_raw_cmd cmd = {0};
     cmd.opcode = VENDOR_SET_OPCODE;
-    cmd.dword10 = sizeof(path_lookup_task) / 4;
+    cmd.dword10 = task_length / 4;
     cmd.dword12 = 0x20021;
-    int ret = comm_raw_sync_cmd_sender(dev, task, sizeof(path_lookup_task), &cmd, 1, res, sizeof(path_lookup_result));
+    int ret = comm_raw_sync_cmd_sender(dev, task, task_length, &cmd, 1, res, sizeof(path_lookup_result));
     if (ret != 0)
     {
         HSCFS_ERRNO_LOG(HSCFS_LOG_ERROR, ret, "submit sync path lookup request failed.");
@@ -291,14 +291,14 @@ int comm_submit_sync_path_lookup_request(comm_dev *dev, path_lookup_task *task, 
     return 0;
 }
 
-int comm_submit_async_path_lookup_request(comm_dev *dev, path_lookup_task *task, path_lookup_result *res, 
+int comm_submit_async_path_lookup_request(comm_dev *dev, path_lookup_task *task, size_t task_length, path_lookup_result *res, 
     comm_async_cb_func cb_func, void *cb_arg)
 {
     comm_raw_cmd cmd = {0};
     cmd.opcode = VENDOR_SET_OPCODE;
-    cmd.dword10 = sizeof(path_lookup_task) / 4;
+    cmd.dword10 = task_length / 4;
     cmd.dword12 = 0x20021;
-    int ret = comm_raw_async_cmd_sender(dev, task, sizeof(path_lookup_task), &cmd, 1, 
+    int ret = comm_raw_async_cmd_sender(dev, task, task_length, &cmd, 1, 
         res, sizeof(path_lookup_result), cb_func, cb_arg);
     if (ret != 0)
     {

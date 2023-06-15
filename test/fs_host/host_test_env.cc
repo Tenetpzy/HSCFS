@@ -125,7 +125,7 @@ int comm_submit_async_rw_request(comm_dev *dev, void *buffer, uint64_t lba, uint
 }
 
 /* 模拟，直接返回fsImage上的数据 */
-int comm_submit_sync_path_lookup_request(comm_dev *dev, path_lookup_task *task, path_lookup_result *res)
+int comm_submit_sync_path_lookup_request(comm_dev *dev, path_lookup_task *task, size_t task_length, path_lookup_result *res)
 {
     static std::unordered_map<std::string, uint32_t> dentry_ino_map = {
         {"a", 3}, {"b", 4}, {"c", 5}

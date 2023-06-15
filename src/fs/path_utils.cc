@@ -49,6 +49,7 @@ private:
     std::unique_ptr<path_lookup_task, dma_buf_deletor> p_task_buf;
     std::unique_ptr<path_lookup_result, dma_buf_deletor> p_task_res_buf;
     uint32_t depth_;
+    size_t task_length;
 };
 
 #ifdef CONFIG_PRINT_DEBUG_INFO
@@ -58,6 +59,10 @@ void print_path_lookup_task(path_lookup_task *task);
 void ssd_path_lookup_controller::construct_task(const path_parser &path_parser, uint32_t start_ino, 
     path_dentry_iterator start_itr)
 {
+    auto upper_align = [](size_t siz, size_t align) {
+        return (siz + align - 1) & (~(align - 1));
+    };
+
     uint32_t depth = 0;
     uint32_t total_dentry_len = 0;
     
@@ -75,6 +80,8 @@ void ssd_path_lookup_controller::construct_task(const path_parser &path_parser, 
     /* 分配task空间，大小：path_lookup_task头部长度 + 路径字符串长度(所有目录项长度 + (depth-1)个'/'字符) */
     size_t path_len = total_dentry_len + depth - 1;
     size_t task_size = sizeof(path_lookup_task) + path_len; 
+    task_size = upper_align(task_size, 4);
+    task_length = task_size;
     void *buf = comm_alloc_dma_mem(task_size);
     if (buf == nullptr)
         throw alloc_error("SSD path lookup controller: alloc task memory failed.");
@@ -113,7 +120,7 @@ void ssd_path_lookup_controller::do_pathlookup()
             throw alloc_error("SSD path lookup controller: alloc task result memory failed.");
         p_task_res_buf.reset(static_cast<path_lookup_result*>(buf));
     }
-    int ret = comm_submit_sync_path_lookup_request(dev, p_task_buf.get(), p_task_res_buf.get());
+    int ret = comm_submit_sync_path_lookup_request(dev, p_task_buf.get(), task_length, p_task_res_buf.get());
     if (ret != 0)
         throw io_error("ssd path lookup controller: send path lookup task failed.");
 }
@@ -349,7 +356,7 @@ dentry_handle path_lookup_processor::do_path_lookup(dentry_store_pos *pos_info)
                                 "but its parent dentry [%s] exist, the location for creating target returned by SSD:\n"
                                 "block offset: %u, slot offset: %u.",
                                 component_name.c_str(), cur_dentry->get_key().name.c_str(), 
-                                pos_info->blkno, pos_info->slotno
+                                ssd_pos_info.blkno, ssd_pos_info.slotno
                             );
                         }
 
