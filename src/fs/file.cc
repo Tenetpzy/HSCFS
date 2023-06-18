@@ -80,21 +80,18 @@ ssize_t file::read(char *buffer, ssize_t count, uint64_t pos)
     rwlock_guard file_op_lg(file_op_lock, rwlock_guard::lock_type::rdlock);
 
     const uint64_t cur_size = get_cur_size();  // 获取一致的page cache中文件大小
-    if (pos >= cur_size)
-        return 0;
-
-    /* 依次遍历读取范围内的每一个page */
+    const uint64_t read_end_pos = std::min(cur_size, pos + count);
     ssize_t read_count = 0;  // 当前已经读取的字节数
 
     {
         page_entry_handle pre_page;  // 必须保持上一个page的引用，确保解锁上一个page时pre_page_lock不是悬垂引用
         std::unique_lock<std::mutex> pre_page_lock;  // 前一个page的锁。获取到当前page的锁后再释放(必须定义在pre_page后)
         
-        while (read_count < count && pos < cur_size)
+        while (pos < read_end_pos)
         {
             /* 计算当前块偏移cur_blkno和当前块内需读取的文件偏移范围[pos, end_pos) */
             const uint32_t cur_blkno = idx_of_blk(pos);
-            const uint64_t end_pos = std::min(end_pos_of_cur_blk(pos), cur_size);
+            const uint64_t end_pos = std::min(end_pos_of_cur_blk(pos), read_end_pos);
             assert(end_pos > pos && end_pos - pos <= 4096);
             HSCFS_LOG(HSCFS_LOG_DEBUG, "read in file(inode = %u), blkno %u, range [%u, %u).", ino, cur_blkno, pos, end_pos);
 

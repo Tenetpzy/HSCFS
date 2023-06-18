@@ -161,12 +161,12 @@ public:
         string output_file;
         cin >> fd >> output_file;
         ofstream of(output_file);
-        char buf[512];
+        auto buf = std::unique_ptr<char[]>(new char[512]);
         ssize_t cnt;
 
         while (true)
         {
-            cnt = hscfs::read(fd, buf, 512);
+            cnt = hscfs::read(fd, buf.get(), 512);
             if (cnt == 0)
                 break;
             if (cnt == -1)
@@ -174,7 +174,7 @@ public:
                 Error_Handler("read")();
                 break;
             }
-            of.write(buf, cnt);
+            of.write(buf.get(), cnt);
         }
     }
 };

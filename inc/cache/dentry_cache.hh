@@ -297,6 +297,8 @@ public:
 
     std::vector<dentry_handle> get_and_clear_dirty_list()
     {
+        for (auto &handle: dirty_list)
+            handle.entry->is_dirty = false;
         std::vector<dentry_handle> ret;
         dirty_list.swap(ret);
         assert(dirty_list.size() == 0);
