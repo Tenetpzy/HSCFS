@@ -16,12 +16,17 @@
 # define O_APPEND	  02000
 #endif
 
+# define SEEK_SET	0	/* Seek from beginning of file.  */
+# define SEEK_CUR	1	/* Seek from current position.  */
+# define SEEK_END	2	/* Seek from end of file.  */
+
 namespace hscfs {
 
 int open(const char *pathname, int flags);
 int close(int fd);
 ssize_t read(int fd, void *buffer, size_t count);
 ssize_t write(int fd, void *buffer, size_t count);
+off_t lseek(int fd, off_t offset, int whence);
 int truncate(int fd, off_t length);
 int fsync(int fd);
 int unlink(const char *pathname);

@@ -83,11 +83,17 @@ public:
      */
     bool truncate(size_t tar_size);
 
+    /* 
+     * 得到file的文件大小size字段
+     * 调用者不需要获取file_meta_lock
+     */
+    uint64_t get_cur_size();
+
     /*
      * 从pos开始读最多count字节
      * 更新file内的atime(但不更新inode中对应元数据)
      * 调用者应在稍后使用file_handle标记dirty
-     * 调用者应持有该文件的pos_lock锁
+     * 调用者应持有该文件的pos_lock锁和file_op_lock锁
      */
     ssize_t read(char *buffer, ssize_t count, uint64_t pos);
 
@@ -95,7 +101,7 @@ public:
      * 从pos开始写入count字节
      * 更新file内的atime和mtime，如果增加了大小，更新size(但不更新inode中对应的元数据)
      * 调用者应在稍后使用file_handle标记dirty
-     * 调用者应持有该文件的pos_lock锁
+     * 调用者应持有该文件的pos_lock锁和file_op_lock锁
      */
     ssize_t write(char *buffer, ssize_t count, uint64_t pos);
 
@@ -174,12 +180,6 @@ private:
      */
     void mark_access();
     void mark_modified();
-
-    /* 
-     * read过程调用，得到file的文件大小size字段
-     * 调用者不需要获取file_meta_lock
-     */
-    uint64_t get_cur_size();
 
     /*
      * write过程调用。如果size_after_write大于file->size，则file->size更新为size_after_write

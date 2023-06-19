@@ -76,9 +76,6 @@ bool file::truncate(size_t tar_size)
 
 ssize_t file::read(char *buffer, ssize_t count, uint64_t pos)
 {
-    /* 获得文件操作共享锁，获取后，文件长度保证不会减小(truncate需要获取此独占锁) */
-    rwlock_guard file_op_lg(file_op_lock, rwlock_guard::lock_type::rdlock);
-
     const uint64_t cur_size = get_cur_size();  // 获取一致的page cache中文件大小
     const uint64_t read_end_pos = std::min(cur_size, pos + count);
     ssize_t read_count = 0;  // 当前已经读取的字节数
@@ -121,8 +118,6 @@ ssize_t file::read(char *buffer, ssize_t count, uint64_t pos)
 
 ssize_t file::write(char *buffer, ssize_t count, uint64_t pos)
 {
-    /* 获得文件操作共享锁，获取后，文件长度保证不会减小(truncate需要获取此独占锁) */
-    rwlock_guard file_op_lg(file_op_lock, rwlock_guard::lock_type::rdlock);
     const uint64_t write_end_pos = pos + count;  // 写入范围的尾后位置
     ssize_t write_count = 0;  // 当前已经写入的字节数
 

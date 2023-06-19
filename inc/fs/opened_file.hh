@@ -41,6 +41,12 @@ public:
      */
     ssize_t write(char *buffer, ssize_t count);
 
+    /* 
+     * 更改读写位置
+     * 调用者应持有fs_freeze_lock共享锁 
+     */
+    off_t set_rw_pos(off_t offset, int whence);
+
 private:
     uint32_t flags;  // 打开文件时的flags
     uint64_t pos;  // 当前文件读写位置
